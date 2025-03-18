@@ -1,0 +1,53 @@
+/* Graph Analysis Plugin Styles */
+
+/* Results table styling */
+.graph-analysis-results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+.graph-analysis-results-table th,
+.graph-analysis-results-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.graph-analysis-results-table th {
+    font-weight: bold;
+    background-color: var(--background-secondary);
+}
+
+.graph-analysis-results-table tr:hover {
+    background-color: var(--background-secondary-alt);
+}
+
+.graph-analysis-results-table a {
+    color: var(--text-accent);
+    text-decoration: none;
+}
+
+.graph-analysis-results-table a:hover {
+    text-decoration: underline;
+}
+
+/* Button container */
+.graph-analysis-button-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.graph-analysis-button-container button {
+    padding: 8px 16px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.graph-analysis-button-container button:hover {
+    background-color: var(--interactive-accent-hover);
+} 

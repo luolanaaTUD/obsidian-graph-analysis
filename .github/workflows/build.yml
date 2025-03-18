@@ -1,0 +1,80 @@
+name: Build Obsidian Plugin
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM module
+        run: |
+          cd graph-analysis-wasm
+          wasm-pack build --target web
+          cd ..
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: plugin-files
+          path: |
+            main.js
+            manifest.json
+            styles.css
+            graph_analysis_wasm_bg.wasm
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: plugin-files
+          path: ./
+      
+      - name: Create release zip
+        run: |
+          mkdir obsidian-graph-analysis
+          cp main.js manifest.json styles.css graph_analysis_wasm_bg.wasm obsidian-graph-analysis/
+          zip -r obsidian-graph-analysis.zip obsidian-graph-analysis/
+      
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: obsidian-graph-analysis.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

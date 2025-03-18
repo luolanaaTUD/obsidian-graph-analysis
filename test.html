@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>WASM Test</title>
+</head>
+<body>
+    <h1>WASM Test</h1>
+    <div id="output"></div>
+
+    <script>
+        // Function to log messages to the page
+        function log(message) {
+            const output = document.getElementById('output');
+            const p = document.createElement('p');
+            p.textContent = message;
+            output.appendChild(p);
+            console.log(message);
+        }
+
+        // Load the WASM module
+        async function loadWasm() {
+            try {
+                log('Starting WASM test...');
+                
+                // Try to fetch the WASM file to see if it exists
+                log('Fetching WASM file...');
+                const response = await fetch('graph_analysis_wasm_bg.wasm');
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch WASM file: ${response.status} ${response.statusText}`);
+                }
+                
+                log('WASM file fetched successfully!');
+                
+                // Load the WASM module
+                log('Loading WASM module...');
+                const wasmModule = await WebAssembly.instantiateStreaming(
+                    fetch('graph_analysis_wasm_bg.wasm'),
+                    {}
+                );
+                
+                log('WASM module loaded successfully!');
+                
+                // Check if the module has the expected exports
+                const exports = wasmModule.instance.exports;
+                log(`WASM module exports: ${Object.keys(exports).join(', ')}`);
+                
+                log('WASM test completed successfully!');
+            } catch (error) {
+                log(`Error: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        // Run the test when the page loads
+        window.onload = loadWasm;
+    </script>
+</body>
+</html> 
