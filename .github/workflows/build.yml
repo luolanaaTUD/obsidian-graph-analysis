@@ -26,6 +26,12 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
+          target: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "graph-analysis-wasm -> target"
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -37,7 +43,7 @@ jobs:
           cd ..
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build plugin
         run: npm run build
@@ -47,10 +53,10 @@ jobs:
         with:
           name: plugin-files
           path: |
-            main.js
-            manifest.json
-            styles.css
-            graph_analysis_wasm_bg.wasm
+            dist/main.js
+            dist/manifest.json
+            dist/assets/styles.css
+            dist/graph_analysis_wasm_bg.wasm
 
   release:
     needs: build
@@ -64,12 +70,12 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: plugin-files
-          path: ./
+          path: ./dist
       
       - name: Create release zip
         run: |
           mkdir obsidian-graph-analysis
-          cp main.js manifest.json styles.css graph_analysis_wasm_bg.wasm obsidian-graph-analysis/
+          cp dist/main.js dist/manifest.json dist/assets/styles.css dist/graph_analysis_wasm_bg.wasm obsidian-graph-analysis/
           zip -r obsidian-graph-analysis.zip obsidian-graph-analysis/
       
       - name: Create GitHub release
