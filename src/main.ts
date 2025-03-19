@@ -4,7 +4,7 @@ import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal, MarkdownR
 // We need to declare the functions that will be available
 declare function calculate_degree_centrality(graph_data_json: string): string;
 declare function calculate_eigenvector_centrality(graph_data_json: string): string;
-declare function __wbg_init(wasm_path: string): Promise<any>;
+declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<any>;
 
 interface GraphAnalysisSettings {
     excludeFolders: string[];
@@ -112,7 +112,17 @@ export default class GraphAnalysisPlugin extends Plugin {
             console.log('Resolved WASM path:', wasmAbsPath);
             
             // Initialize the WASM module with the absolute path
-            await __wbg_init(wasmAbsPath);
+            // First fetch the WASM file
+            const response = await fetch(wasmAbsPath);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch WASM file: ${response.statusText}`);
+            }
+            
+            // Get the WASM binary
+            const wasmBinary = await response.arrayBuffer();
+            
+            // Initialize with the binary using the correct object parameter format
+            await __wbg_init({ module_or_path: wasmBinary });
             
             this.wasmInitialized = true;
             console.log('Graph Analysis WASM module initialized successfully');

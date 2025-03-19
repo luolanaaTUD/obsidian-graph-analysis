@@ -19,7 +19,7 @@ const copyWasmFiles = {
   setup(build) {
     build.onEnd(() => {
       const wasmDir = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg');
-      const outputDir = path.join(process.cwd());
+      const outputDir = path.join(process.cwd(), 'dist');
       
       // Create the output directory if it doesn't exist
       if (!fs.existsSync(outputDir)) {
@@ -53,10 +53,14 @@ const injectWasmCode = {
       const wasmJsPath = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg', 'graph_analysis_wasm.js');
       const wasmJsCode = await fs.promises.readFile(wasmJsPath, 'utf8');
       
-      // Create a modified version of the WASM JS code that doesn't use dynamic imports
+      // Create a modified version of the WASM JS code that works with CommonJS
       const modifiedWasmJsCode = wasmJsCode
         .replace('export default __wbg_init;', '')
-        .replace('export { initSync };', '');
+        .replace('export { initSync };', '')
+        .replace(/export function ([a-zA-Z_]+)/g, 'function $1')
+        .replace(/export async function ([a-zA-Z_]+)/g, 'async function $1')
+        // Remove import.meta usage
+        .replace(/new URL\([^)]+\)/g, 'undefined');
       
       // Inject the WASM JS code at the top of the file
       const modifiedSource = `
@@ -96,11 +100,11 @@ const context = await esbuild.context({
     "@lezer/lr",
     ...builtins],
   format: "cjs",
-  target: "es2018",
+  target: "es2020",
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: "main.js",
+  outfile: "dist/main.js",
   plugins: [injectWasmCode, copyWasmFiles],
 });
 

@@ -3,7 +3,6 @@ mod utils;
 use wasm_bindgen::prelude::*;
 use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -124,7 +123,7 @@ pub fn calculate_eigenvector_centrality(graph_data_json: &str) -> String {
     utils::set_panic_hook();
     
     // Parse the input JSON
-    let graph_data: GraphData = match serde_json::from_str(graph_data_json) {
+    let _graph_data: GraphData = match serde_json::from_str(graph_data_json) {
         Ok(data) => data,
         Err(e) => {
             let error = ErrorResponse { error: format!("Failed to parse graph data: {}", e) };
