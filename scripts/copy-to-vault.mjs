@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 
 // Get the current directory
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.join(__dirname, '..');
 
 // Configuration
 const pluginId = 'obsidian-graph-analysis';
@@ -46,30 +47,30 @@ if (!fs.existsSync(pluginDir)) {
     console.log(`Created plugin directory: ${pluginDir}`);
 }
 
-// Files to copy
+// Files to copy with their source locations
 const filesToCopy = [
-    'main.js',
-    'manifest.json',
-    'styles.css',
-    'graph_analysis_wasm_bg.wasm'
+    { source: 'dist/main.js', dest: 'main.js' },
+    { source: 'dist/manifest.json', dest: 'manifest.json' },
+    { source: 'dist/assets/styles.css', dest: 'styles.css' },
+    { source: 'dist/graph_analysis_wasm_bg.wasm', dest: 'graph_analysis_wasm_bg.wasm' }
 ];
 
 // Copy each file
 filesToCopy.forEach(file => {
-    const sourcePath = path.join(__dirname, file);
-    const destPath = path.join(pluginDir, file);
+    const sourcePath = path.join(rootDir, file.source);
+    const destPath = path.join(pluginDir, file.dest);
     
     // Skip if source file doesn't exist
     if (!fs.existsSync(sourcePath)) {
-        console.log(`Skipping ${file} (not found)`);
+        console.log(`Skipping ${file.source} (not found)`);
         return;
     }
     
     try {
         fs.copyFileSync(sourcePath, destPath);
-        console.log(`Copied ${file} to ${destPath}`);
+        console.log(`Copied ${file.source} to ${destPath}`);
     } catch (error) {
-        console.error(`Error copying ${file}: ${error.message}`);
+        console.error(`Error copying ${file.source}: ${error.message}`);
     }
 });
 
