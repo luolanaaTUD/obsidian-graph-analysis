@@ -111,6 +111,7 @@
 /* Add padding to the SVG container to account for the title bar */
 .graph-analysis-canvas svg {
     padding-top: 32px;
+    background-color: rgba(var(--background-primary-rgb), 0.7);
 }
 
 .graph-analysis-canvas::before {
@@ -186,4 +187,70 @@
 
 .graph-analysis-close-button::after {
     transform: rotate(-45deg);
+}
+
+/* Loading indicator */
+.graph-analysis-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--background-secondary);
+    padding: 10px 20px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1004;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.graph-analysis-loading::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    margin-right: 10px;
+    border: 2px solid var(--background-modifier-border);
+    border-top-color: var(--text-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Graph visualization styles */
+.graph-node {
+    transition: r 200ms ease, opacity 200ms ease, fill 200ms ease;
+    cursor: pointer;
+}
+
+.graph-link {
+    transition: stroke 200ms ease, stroke-opacity 200ms ease, stroke-width 200ms ease;
+    /* Base link color - will be overridden by theme-specific styles */
+    stroke: var(--background-modifier-border);
+}
+
+/* Theme-specific link styles */
+.theme-light .graph-link {
+    stroke: var(--background-modifier-border);
+    stroke-opacity: 0.6;
+}
+
+.theme-dark .graph-link {
+    stroke: var(--text-faint);
+    stroke-opacity: 0.8;
+}
+
+.graph-label {
+    transition: font-weight 200ms ease, opacity 200ms ease;
+    pointer-events: none;
+}
+
+.graph-node:hover {
+    stroke: var(--text-accent-hover);
+    stroke-width: 2px;
 } 
