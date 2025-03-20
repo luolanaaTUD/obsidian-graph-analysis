@@ -61,6 +61,19 @@ export class GraphView {
     private startWidth: number = 0;
     private startHeight: number = 0;
     
+    // For handling hover and click interactions
+    private hoverNode: GraphNode | null = null;
+    private nodeTooltip: HTMLElement | null = null;
+    private hoverTimeout: number | null = null;
+    private tooltipVisible: boolean = false;
+    // Event handler references
+    private tooltipMouseEnterHandler: ((e: MouseEvent) => void) | null = null;
+    private tooltipMouseLeaveHandler: ((e: MouseEvent) => void) | null = null;
+    private openNoteButton: HTMLElement | null = null;
+    private openNoteButtonMouseEnterHandler: ((e: MouseEvent) => void) | null = null;
+    private openNoteButtonMouseLeaveHandler: ((e: MouseEvent) => void) | null = null;
+    private openNoteButtonClickHandler: ((e: MouseEvent) => void) | null = null;
+    
     // Bound event handlers
     private boundMouseMove: (e: MouseEvent) => void;
     private boundMouseUp: (e: MouseEvent) => void;
@@ -229,6 +242,11 @@ export class GraphView {
     }
 
     private async initializeD3() {
+        // Reset hover state to ensure first hover works
+        this.hoverNode = null;
+        this.hoverTimeout = null;
+        this.tooltipVisible = false;
+        
         // Create SVG container
         this.svg = d3.select(this.canvas)
             .append('svg')
@@ -236,13 +254,25 @@ export class GraphView {
             .attr('height', '100%')
             .style('position', 'absolute')
             .style('top', 0)
-            .style('left', 0);
+            .style('left', 0)
+            .on('click', () => {
+                // Close tooltip when clicking anywhere on the canvas
+                this.removeNodeTooltip();
+                
+                // Reset all nodes to default state on canvas click
+                this.resetGraphStyles();
+            });
             
         // Add zoom behavior
         this.zoom = d3.zoom<SVGSVGElement, unknown>()
             .scaleExtent([0.1, 4])
             .on('zoom', (event) => {
                 this.svgGroup.attr('transform', event.transform);
+                // Close tooltip on zoom
+                this.removeNodeTooltip();
+                
+                // Reset all nodes to default state on zoom
+                this.resetGraphStyles();
             });
             
         // Add a group for the graph that will be transformed
@@ -268,6 +298,38 @@ export class GraphView {
             
         // Set the initial transform to center the graph properly
         this.updateGraphTransform();
+    }
+
+    // Helper method to reset all graph styles to default
+    private resetGraphStyles() {
+        // Only proceed if we're not currently highlighting a specific node
+        if (this.hoverNode !== null) return;
+        
+        // Use consistent colors
+        const primaryNodeColor = 'var(--interactive-accent)';
+        
+        // Reset all nodes to default state
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .transition()
+            .duration(200)
+            .attr('fill', primaryNodeColor)
+            .attr('opacity', 1.0)
+            .attr('r', d => this.getNodeRadius(d));
+            
+        // Reset all links to default state
+        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+            .transition()
+            .duration(200)
+            .style('stroke', 'var(--background-modifier-border)')
+            .style('stroke-opacity', 0.5)
+            .style('stroke-width', 2);
+            
+        // Reset all labels to default state
+        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            .transition()
+            .duration(200)
+            .style('font-weight', 'normal')
+            .style('opacity', 0.8);
     }
 
     // Create a custom force to keep nodes within a circular boundary
@@ -431,11 +493,16 @@ export class GraphView {
             }
         });
         
+        // Use consistent node colors from CSS variables
+        const primaryNodeColor = 'var(--interactive-accent)';
+        
         // Update links
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('line')
             .data(this.links)
             .join(
                 enter => enter.append('line')
+                    .attr('stroke', 'var(--background-modifier-border)')
+                    .attr('stroke-opacity', 0.5)
                     .attr('stroke-width', 2)
                     .attr('class', 'graph-link'),
                 update => update,
@@ -452,24 +519,30 @@ export class GraphView {
             .join(
                 enter => enter.append('circle')
                     .attr('r', d => this.getNodeRadius(d))
-                    .attr('fill', 'var(--text-accent)')
-                    .attr('opacity', 0.6)
+                    .attr('fill', primaryNodeColor)
+                    .attr('opacity', 1.0)
                     .attr('class', 'graph-node')
                     .call(this.drag())
-                    .on('click', (event, d) => this.handleNodeClick(d)),
-                update => update.attr('r', d => this.getNodeRadius(d)),
+                    .on('dblclick', (event, d) => this.openNoteAndCloseGraph(d))
+                    .on('mouseover', (event, d) => this.onNodeMouseOver(d))
+                    .on('mouseout', (event, d) => this.onNodeMouseOut(d)),
+                update => update
+                    .attr('r', d => this.getNodeRadius(d))
+                    .attr('fill', primaryNodeColor),
                 exit => exit.remove()
             )
             .attr('cx', d => (d as any).x)
             .attr('cy', d => (d as any).y);
 
-        // Add hover effect
+        // Add hover effect (for connections highlighting)
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .on('mouseover', (event, d) => {
                 this.highlightConnections(d.id, true);
+                this.onNodeMouseOver(d);
             })
             .on('mouseout', (event, d) => {
                 this.highlightConnections(d.id, false);
+                this.onNodeMouseOut(d);
             });
 
         // Add labels
@@ -506,60 +579,598 @@ export class GraphView {
             connectedNodeIds.add(targetId);
         });
         
-        // Highlight the selected node
+        // Use Obsidian CSS variables for colors
+        const primaryNodeColor = 'var(--interactive-accent)';
+        const primaryNodeHighlightColor = 'var(--interactive-accent-hover)';
+        const secondaryNodeColor = 'var(--interactive-accent)';
+        const fadedNodeColor = 'var(--text-faint)';
+        
+        // Reset all nodes to default state first if we're canceling a highlight
+        if (!highlight) {
+            this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+                .transition()
+                .duration(200)
+                .attr('fill', primaryNodeColor)
+                .attr('opacity', 1.0)
+                .attr('r', d => this.getNodeRadius(d));
+                
+            // Reset all links
+            this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+                .transition()
+                .duration(200)
+                .style('stroke', 'var(--background-modifier-border)')
+                .style('stroke-opacity', 0.5)
+                .style('stroke-width', 2);
+                
+            // Reset all labels
+            this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+                .transition()
+                .duration(200)
+                .style('font-weight', 'normal')
+                .style('opacity', 0.8);
+                
+            return;
+        }
+        
+        // If highlighting:
+        
+        // 1. Highlight the selected node
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id === nodeId)
             .transition()
             .duration(200)
-            .attr('r', d => highlight ? this.getNodeRadius(d) * 1.2 : this.getNodeRadius(d))
-            .attr('opacity', highlight ? 1 : 0.6);
+            .attr('r', d => this.getNodeRadius(d) * 1.2)
+            .attr('fill', primaryNodeHighlightColor)
+            .attr('opacity', 1.0);
             
-        // Highlight connected nodes
+        // 2. Highlight connected nodes
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
             .transition()
             .duration(200)
-            .attr('opacity', highlight ? 0.9 : 0.6);
+            .attr('fill', secondaryNodeColor)
+            .attr('opacity', 0.9);
             
-        // Define the colors explicitly
-        const accentColor = '#705dcf'; // Purple color similar to default Obsidian accent
+        // 3. Fade non-connected nodes
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id))
+            .transition()
+            .duration(200)
+            .attr('fill', fadedNodeColor)
+            .attr('opacity', 0.3);
             
-        // Highlight connected links with direct color
+        // 4. Highlight connected links
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
             .filter(d => {
                 const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
                 const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
                 return sourceId === nodeId || targetId === nodeId;
             })
-            .style('stroke', highlight ? accentColor : '')
-            .style('stroke-opacity', highlight ? '1' : '')
-            .style('stroke-width', highlight ? '3px' : '2px');
+            .style('stroke', primaryNodeHighlightColor)
+            .style('stroke-opacity', 1)
+            .style('stroke-width', 3);
             
-        // Also highlight the labels of connected nodes
+        // 5. Fade non-connected links
+        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+            .filter(d => {
+                const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
+                const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
+                return sourceId !== nodeId && targetId !== nodeId;
+            })
+            .style('stroke', 'var(--background-modifier-border)')
+            .style('stroke-opacity', 0.2)
+            .style('stroke-width', 1);
+            
+        // 6. Highlight labels of connected nodes
         this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
             .filter(d => connectedNodeIds.has(d.id))
             .transition()
             .duration(200)
-            .style('font-weight', highlight ? 'bold' : 'normal')
-            .style('opacity', highlight ? 1 : 0.8);
+            .style('font-weight', 'bold')
+            .style('opacity', 1);
+            
+        // 7. Fade labels of non-connected nodes
+        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            .filter(d => !connectedNodeIds.has(d.id))
+            .transition()
+            .duration(200)
+            .style('font-weight', 'normal')
+            .style('opacity', 0.3);
     }
 
-    private handleNodeClick(node: GraphNode) {
+    private onNodeMouseOver(node: GraphNode) {
+        // Store the node being hovered
+        this.hoverNode = node;
+        
+        // Clear any existing timeout
+        if (this.hoverTimeout !== null) {
+            window.clearTimeout(this.hoverTimeout);
+        }
+        
+        // Always reset the timeout
+        this.hoverTimeout = window.setTimeout(() => {
+            if (this.hoverNode === node) {
+                this.showNodeMetadata(node);
+                this.tooltipVisible = true;
+            }
+        }, 500); // 0.5 second delay
+    }
+    
+    private onNodeMouseOut(node: GraphNode) {
+        // Clear the hover node
+        this.hoverNode = null;
+        
+        // Clear the hover timeout if it exists
+        if (this.hoverTimeout !== null) {
+            window.clearTimeout(this.hoverTimeout);
+            this.hoverTimeout = null;
+        }
+        
+        // Add a short delay before removing tooltip to allow moving to the tooltip
+        setTimeout(() => {
+            // Only remove if we're not hovering over the tooltip or node
+            if (!this.hoverNode) {
+                this.removeNodeTooltip();
+            }
+        }, 100);
+    }
+    
+    private showNodeMetadata(node: GraphNode) {
+        // If we're already showing a tooltip for this node, don't create another one
+        if (this.tooltipVisible && this.nodeTooltip) {
+            return;
+        }
+        
+        // Do not show tooltip if drag operations are active
+        if (this.isDragging || this.isResizing || this.isMovingCanvas) {
+            return;
+        }
+        
+        // Remove any existing tooltip
+        this.removeNodeTooltip();
+        
+        // Create tooltip element
+        this.nodeTooltip = this.canvas.createDiv({ cls: 'graph-node-tooltip' });
+        
+        // Add mouse events to keep tooltip open when hovering over it
+        this.tooltipMouseEnterHandler = () => {
+            // Keep the tooltip visible when mouse enters it
+            this.hoverNode = node; // Keep the hover state active
+        };
+        
+        this.tooltipMouseLeaveHandler = () => {
+            // Remove the tooltip when mouse leaves it
+            this.hoverNode = null;
+            this.removeNodeTooltip();
+        };
+        
+        this.nodeTooltip.addEventListener('mouseenter', this.tooltipMouseEnterHandler);
+        this.nodeTooltip.addEventListener('mouseleave', this.tooltipMouseLeaveHandler);
+        
+        // Calculate position (to the right and slightly above the node)
+        const nodeX = (node as any).x;
+        const nodeY = (node as any).y;
+        
+        // Get SVG transform to calculate correct screen position
+        const transform = d3.zoomTransform(this.svg.node()!);
+        const screenX = transform.applyX(nodeX);
+        const screenY = transform.applyY(nodeY);
+        
+        // Position the tooltip to the right and slightly above the node
+        this.nodeTooltip.style.position = 'absolute';
+        this.nodeTooltip.style.left = `${screenX + this.getNodeRadius(node) + 15}px`;
+        this.nodeTooltip.style.top = `${screenY - 20}px`;
+        this.nodeTooltip.style.backgroundColor = 'var(--background-primary)';
+        this.nodeTooltip.style.color = 'var(--text-normal)';
+        this.nodeTooltip.style.padding = '10px 12px';
+        this.nodeTooltip.style.borderRadius = '8px';
+        this.nodeTooltip.style.boxShadow = '0 2px 8px var(--background-modifier-box-shadow)';
+        this.nodeTooltip.style.zIndex = '1000';
+        // Set fixed width and height for consistent size across all tooltips
+        this.nodeTooltip.style.width = '320px';
+        this.nodeTooltip.style.minHeight = '200px';
+        this.nodeTooltip.style.maxHeight = '400px';
+        this.nodeTooltip.style.overflowY = 'auto';
+        this.nodeTooltip.style.fontSize = 'var(--font-ui-small)';
+        this.nodeTooltip.style.border = '1px solid var(--background-modifier-border)';
+        (this.nodeTooltip.style as any)['backdropFilter'] = 'blur(8px)';
+        (this.nodeTooltip.style as any)['-webkit-backdrop-filter'] = 'blur(8px)';
+        
+        // Add custom scrollbar styling to the tooltip container
+        (this.nodeTooltip.style as any)['scrollbarWidth'] = 'thin';
+        (this.nodeTooltip.style as any)['scrollbarColor'] = 'var(--background-modifier-border) transparent';
+        
+        // Add webkit scrollbar styling (for Chrome, Safari, etc.)
+        const tooltipScrollbarStyle = document.createElement('style');
+        tooltipScrollbarStyle.textContent = `
+            .graph-node-tooltip::-webkit-scrollbar {
+                width: 6px;
+            }
+            .graph-node-tooltip::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            .graph-node-tooltip::-webkit-scrollbar-thumb {
+                background-color: var(--background-modifier-border);
+                border-radius: 3px;
+            }
+        `;
+        document.head.appendChild(tooltipScrollbarStyle);
+        
+        // Add title
+        const title = this.nodeTooltip.createEl('h4', { text: node.name });
+        title.style.margin = '0 0 8px 0';
+        title.style.borderBottom = '1px solid var(--background-modifier-border)';
+        title.style.paddingBottom = '6px';
+        title.style.fontSize = 'var(--font-ui-medium)';
+        title.style.fontWeight = 'var(--font-medium)';
+        
+        // Add metadata content
+        const metadataContainer = this.nodeTooltip.createDiv({ cls: 'metadata-container' });
+        
+        // Get Obsidian metadata for the file
         if (node.path) {
-            // Open the note when the node is clicked
             const file = this.app.vault.getAbstractFileByPath(node.path);
             if (file instanceof TFile) {
-                this.app.workspace.getLeaf().openFile(file);
+                // Get file metadata from Obsidian cache
+                const metadata = this.app.metadataCache.getFileCache(file);
+                
+                // Create a note about double-click action
+                const actionHint = this.nodeTooltip.createDiv({
+                    cls: 'action-hint',
+                    attr: { 'aria-label': 'Action hint' }
+                });
+                actionHint.style.textAlign = 'center';
+                actionHint.style.marginBottom = '10px';
+                
+                // Create a button instead of text hint
+                const openNoteBtn = actionHint.createEl('button', {
+                    text: 'Open Note',
+                    cls: 'open-note-button',
+                });
+                this.openNoteButton = openNoteBtn;
+                
+                // Style the button to match Obsidian's theme
+                openNoteBtn.style.backgroundColor = 'var(--interactive-accent)';
+                openNoteBtn.style.color = 'var(--text-on-accent)';
+                openNoteBtn.style.border = 'none';
+                openNoteBtn.style.borderRadius = '4px';
+                openNoteBtn.style.padding = '6px 12px';
+                openNoteBtn.style.cursor = 'pointer';
+                openNoteBtn.style.fontWeight = 'var(--font-medium)';
+                openNoteBtn.style.fontSize = 'var(--font-ui-small)';
+                openNoteBtn.style.transition = 'background-color 0.1s ease';
+                openNoteBtn.style.outline = 'none';
+                
+                // Add hover effect
+                this.openNoteButtonMouseEnterHandler = () => {
+                    if (this.openNoteButton) {
+                        this.openNoteButton.style.backgroundColor = 'var(--interactive-accent-hover)';
+                    }
+                };
+                
+                this.openNoteButtonMouseLeaveHandler = () => {
+                    if (this.openNoteButton) {
+                        this.openNoteButton.style.backgroundColor = 'var(--interactive-accent)';
+                    }
+                };
+                
+                // Add click handler to open the note
+                this.openNoteButtonClickHandler = (e: MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.openNoteAndCloseGraph(node);
+                };
+                
+                openNoteBtn.addEventListener('mouseenter', this.openNoteButtonMouseEnterHandler);
+                openNoteBtn.addEventListener('mouseleave', this.openNoteButtonMouseLeaveHandler);
+                openNoteBtn.addEventListener('click', this.openNoteButtonClickHandler);
+                
+                // Show creation and modification times
+                const createdField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                createdField.createSpan({ text: 'Created: ', cls: 'metadata-label' });
+                createdField.createSpan({ 
+                    text: new Date(file.stat.ctime).toLocaleString(),
+                    cls: 'metadata-value' 
+                });
+                
+                const modifiedField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                modifiedField.createSpan({ text: 'Modified: ', cls: 'metadata-label' });
+                modifiedField.createSpan({ 
+                    text: new Date(file.stat.mtime).toLocaleString(),
+                    cls: 'metadata-value' 
+                });
+                
+                const sizeField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                sizeField.createSpan({ text: 'Size: ', cls: 'metadata-label' });
+                sizeField.createSpan({ 
+                    text: `${(file.stat.size / 1024).toFixed(2)} KB`,
+                    cls: 'metadata-value' 
+                });
+                
+                // Show tags if available
+                if (metadata && metadata.tags && metadata.tags.length > 0) {
+                    const tagsField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                    tagsField.createSpan({ text: 'Tags: ', cls: 'metadata-label' });
+                    const tagsContainer = tagsField.createSpan({ cls: 'metadata-value metadata-tags' });
+                    tagsContainer.style.display = 'flex';
+                    tagsContainer.style.flexWrap = 'wrap';
+                    tagsContainer.style.gap = '4px';
+                    tagsContainer.style.marginTop = '4px';
+                    
+                    metadata.tags.forEach((tag) => {
+                        const tagEl = tagsContainer.createSpan({ 
+                            text: tag.tag,
+                            cls: 'metadata-tag' 
+                        });
+                        tagEl.style.backgroundColor = 'var(--tag-background)';
+                        tagEl.style.color = 'var(--tag-color)';
+                        tagEl.style.borderRadius = '4px';
+                        tagEl.style.padding = '2px 6px';
+                        tagEl.style.fontSize = 'var(--font-ui-smaller)';
+                        tagEl.style.display = 'inline-block';
+                    });
+                }
+                
+                // Show frontmatter if available
+                if (metadata && metadata.frontmatter) {
+                    const frontmatterField = metadataContainer.createDiv({ cls: 'metadata-section' });
+                    frontmatterField.style.marginTop = '10px';
+                    
+                    const frontmatterTitle = frontmatterField.createEl('div', { 
+                        text: 'Frontmatter', 
+                        cls: 'metadata-section-title' 
+                    });
+                    frontmatterTitle.style.fontWeight = 'var(--font-medium)';
+                    frontmatterTitle.style.fontSize = 'var(--font-ui-small)';
+                    frontmatterTitle.style.marginBottom = '4px';
+                    frontmatterTitle.style.color = 'var(--text-accent)';
+                    
+                    const frontmatterContent = frontmatterField.createDiv({ cls: 'frontmatter-content' });
+                    frontmatterContent.style.marginTop = '4px';
+                    frontmatterContent.style.fontSize = 'var(--font-ui-smaller)';
+                    frontmatterContent.style.paddingLeft = '8px';
+                    frontmatterContent.style.borderLeft = '2px solid var(--background-modifier-border)';
+                    
+                    // Filter out sensitive or system properties
+                    const excludedProps = ['position', 'cssclass', 'tag', 'tags'];
+                    
+                    Object.entries(metadata.frontmatter).forEach(([key, value]) => {
+                        if (!excludedProps.includes(key.toLowerCase())) {
+                            const propDiv = frontmatterContent.createDiv({ cls: 'metadata-field' });
+                            propDiv.createSpan({ 
+                                text: `${key}: `, 
+                                cls: 'metadata-label' 
+                            });
+                            
+                            // Handle different value types
+                            let displayValue: string;
+                            if (value === null || value === undefined) {
+                                displayValue = '';
+                            } else if (Array.isArray(value)) {
+                                displayValue = value.join(', ');
+                            } else if (typeof value === 'object') {
+                                try {
+                                    displayValue = JSON.stringify(value);
+                                } catch (e) {
+                                    displayValue = '[Object]';
+                                }
+                            } else {
+                                displayValue = String(value);
+                            }
+                            
+                            propDiv.createSpan({ 
+                                text: displayValue, 
+                                cls: 'metadata-value' 
+                            });
+                        }
+                    });
+                }
+                
+                // Show backlinks count
+                // Use the resolvedLinks from metadata cache to count backlinks
+                const backlinksCount = Object.entries(this.app.metadataCache.resolvedLinks)
+                    .filter(([sourcePath, targetLinks]) => targetLinks[file.path])
+                    .length;
+                
+                const backlinksField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                backlinksField.createSpan({ text: 'Backlinks: ', cls: 'metadata-label' });
+                backlinksField.createSpan({ 
+                    text: `${backlinksCount}`,
+                    cls: 'metadata-value' 
+                });
+                
+                // Note preview section
+                const previewSection = this.nodeTooltip.createDiv({ cls: 'note-preview-section' });
+                previewSection.style.marginTop = '15px';
+                previewSection.style.borderTop = '1px solid var(--background-modifier-border)';
+                previewSection.style.paddingTop = '8px';
+                
+                const previewTitle = previewSection.createEl('div', {
+                    text: 'Note Preview',
+                    cls: 'preview-section-title'
+                });
+                previewTitle.style.fontWeight = 'var(--font-medium)';
+                previewTitle.style.fontSize = 'var(--font-ui-small)';
+                previewTitle.style.marginBottom = '6px';
+                previewTitle.style.color = 'var(--text-accent)';
+                
+                // Create preview content container
+                const previewContent = previewSection.createDiv({ cls: 'preview-content' });
+                previewContent.style.fontSize = 'var(--font-ui-smaller)';
+                previewContent.style.color = 'var(--text-normal)';
+                previewContent.style.lineHeight = '1.5';
+                // Remove max-height and overflow for preview content - no scrolling here
+                previewContent.style.backgroundColor = 'var(--background-secondary)';
+                previewContent.style.padding = '8px';
+                previewContent.style.borderRadius = '4px';
+                previewContent.style.whiteSpace = 'pre-wrap';
+                previewContent.style.wordBreak = 'break-word';
+                
+                // Get file content and render preview
+                this.app.vault.read(file).then(content => {
+                    // Remove YAML frontmatter if present
+                    let cleanContent = content;
+                    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
+                    if (frontmatterMatch) {
+                        cleanContent = content.slice(frontmatterMatch[0].length);
+                    }
+                    
+                    // Truncate content if too long (show first ~300 chars)
+                    const maxPreviewLength = 500;
+                    let previewText = cleanContent.trim().substring(0, maxPreviewLength);
+                    if (cleanContent.length > maxPreviewLength) {
+                        previewText += '...';
+                    }
+                    
+                    // Replace line breaks with HTML breaks to preserve formatting
+                    previewText = previewText.replace(/\n/g, '<br>');
+                    
+                    // Add some basic Markdown formatting
+                    // Format headings
+                    previewText = previewText.replace(/^(#{1,6})\s+(.+?)(<br>|$)/gm, (match, hashes, text, lineEnd) => {
+                        const headingLevel = hashes.length;
+                        return `<span style="font-weight: bold; font-size: ${1.2 - (headingLevel * 0.1)}em;">${text}</span>${lineEnd}`;
+                    });
+                    
+                    // Format bold text
+                    previewText = previewText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                    
+                    // Format italic text
+                    previewText = previewText.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                    
+                    // Format links
+                    previewText = previewText.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="#" style="color: var(--text-accent);">$1</a>');
+                    
+                    // Format internal links
+                    previewText = previewText.replace(/\[\[(.+?)\]\]/g, '<a href="#" style="color: var(--text-accent);">$1</a>');
+                    
+                    // Set HTML content with basic formatting
+                    previewContent.innerHTML = previewText;
+                    
+                    // Remove scroll indicator
+                }).catch(err => {
+                    previewContent.setText('Unable to load note preview.');
+                    previewContent.style.color = 'var(--text-error)';
+                    previewContent.style.fontStyle = 'italic';
+                });
+                
+                // Remove path info - we don't need to show it
+            } else {
+                // If file doesn't exist, show an error message
+                const noteInfo = metadataContainer.createDiv({ cls: 'metadata-error' });
+                noteInfo.createSpan({ 
+                    text: 'Note not found in vault. It may have been renamed or deleted.',
+                    cls: 'metadata-error-text'
+                }).style.color = 'var(--text-error)';
             }
+        } else {
+            // No path information
+            const errorInfo = metadataContainer.createDiv({ cls: 'metadata-error' });
+            errorInfo.createSpan({ 
+                text: 'No file path associated with this node.',
+                cls: 'metadata-error-text'
+            }).style.color = 'var(--text-error)';
+        }
+        
+        // Style metadata label/value
+        const labels = this.nodeTooltip.querySelectorAll('.metadata-label');
+        const values = this.nodeTooltip.querySelectorAll('.metadata-value');
+        const fields = this.nodeTooltip.querySelectorAll('.metadata-field');
+        
+        labels.forEach((label: Element) => {
+            (label as HTMLElement).style.fontWeight = 'var(--font-medium)';
+            (label as HTMLElement).style.color = 'var(--text-muted)';
+            (label as HTMLElement).style.display = 'inline-block';
+            (label as HTMLElement).style.minWidth = '80px';
+        });
+        
+        values.forEach((value: Element) => {
+            (value as HTMLElement).style.wordBreak = 'break-word';
+        });
+        
+        fields.forEach((field: Element) => {
+            (field as HTMLElement).style.marginBottom = '6px';
+        });
+    }
+    
+    private removeNodeTooltip() {
+        if (this.nodeTooltip) {
+            // Clean up event listeners
+            if (this.tooltipMouseEnterHandler) {
+                this.nodeTooltip.removeEventListener('mouseenter', this.tooltipMouseEnterHandler);
+            }
+            if (this.tooltipMouseLeaveHandler) {
+                this.nodeTooltip.removeEventListener('mouseleave', this.tooltipMouseLeaveHandler);
+            }
+            
+            // Clean up button event listeners
+            if (this.openNoteButton) {
+                if (this.openNoteButtonMouseEnterHandler) {
+                    this.openNoteButton.removeEventListener('mouseenter', this.openNoteButtonMouseEnterHandler);
+                }
+                if (this.openNoteButtonMouseLeaveHandler) {
+                    this.openNoteButton.removeEventListener('mouseleave', this.openNoteButtonMouseLeaveHandler);
+                }
+                if (this.openNoteButtonClickHandler) {
+                    this.openNoteButton.removeEventListener('click', this.openNoteButtonClickHandler);
+                }
+                this.openNoteButton = null;
+            }
+            
+            this.nodeTooltip.remove();
+            this.nodeTooltip = null;
+            this.tooltipVisible = false;
+            this.tooltipMouseEnterHandler = null;
+            this.tooltipMouseLeaveHandler = null;
+            this.openNoteButtonMouseEnterHandler = null;
+            this.openNoteButtonMouseLeaveHandler = null;
+            this.openNoteButtonClickHandler = null;
+        }
+    }
+    
+    private openNoteAndCloseGraph(node: GraphNode) {
+        if (node.path) {
+            // Try to get the file
+            const file = this.app.vault.getAbstractFileByPath(node.path);
+            if (file instanceof TFile) {
+                // Open the file
+                this.app.workspace.getLeaf().openFile(file);
+                
+                // Close the graph view
+                // Notify plugin that we've been closed
+                const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+                if (plugin) {
+                    plugin.graphView = null;
+                }
+                
+                // Clean up
+                this.onunload();
+                this.canvas.remove();
+            } else {
+                new Notice(`Could not find file at path: ${node.path}`);
+            }
+        } else {
+            new Notice('This node has no associated file path.');
         }
     }
 
     private drag() {
+        // Use consistent colors
+        const primaryNodeColor = 'var(--interactive-accent)';
+        
         return d3.drag<SVGCircleElement, GraphNode>()
             .on('start', (event, d) => {
                 if (!event.active) this.simulation.alphaTarget(0.3).restart();
                 (d as any).fx = (d as any).x;
                 (d as any).fy = (d as any).y;
+                
+                // Clear hover state and remove tooltip when dragging starts
+                this.hoverNode = null;
+                if (this.hoverTimeout !== null) {
+                    window.clearTimeout(this.hoverTimeout);
+                    this.hoverTimeout = null;
+                }
+                this.removeNodeTooltip();
                 
                 // Highlight connections when dragging starts
                 this.highlightConnections(d.id, true);
@@ -580,6 +1191,11 @@ export class GraphView {
 
     private async loadVaultData() {
         try {
+            // Reset hover state
+            this.hoverNode = null;
+            this.hoverTimeout = null;
+            this.tooltipVisible = false;
+            
             // Build the graph data
             const graphData = await this.buildGraphData();
             
@@ -702,6 +1318,10 @@ export class GraphView {
             this.isDragging = true;
             this.startX = e.clientX - parseInt(this.canvas.style.left);
             this.startY = e.clientY - parseInt(this.canvas.style.top);
+            
+            // Close any open tooltips when dragging the canvas
+            this.removeNodeTooltip();
+            
             e.preventDefault();
             e.stopPropagation();
         }
@@ -714,6 +1334,10 @@ export class GraphView {
             this.startY = e.clientY;
             this.startWidth = this.canvas.offsetWidth;
             this.startHeight = this.canvas.offsetHeight;
+            
+            // Close any open tooltips when resizing the canvas
+            this.removeNodeTooltip();
+            
             e.preventDefault();
             e.stopPropagation();
         }
@@ -788,6 +1412,25 @@ export class GraphView {
     }
 
     public onunload() {
+        // Clear any pending hover timeouts
+        if (this.hoverTimeout !== null) {
+            window.clearTimeout(this.hoverTimeout);
+            this.hoverTimeout = null;
+        }
+        
+        // Clear hover state
+        this.hoverNode = null;
+        this.tooltipVisible = false;
+        this.tooltipMouseEnterHandler = null;
+        this.tooltipMouseLeaveHandler = null;
+        this.openNoteButton = null;
+        this.openNoteButtonMouseEnterHandler = null;
+        this.openNoteButtonMouseLeaveHandler = null;
+        this.openNoteButtonClickHandler = null;
+        
+        // Remove any tooltips
+        this.removeNodeTooltip();
+        
         // Clean up event listeners
         document.removeEventListener('mousemove', this.boundMouseMove);
         document.removeEventListener('mouseup', this.boundMouseUp);
