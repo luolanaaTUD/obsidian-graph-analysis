@@ -217,7 +217,7 @@ export class GraphView {
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 // Always apply a gentle force toward the center for orphan nodes (no links)
-                const isOrphan = (d.degree === 0 || !d.degree);
+                const isOrphan = d.degree === 0;
                 if (isOrphan) {
                     // Stronger centering force for orphans
                     d.vx -= dx * 0.03 * alpha;
@@ -506,7 +506,7 @@ export class GraphView {
         this.nodes = [];
         this.links = [];
         
-        // Create nodes
+        // Create nodes with centrality scores from WASM
         graphData.nodes.forEach((nodePath, index) => {
             const fileName = nodePath.split('/').pop() || nodePath;
             const displayName = fileName.replace('.md', '');
@@ -519,30 +519,17 @@ export class GraphView {
                 id: index.toString(),
                 name: displayName,
                 path: nodePath,
-                centralityScore: centralityScore
+                centralityScore: centralityScore,
+                degree: centralityScore // For degree centrality, the score is the degree
             });
         });
         
-        // Create links and calculate node degrees
-        const nodeDegrees = new Map<string, number>();
-        
+        // Create links
         graphData.edges.forEach(([sourceIdx, targetIdx]) => {
-            const sourceId = sourceIdx.toString();
-            const targetId = targetIdx.toString();
-            
             this.links.push({
-                source: sourceId,
-                target: targetId
+                source: sourceIdx.toString(),
+                target: targetIdx.toString()
             });
-            
-            // Increment degree count for both nodes
-            nodeDegrees.set(sourceId, (nodeDegrees.get(sourceId) || 0) + 1);
-            nodeDegrees.set(targetId, (nodeDegrees.get(targetId) || 0) + 1);
-        });
-        
-        // Add degree information to nodes
-        this.nodes.forEach(node => {
-            node.degree = nodeDegrees.get(node.id) || 0;
         });
         
         // Update simulation
