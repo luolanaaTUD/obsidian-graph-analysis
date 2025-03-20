@@ -1,7 +1,8 @@
 mod utils;
 
 use wasm_bindgen::prelude::*;
-use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::graph::DiGraph;
+use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -311,7 +312,7 @@ pub fn calculate_betweenness_centrality(graph_data_json: &str) -> String {
     
     // For each node as a source
     for s in 0..n {
-        let source = graph.node_indices().nth(s).unwrap();
+        let _source = graph.node_indices().nth(s).unwrap();
         
         // BFS data structures
         let mut queue = std::collections::VecDeque::new();
