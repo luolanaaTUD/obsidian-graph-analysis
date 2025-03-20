@@ -159,9 +159,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                 // Create and show new graph view
                 this.graphView = new GraphView(
                     this.app, 
-                    this.calculateDegreeCentrality.bind(this),
-                    this.calculateEigenvectorCentrality.bind(this),
-                    this.calculateBetweennessCentrality.bind(this)
+                    this.calculateDegreeCentrality.bind(this)
                 );
                 await this.graphView.onload(this.app.workspace.containerEl);
             }
