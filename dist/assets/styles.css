@@ -52,11 +52,14 @@
     background-color: var(--interactive-accent-hover);
 }
 
+/* Graph Analysis Canvas */
 .graph-analysis-canvas {
     position: absolute;
-    background: var(--background-primary);
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    background: rgba(var(--background-primary-rgb), 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     z-index: 100;
 }
