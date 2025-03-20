@@ -53,6 +53,7 @@ export class GraphView {
     private height: number = 600;
     private calculateDegreeCentrality?: (graphDataJson: string) => string;
     private loadingIndicator: HTMLElement | null = null;
+    private maxCentralityScore: number = 1; // Store max centrality score
     
     // Variables for dragging and resizing
     private startX: number = 0;
@@ -276,16 +277,43 @@ export class GraphView {
         return radius;
     }
     
-    private getMaxCentralityScore(): number {
-        if (!this.nodes || this.nodes.length === 0) return 1;
-        
-        let maxScore = 0;
-        for (const node of this.nodes) {
-            if (node.centralityScore !== undefined && node.centralityScore > maxScore) {
-                maxScore = node.centralityScore;
+    private calculateCentrality(graphData: GraphData): CentralityResult[] {
+        try {
+            // Check if we have the WASM calculation function
+            if (!this.calculateDegreeCentrality) {
+                console.error('WASM centrality calculation function not available');
+                return [];
             }
+            
+            // Call the WASM function to calculate degree centrality
+            const graphDataJson = JSON.stringify(graphData);
+            const resultsJson = this.calculateDegreeCentrality(graphDataJson);
+            
+            // Parse results
+            const results = JSON.parse(resultsJson) as CentralityResult[];
+            
+            // Check for error
+            if (results.length === 1 && 'error' in results[0]) {
+                console.error('Error calculating centrality:', (results[0] as any).error);
+                return [];
+            }
+            
+            // Store the maximum score at calculation time
+            if (results.length > 0) {
+                this.maxCentralityScore = results.reduce((max, current) => 
+                    current.score > max ? current.score : max, 0);
+            }
+            
+            return results;
+        } catch (error) {
+            console.error('Error calculating centrality:', error);
+            return [];
         }
-        return maxScore > 0 ? maxScore : 1; // Avoid returning 0
+    }
+    
+    private getMaxCentralityScore(): number {
+        // Return the stored max score
+        return this.maxCentralityScore > 0 ? this.maxCentralityScore : 1;
     }
 
     private getLinkDistance(link: GraphLink): number {
@@ -467,34 +495,6 @@ export class GraphView {
             });
     }
 
-    private calculateCentrality(graphData: GraphData): CentralityResult[] {
-        try {
-            // Check if we have the WASM calculation function
-            if (!this.calculateDegreeCentrality) {
-                console.error('WASM centrality calculation function not available');
-                return [];
-            }
-            
-            // Call the WASM function to calculate degree centrality
-            const graphDataJson = JSON.stringify(graphData);
-            const resultsJson = this.calculateDegreeCentrality(graphDataJson);
-            
-            // Parse results
-            const results = JSON.parse(resultsJson) as CentralityResult[];
-            
-            // Check for error
-            if (results.length === 1 && 'error' in results[0]) {
-                console.error('Error calculating centrality:', (results[0] as any).error);
-                return [];
-            }
-            
-            return results;
-        } catch (error) {
-            console.error('Error calculating centrality:', error);
-            return [];
-        }
-    }
-
     private async loadVaultData() {
         // Build graph data from vault
         const graphData = await this.buildGraphData();
@@ -546,6 +546,9 @@ export class GraphView {
     }
 
     private async buildGraphData(): Promise<GraphData> {
+        // TODO: Consider moving this graph building logic to Rust/WASM for better performance
+        // This would require passing the vault data to WASM or creating a bridge API
+        
         const files = this.app.vault.getMarkdownFiles();
         const nodes: string[] = [];
         const nodeMap: Map<string, number> = new Map();
