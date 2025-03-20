@@ -6,6 +6,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
     name: string;
     path?: string;
     centralityScore?: number;
+    degree?: number;
 }
 
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
@@ -31,44 +32,49 @@ export class GraphView {
     private container: HTMLElement;
     private canvas: HTMLElement;
     private app: App;
+    private svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
+    private simulation: d3.Simulation<GraphNode, GraphLink>;
+    private nodes: GraphNode[] = [];
+    private links: GraphLink[] = [];
+    private nodesSelection: d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown>;
+    private linksSelection: d3.Selection<SVGLineElement, GraphLink, SVGGElement, unknown>;
+    private labelsSelection: d3.Selection<SVGTextElement, GraphNode, SVGGElement, unknown>;
+    private svgGroup: d3.Selection<SVGGElement, unknown, null, undefined>;
+    private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
     private isDragging: boolean = false;
+    private draggedNode: GraphNode | null = null;
+    private isMovingCanvas: boolean = false;
     private isResizing: boolean = false;
+    private initialX: number = 0;
+    private initialY: number = 0;
+    private initialWidth: number = 800;
+    private initialHeight: number = 600;
+    private width: number = 800;
+    private height: number = 600;
+    private calculateDegreeCentrality?: (graphDataJson: string) => string;
+    private loadingIndicator: HTMLElement | null = null;
+    
+    // Variables for dragging and resizing
     private startX: number = 0;
     private startY: number = 0;
     private startWidth: number = 0;
     private startHeight: number = 0;
     
-    // D3 related properties
-    private svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
-    private graphContainer: d3.Selection<SVGGElement, unknown, null, undefined>;
-    private simulation: d3.Simulation<GraphNode, GraphLink>;
-    private nodes: GraphNode[] = [];
-    private links: GraphLink[] = [];
-    private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
-    private initialWidth: number;
-    private initialHeight: number;
-    private loadingIndicator: HTMLElement | null = null;
-    private nodeSizeScale: d3.ScaleLinear<number, number>;
-    private calculateDegreeCentrality: CentralityCalculator | null = null;
-
     // Bound event handlers
     private boundMouseMove: (e: MouseEvent) => void;
     private boundMouseUp: (e: MouseEvent) => void;
     private boundMouseDown: (e: MouseEvent) => void;
     private boundResizeStart: (e: MouseEvent) => void;
 
-    constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
+    constructor(app: App, calculateDegreeCentrality?: (graphDataJson: string) => string) {
         this.app = app;
-        this.calculateDegreeCentrality = calculateDegreeCentrality || null;
+        this.calculateDegreeCentrality = calculateDegreeCentrality;
         
-        // Bind event handlers once
+        // Create bound event handlers to properly handle 'this'
         this.boundMouseMove = this.onMouseMove.bind(this);
         this.boundMouseUp = this.onMouseUp.bind(this);
         this.boundMouseDown = this.onMouseDown.bind(this);
         this.boundResizeStart = this.onResizeStart.bind(this);
-        
-        // Initialize node size scale (will be updated later with actual data)
-        this.nodeSizeScale = d3.scaleLinear().range([10, 30]);
     }
 
     public async onload(container: HTMLElement) {
@@ -162,24 +168,24 @@ export class GraphView {
             .style('position', 'absolute')
             .style('top', 0)
             .style('left', 0);
-
+        
         // Add zoom behavior
         this.zoom = d3.zoom<SVGSVGElement, unknown>()
             .scaleExtent([0.1, 4])
             .on('zoom', (event) => {
-                this.graphContainer.attr('transform', event.transform);
+                this.svgGroup.attr('transform', event.transform);
             });
-
+            
         // Add a group for the graph that will be transformed
-        this.graphContainer = this.svg.append('g');
+        this.svgGroup = this.svg.append('g');
 
         // Enable zoom and pan
         this.svg.call(this.zoom);
-
+        
         // Get the available height (accounting for title bar)
         const width = this.canvas.clientWidth;
         const height = this.canvas.clientHeight - 32; // Account for title bar
-
+        
         // Initialize force simulation
         this.simulation = d3.forceSimulation<GraphNode>()
             .force('charge', d3.forceManyBody().strength(-100))
@@ -188,10 +194,48 @@ export class GraphView {
             .force('link', d3.forceLink<GraphNode, GraphLink>()
                 .id(d => d.id)
                 .distance(d => this.getLinkDistance(d)))
+            .force('boundary', this.createBoundaryForce())
             .on('tick', () => this.updateGraph());
             
         // Set the initial transform to center the graph properly
         this.updateGraphTransform();
+    }
+
+    // Create a custom force to keep nodes within a circular boundary
+    private createBoundaryForce() {
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight - 32; // Account for title bar
+        const boundaryRadius = Math.min(width, height) * 0.4; // 40% of the smallest dimension
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const strength = 0.15; // Increased strength to keep orphan nodes closer
+        
+        return function(alpha: number) {
+            return function(d: any) {
+                const dx = d.x - centerX;
+                const dy = d.y - centerY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Always apply a gentle force toward the center for orphan nodes (no links)
+                const isOrphan = (d.degree === 0 || !d.degree);
+                if (isOrphan) {
+                    // Stronger centering force for orphans
+                    d.vx -= dx * 0.03 * alpha;
+                    d.vy -= dy * 0.03 * alpha;
+                }
+                
+                if (distance > boundaryRadius) {
+                    // Calculate new position within boundary
+                    d.x = centerX + (dx / distance) * boundaryRadius;
+                    d.y = centerY + (dy / distance) * boundaryRadius;
+                } else if (distance > boundaryRadius * 0.85) {
+                    // Apply a stronger force as nodes approach the boundary
+                    const nudge = (boundaryRadius - distance) / boundaryRadius;
+                    d.vx -= dx * nudge * strength * alpha;
+                    d.vy -= dy * nudge * strength * alpha;
+                }
+            };
+        };
     }
 
     private getNodeRadius(node: GraphNode): number {
@@ -271,13 +315,13 @@ export class GraphView {
         const scale = Math.min(scaleX, scaleY);
         
         // Apply the transform
-        this.graphContainer.attr('transform', 
+        this.svgGroup.attr('transform', 
             `translate(${centerX}, ${centerY}) scale(${scale}) translate(${-this.initialWidth/2}, ${-(this.initialHeight-32)/2})`);
     }
 
     private updateGraph() {
         // Update links
-        this.graphContainer.selectAll<SVGLineElement, GraphLink>('line')
+        this.svgGroup.selectAll<SVGLineElement, GraphLink>('line')
             .data(this.links)
             .join(
                 enter => enter.append('line')
@@ -292,7 +336,7 @@ export class GraphView {
             .attr('y2', d => (d.target as unknown as GraphNode).y!);
 
         // Update nodes
-        const nodes = this.graphContainer.selectAll<SVGCircleElement, GraphNode>('circle')
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('circle')
             .data(this.nodes, d => d.id)
             .join(
                 enter => enter.append('circle')
@@ -309,7 +353,7 @@ export class GraphView {
             .attr('cy', d => (d as any).y);
 
         // Add hover effect
-        nodes
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .on('mouseover', (event, d) => {
                 this.highlightConnections(d.id, true);
             })
@@ -318,7 +362,7 @@ export class GraphView {
             });
 
         // Add labels
-        this.graphContainer.selectAll<SVGTextElement, GraphNode>('text')
+        this.svgGroup.selectAll<SVGTextElement, GraphNode>('text')
             .data(this.nodes, d => d.id)
             .join(
                 enter => enter.append('text')
@@ -352,7 +396,7 @@ export class GraphView {
         });
         
         // Highlight the selected node
-        this.graphContainer.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id === nodeId)
             .transition()
             .duration(200)
@@ -360,7 +404,7 @@ export class GraphView {
             .attr('opacity', highlight ? 1 : 0.6);
             
         // Highlight connected nodes
-        this.graphContainer.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
             .transition()
             .duration(200)
@@ -370,7 +414,7 @@ export class GraphView {
         const accentColor = '#705dcf'; // Purple color similar to default Obsidian accent
             
         // Highlight connected links with direct color
-        this.graphContainer.selectAll<SVGLineElement, GraphLink>('.graph-link')
+        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
             .filter(d => {
                 const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
                 const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
@@ -381,7 +425,7 @@ export class GraphView {
             .style('stroke-width', highlight ? '3px' : '2px');
             
         // Also highlight the labels of connected nodes
-        this.graphContainer.selectAll<SVGTextElement, GraphNode>('.graph-label')
+        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
             .filter(d => connectedNodeIds.has(d.id))
             .transition()
             .duration(200)
@@ -479,12 +523,26 @@ export class GraphView {
             });
         });
         
-        // Create links
+        // Create links and calculate node degrees
+        const nodeDegrees = new Map<string, number>();
+        
         graphData.edges.forEach(([sourceIdx, targetIdx]) => {
+            const sourceId = sourceIdx.toString();
+            const targetId = targetIdx.toString();
+            
             this.links.push({
-                source: sourceIdx.toString(),
-                target: targetIdx.toString()
+                source: sourceId,
+                target: targetId
             });
+            
+            // Increment degree count for both nodes
+            nodeDegrees.set(sourceId, (nodeDegrees.get(sourceId) || 0) + 1);
+            nodeDegrees.set(targetId, (nodeDegrees.get(targetId) || 0) + 1);
+        });
+        
+        // Add degree information to nodes
+        this.nodes.forEach(node => {
+            node.degree = nodeDegrees.get(node.id) || 0;
         });
         
         // Update simulation
@@ -608,6 +666,29 @@ export class GraphView {
 
     private onMouseUp(e: MouseEvent) {
         this.isDragging = false;
+        this.isResizing = false;
+    }
+
+    private onResizeEnd() {
+        if (!this.isResizing) return;
+        
+        // Update based on final size
+        this.width = this.canvas.clientWidth;
+        this.height = this.canvas.clientHeight - 32; // Account for title bar
+        
+        // Update SVG dimensions
+        this.svg
+            .attr('width', this.width)
+            .attr('height', this.height);
+        
+        // Update simulation forces that depend on canvas size
+        this.simulation
+            .force('center', d3.forceCenter(this.width / 2, this.height / 2))
+            .force('boundary', this.createBoundaryForce());
+            
+        // Restart simulation with an increased alpha to adjust layout
+        this.simulation.alpha(0.3).restart();
+        
         this.isResizing = false;
     }
 
