@@ -5,6 +5,8 @@ import { GraphView } from './components/GraphView';
 // We need to declare the functions that will be available
 declare function calculate_degree_centrality(graph_data_json: string): string;
 declare function calculate_eigenvector_centrality(graph_data_json: string): string;
+declare function calculate_betweenness_centrality(graph_data_json: string): string;
+declare function build_graph_from_vault(vault_data_json: string): string;
 declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<any>;
 
 interface GraphAnalysisSettings {
@@ -130,6 +132,13 @@ export default class GraphAnalysisPlugin extends Plugin {
             name: 'Analyze Vault (Eigenvector Centrality)',
             callback: () => this.analyzeCentrality('eigenvector')
         });
+        
+        // Add command for betweenness centrality
+        this.addCommand({
+            id: 'analyze-vault-betweenness-centrality',
+            name: 'Analyze Vault (Betweenness Centrality)',
+            callback: () => this.analyzeCentrality('betweenness')
+        });
 
         // Add settings tab
         this.addSettingTab(new GraphAnalysisSettingTab(this.app, this));
@@ -148,7 +157,12 @@ export default class GraphAnalysisPlugin extends Plugin {
                 }, 1000);
             } else {
                 // Create and show new graph view
-                this.graphView = new GraphView(this.app, this.calculateDegreeCentrality.bind(this));
+                this.graphView = new GraphView(
+                    this.app, 
+                    this.calculateDegreeCentrality.bind(this),
+                    this.calculateEigenvectorCentrality.bind(this),
+                    this.calculateBetweennessCentrality.bind(this)
+                );
                 await this.graphView.onload(this.app.workspace.containerEl);
             }
         });
@@ -170,7 +184,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         await this.saveData(this.settings);
     }
 
-    async analyzeCentrality(algorithm: 'degree' | 'eigenvector') {
+    async analyzeCentrality(algorithm: 'degree' | 'eigenvector' | 'betweenness') {
         if (!this.wasmInitialized) {
             new Notice('WASM module not initialized. Please try again later.');
             return;
@@ -193,6 +207,9 @@ export default class GraphAnalysisPlugin extends Plugin {
             } else if (algorithm === 'eigenvector') {
                 resultsJson = calculate_eigenvector_centrality(JSON.stringify(graphData));
                 algorithmName = 'Eigenvector Centrality';
+            } else if (algorithm === 'betweenness') {
+                resultsJson = calculate_betweenness_centrality(JSON.stringify(graphData));
+                algorithmName = 'Betweenness Centrality';
             } else {
                 throw new Error(`Unknown algorithm: ${algorithm}`);
             }
@@ -216,8 +233,50 @@ export default class GraphAnalysisPlugin extends Plugin {
         }
     }
 
-    async buildGraphData() {
+    public async buildGraphData() {
         const files = this.app.vault.getMarkdownFiles();
+        
+        // First try to use the Rust implementation for better performance
+        if (this.wasmInitialized && typeof build_graph_from_vault === 'function') {
+            try {
+                // Prepare vault data for Rust
+                const vaultFiles = await Promise.all(files.map(async (file) => {
+                    // Skip files in excluded folders
+                    if (this.isFileExcluded(file)) {
+                        return null;
+                    }
+                    
+                    const content = await this.app.vault.read(file);
+                    return {
+                        path: file.path,
+                        content: content
+                    };
+                }));
+                
+                // Filter out excluded files
+                const filteredVaultFiles = vaultFiles.filter(file => file !== null);
+                
+                // Convert to JSON and call Rust function
+                const vaultDataJson = JSON.stringify({ files: filteredVaultFiles });
+                const graphDataJson = build_graph_from_vault(vaultDataJson);
+                
+                // Parse the result
+                const graphData = JSON.parse(graphDataJson);
+                
+                // Check for error
+                if (graphData.error) {
+                    console.error('Error building graph in Rust:', graphData.error);
+                    throw new Error(graphData.error);
+                }
+                
+                return graphData;
+            } catch (error) {
+                console.error('Error using Rust graph builder, falling back to TS implementation:', error);
+                // Fall back to TypeScript implementation
+            }
+        }
+        
+        // Fallback TypeScript implementation
         const nodes: string[] = [];
         const nodeMap: Map<string, number> = new Map();
         const edges: [number, number][] = [];
@@ -328,6 +387,34 @@ export default class GraphAnalysisPlugin extends Plugin {
         } catch (error) {
             console.error('Error in WASM degree centrality calculation:', error);
             throw new Error('Failed to calculate degree centrality');
+        }
+    }
+    
+    // Method to calculate eigenvector centrality using WASM
+    public calculateEigenvectorCentrality(graphDataJson: string): string {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            return calculate_eigenvector_centrality(graphDataJson);
+        } catch (error) {
+            console.error('Error in WASM eigenvector centrality calculation:', error);
+            throw new Error('Failed to calculate eigenvector centrality');
+        }
+    }
+    
+    // Method to calculate betweenness centrality using WASM
+    public calculateBetweennessCentrality(graphDataJson: string): string {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            return calculate_betweenness_centrality(graphDataJson);
+        } catch (error) {
+            console.error('Error in WASM betweenness centrality calculation:', error);
+            throw new Error('Failed to calculate betweenness centrality');
         }
     }
 }

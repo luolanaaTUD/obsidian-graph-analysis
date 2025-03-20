@@ -52,6 +52,9 @@ export class GraphView {
     private width: number = 800;
     private height: number = 600;
     private calculateDegreeCentrality?: (graphDataJson: string) => string;
+    private calculateEigenvectorCentrality?: (graphDataJson: string) => string;
+    private calculateBetweennessCentrality?: (graphDataJson: string) => string;
+    private centralityType: 'degree' | 'eigenvector' | 'betweenness' = 'degree';
     private loadingIndicator: HTMLElement | null = null;
     private maxCentralityScore: number = 1; // Store max centrality score
     
@@ -67,9 +70,16 @@ export class GraphView {
     private boundMouseDown: (e: MouseEvent) => void;
     private boundResizeStart: (e: MouseEvent) => void;
 
-    constructor(app: App, calculateDegreeCentrality?: (graphDataJson: string) => string) {
+    constructor(
+        app: App, 
+        calculateDegreeCentrality?: (graphDataJson: string) => string,
+        calculateEigenvectorCentrality?: (graphDataJson: string) => string,
+        calculateBetweennessCentrality?: (graphDataJson: string) => string
+    ) {
         this.app = app;
         this.calculateDegreeCentrality = calculateDegreeCentrality;
+        this.calculateEigenvectorCentrality = calculateEigenvectorCentrality;
+        this.calculateBetweennessCentrality = calculateBetweennessCentrality;
         
         // Create bound event handlers to properly handle 'this'
         this.boundMouseMove = this.onMouseMove.bind(this);
@@ -102,6 +112,38 @@ export class GraphView {
         // Add drag handle (title bar)
         const dragHandle = this.canvas.createDiv({ cls: 'graph-analysis-drag-handle' });
         dragHandle.createSpan({ text: 'Graph Analysis' });
+        
+        // Add centrality type selector
+        const selectorContainer = dragHandle.createDiv({ cls: 'graph-analysis-selector-container' });
+        const centralitySelector = selectorContainer.createEl('select', { cls: 'graph-analysis-centrality-selector' });
+        
+        // Add options
+        const degreeOption = centralitySelector.createEl('option', { text: 'Degree Centrality' });
+        degreeOption.value = 'degree';
+        degreeOption.selected = true;
+        
+        const eigenvectorOption = centralitySelector.createEl('option', { text: 'Eigenvector Centrality' });
+        eigenvectorOption.value = 'eigenvector';
+        
+        const betweennessOption = centralitySelector.createEl('option', { text: 'Betweenness Centrality' });
+        betweennessOption.value = 'betweenness';
+        
+        // Add change event
+        centralitySelector.addEventListener('change', async (e) => {
+            const select = e.target as HTMLSelectElement;
+            this.centralityType = select.value as 'degree' | 'eigenvector' | 'betweenness';
+            
+            // Reload data with new centrality type
+            this.showLoadingIndicator();
+            try {
+                await this.loadVaultData();
+            } catch (error) {
+                console.error(`Error loading vault data with ${this.centralityType} centrality:`, error);
+                new Notice(`Error loading graph data: ${(error as Error).message}`);
+            } finally {
+                this.hideLoadingIndicator();
+            }
+        });
 
         // Add close button
         const closeButton = this.canvas.createDiv({ cls: 'graph-analysis-close-button' });
@@ -279,15 +321,25 @@ export class GraphView {
     
     private calculateCentrality(graphData: GraphData): CentralityResult[] {
         try {
-            // Check if we have the WASM calculation function
-            if (!this.calculateDegreeCentrality) {
-                console.error('WASM centrality calculation function not available');
+            // Check which centrality function to use based on selected type
+            let centralityCalculator: ((graphDataJson: string) => string) | undefined;
+            
+            if (this.centralityType === 'degree' && this.calculateDegreeCentrality) {
+                centralityCalculator = this.calculateDegreeCentrality;
+            } else if (this.centralityType === 'eigenvector' && this.calculateEigenvectorCentrality) {
+                centralityCalculator = this.calculateEigenvectorCentrality;
+            } else if (this.centralityType === 'betweenness' && this.calculateBetweennessCentrality) {
+                centralityCalculator = this.calculateBetweennessCentrality;
+            }
+            
+            if (!centralityCalculator) {
+                console.error(`${this.centralityType} centrality calculation function not available`);
                 return [];
             }
             
-            // Call the WASM function to calculate degree centrality
+            // Call the selected centrality function
             const graphDataJson = JSON.stringify(graphData);
-            const resultsJson = this.calculateDegreeCentrality(graphDataJson);
+            const resultsJson = centralityCalculator(graphDataJson);
             
             // Parse results
             const results = JSON.parse(resultsJson) as CentralityResult[];
@@ -496,59 +548,73 @@ export class GraphView {
     }
 
     private async loadVaultData() {
-        // Build graph data from vault
-        const graphData = await this.buildGraphData();
-        
-        // Calculate degree centrality using WASM
-        const centralityResults = this.calculateCentrality(graphData);
-        
-        // Convert to D3 format
-        this.nodes = [];
-        this.links = [];
-        
-        // Create nodes with centrality scores from WASM
-        graphData.nodes.forEach((nodePath, index) => {
-            const fileName = nodePath.split('/').pop() || nodePath;
-            const displayName = fileName.replace('.md', '');
+        try {
+            // Build the graph data
+            const graphData = await this.buildGraphData();
             
-            // Find corresponding centrality result
-            const centralityResult = centralityResults.find(r => r.node_id === index);
-            const centralityScore = centralityResult ? centralityResult.score : 0;
+            // Calculate degree centrality using WASM
+            const centralityResults = this.calculateCentrality(graphData);
             
-            this.nodes.push({
-                id: index.toString(),
-                name: displayName,
-                path: nodePath,
-                centralityScore: centralityScore,
-                degree: centralityScore // For degree centrality, the score is the degree
+            // Convert to D3 format
+            this.nodes = [];
+            this.links = [];
+            
+            // Create nodes with centrality scores from WASM
+            graphData.nodes.forEach((nodePath, index) => {
+                const fileName = nodePath.split('/').pop() || nodePath;
+                const displayName = fileName.replace('.md', '');
+                
+                // Find corresponding centrality result
+                const centralityResult = centralityResults.find(r => r.node_id === index);
+                const centralityScore = centralityResult ? centralityResult.score : 0;
+                
+                this.nodes.push({
+                    id: index.toString(),
+                    name: displayName,
+                    path: nodePath,
+                    centralityScore: centralityScore,
+                    degree: centralityScore // For degree centrality, the score is the degree
+                });
             });
-        });
-        
-        // Create links
-        graphData.edges.forEach(([sourceIdx, targetIdx]) => {
-            this.links.push({
-                source: sourceIdx.toString(),
-                target: targetIdx.toString()
+            
+            // Create links
+            graphData.edges.forEach(([sourceIdx, targetIdx]) => {
+                this.links.push({
+                    source: sourceIdx.toString(),
+                    target: targetIdx.toString()
+                });
             });
-        });
-        
-        // Update simulation
-        this.simulation.nodes(this.nodes);
-        const linkForce = this.simulation.force('link') as d3.ForceLink<GraphNode, GraphLink>;
-        linkForce.links(this.links);
-        
-        // Update collision detection radius based on node sizes
-        const collisionForce = this.simulation.force('collision') as d3.ForceCollide<GraphNode>;
-        collisionForce.radius(d => this.getNodeRadius(d) + 5);
-        
-        // Restart simulation
-        this.simulation.alpha(1).restart();
+            
+            // Update simulation
+            this.simulation.nodes(this.nodes);
+            const linkForce = this.simulation.force('link') as d3.ForceLink<GraphNode, GraphLink>;
+            linkForce.links(this.links);
+            
+            // Update collision detection radius based on node sizes
+            const collisionForce = this.simulation.force('collision') as d3.ForceCollide<GraphNode>;
+            collisionForce.radius(d => this.getNodeRadius(d) + 5);
+            
+            // Restart simulation
+            this.simulation.alpha(1).restart();
+        } catch (error) {
+            console.error('Error loading vault data:', error);
+            throw error;
+        }
     }
 
     private async buildGraphData(): Promise<GraphData> {
-        // TODO: Consider moving this graph building logic to Rust/WASM for better performance
-        // This would require passing the vault data to WASM or creating a bridge API
+        // Use the plugin's buildGraphData method if available
+        // This will use the Rust implementation if available
+        const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+        if (plugin && typeof plugin.buildGraphData === 'function') {
+            try {
+                return await plugin.buildGraphData();
+            } catch (error) {
+                console.error('Error using plugin graph builder, falling back to local implementation:', error);
+            }
+        }
         
+        // Fallback to local implementation
         const files = this.app.vault.getMarkdownFiles();
         const nodes: string[] = [];
         const nodeMap: Map<string, number> = new Map();
