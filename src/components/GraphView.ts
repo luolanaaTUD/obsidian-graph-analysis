@@ -1,4 +1,15 @@
-import { App, WorkspaceLeaf } from 'obsidian';
+import { App } from 'obsidian';
+import * as d3 from 'd3';
+
+interface GraphNode extends d3.SimulationNodeDatum {
+    id: string;
+    name: string;
+}
+
+interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
+    source: string;
+    target: string;
+}
 
 export class GraphView {
     private container: HTMLElement;
@@ -10,9 +21,31 @@ export class GraphView {
     private startY: number = 0;
     private startWidth: number = 0;
     private startHeight: number = 0;
+    
+    // D3 related properties
+    private svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
+    private graphContainer: d3.Selection<SVGGElement, unknown, null, undefined>;
+    private simulation: d3.Simulation<GraphNode, GraphLink>;
+    private nodes: GraphNode[] = [];
+    private links: GraphLink[] = [];
+    private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
+    private initialWidth: number;
+    private initialHeight: number;
+
+    // Bound event handlers
+    private boundMouseMove: (e: MouseEvent) => void;
+    private boundMouseUp: (e: MouseEvent) => void;
+    private boundMouseDown: (e: MouseEvent) => void;
+    private boundResizeStart: (e: MouseEvent) => void;
 
     constructor(app: App) {
         this.app = app;
+        
+        // Bind event handlers once
+        this.boundMouseMove = this.onMouseMove.bind(this);
+        this.boundMouseUp = this.onMouseUp.bind(this);
+        this.boundMouseDown = this.onMouseDown.bind(this);
+        this.boundResizeStart = this.onResizeStart.bind(this);
     }
 
     public async onload(container: HTMLElement) {
@@ -26,14 +59,24 @@ export class GraphView {
         const width = Math.floor(appContainer.offsetWidth * 0.8);
         const height = Math.floor(appContainer.offsetHeight * 0.8);
         
+        // Store initial dimensions for scaling reference
+        this.initialWidth = width;
+        this.initialHeight = height;
+        
         // Set initial position and size
         this.canvas.style.width = `${width}px`;
         this.canvas.style.height = `${height}px`;
         this.canvas.style.left = `${Math.floor((appContainer.offsetWidth - width) / 2)}px`;
         this.canvas.style.top = `${Math.floor((appContainer.offsetHeight - height) / 2)}px`;
 
+        // Add drag handle (title bar)
+        const dragHandle = this.canvas.createDiv({ cls: 'graph-analysis-drag-handle' });
+        dragHandle.createSpan({ text: 'Graph Analysis' });
+
         // Add close button
         const closeButton = this.canvas.createDiv({ cls: 'graph-analysis-close-button' });
+        closeButton.setAttribute('aria-label', 'Close graph view');
+        closeButton.setAttribute('role', 'button');
         closeButton.addEventListener('click', () => {
             this.onunload();
             this.canvas.remove();
@@ -43,55 +86,234 @@ export class GraphView {
         const resizeHandle = this.canvas.createDiv({ cls: 'graph-analysis-resize-handle' });
 
         // Setup event listeners for dragging
-        this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
-        document.addEventListener('mousemove', this.onMouseMove.bind(this));
-        document.addEventListener('mouseup', this.onMouseUp.bind(this));
+        dragHandle.addEventListener('mousedown', this.boundMouseDown);
 
         // Setup event listeners for resizing
-        resizeHandle.addEventListener('mousedown', this.onResizeStart.bind(this));
+        resizeHandle.addEventListener('mousedown', this.boundResizeStart);
+
+        // Setup global event listeners
+        document.addEventListener('mousemove', this.boundMouseMove);
+        document.addEventListener('mouseup', this.boundMouseUp);
+
+        // Initialize D3 visualization
+        await this.initializeD3();
+        
+        // Add some test data
+        this.addTestData();
+    }
+
+    private async initializeD3() {
+        // Create SVG container
+        this.svg = d3.select(this.canvas)
+            .append('svg')
+            .attr('width', '100%')
+            .attr('height', '100%')
+            .style('position', 'absolute')
+            .style('top', 0)
+            .style('left', 0);
+
+        // Add zoom behavior
+        this.zoom = d3.zoom<SVGSVGElement, unknown>()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => {
+                this.graphContainer.attr('transform', event.transform);
+            });
+
+        // Add a group for the graph that will be transformed
+        this.graphContainer = this.svg.append('g');
+
+        // Enable zoom and pan
+        this.svg.call(this.zoom);
+
+        // Get the available height (accounting for title bar)
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight - 32; // Account for title bar
+
+        // Initialize force simulation
+        this.simulation = d3.forceSimulation<GraphNode>()
+            .force('charge', d3.forceManyBody().strength(-100))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(30))
+            .force('link', d3.forceLink<GraphNode, GraphLink>()
+                .id(d => d.id)
+                .distance(100))
+            .on('tick', () => this.updateGraph());
+            
+        // Set the initial transform to center the graph properly
+        this.updateGraphTransform();
+    }
+
+    private updateGraphTransform() {
+        const availableWidth = this.canvas.clientWidth;
+        const availableHeight = this.canvas.clientHeight - 32; // Account for title bar
+        
+        // Center the graph in the available space
+        const centerX = availableWidth / 2;
+        const centerY = availableHeight / 2;
+        
+        // Calculate the scale based on initial dimensions
+        const scaleX = availableWidth / this.initialWidth;
+        const scaleY = (availableHeight) / (this.initialHeight - 32);
+        
+        // Use the minimum scale to maintain aspect ratio
+        const scale = Math.min(scaleX, scaleY);
+        
+        // Apply the transform
+        this.graphContainer.attr('transform', 
+            `translate(${centerX}, ${centerY}) scale(${scale}) translate(${-this.initialWidth/2}, ${-(this.initialHeight-32)/2})`);
+    }
+
+    private updateGraph() {
+        // Update nodes
+        const nodes = this.graphContainer.selectAll<SVGCircleElement, GraphNode>('circle')
+            .data(this.nodes, d => d.id)
+            .join(
+                enter => enter.append('circle')
+                    .attr('r', 20)
+                    .attr('fill', 'var(--text-accent)')
+                    .attr('opacity', 0.6)
+                    .call(this.drag()),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr('cx', d => (d as any).x)
+            .attr('cy', d => (d as any).y);
+
+        // Add hover effect
+        nodes
+            .on('mouseover', function() {
+                d3.select(this)
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 1);
+            })
+            .on('mouseout', function() {
+                d3.select(this)
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 0.6);
+            });
+
+        // Add labels
+        this.graphContainer.selectAll<SVGTextElement, GraphNode>('text')
+            .data(this.nodes, d => d.id)
+            .join(
+                enter => enter.append('text')
+                    .attr('dy', 30)
+                    .attr('text-anchor', 'middle')
+                    .style('fill', 'var(--text-normal)')
+                    .style('font-size', '12px')
+                    .text(d => d.name),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr('x', d => (d as any).x)
+            .attr('y', d => (d as any).y);
+    }
+
+    private drag() {
+        return d3.drag<SVGCircleElement, GraphNode>()
+            .on('start', (event, d) => {
+                if (!event.active) this.simulation.alphaTarget(0.3).restart();
+                (d as any).fx = (d as any).x;
+                (d as any).fy = (d as any).y;
+            })
+            .on('drag', (event, d) => {
+                (d as any).fx = event.x;
+                (d as any).fy = event.y;
+            })
+            .on('end', (event, d) => {
+                if (!event.active) this.simulation.alphaTarget(0);
+                (d as any).fx = null;
+                (d as any).fy = null;
+            });
+    }
+
+    private addTestData() {
+        // Add some test nodes
+        this.nodes = [
+            { id: '1', name: 'Node 1' },
+            { id: '2', name: 'Node 2' },
+            { id: '3', name: 'Node 3' },
+            { id: '4', name: 'Node 4' },
+            { id: '5', name: 'Node 5' }
+        ];
+
+        // Update simulation with new nodes
+        this.simulation.nodes(this.nodes);
+        this.simulation.alpha(1).restart();
     }
 
     private onMouseDown(e: MouseEvent) {
-        if (e.target === this.canvas) {
+        if (e.target instanceof HTMLElement && e.target.closest('.graph-analysis-drag-handle')) {
             this.isDragging = true;
-            this.startX = e.clientX - this.canvas.offsetLeft;
-            this.startY = e.clientY - this.canvas.offsetTop;
+            this.startX = e.clientX - parseInt(this.canvas.style.left);
+            this.startY = e.clientY - parseInt(this.canvas.style.top);
             e.preventDefault();
+            e.stopPropagation();
         }
     }
 
     private onResizeStart(e: MouseEvent) {
-        this.isResizing = true;
-        this.startX = e.clientX;
-        this.startY = e.clientY;
-        this.startWidth = this.canvas.offsetWidth;
-        this.startHeight = this.canvas.offsetHeight;
-        e.preventDefault();
-        e.stopPropagation();
+        if (e.target instanceof HTMLElement && e.target.closest('.graph-analysis-resize-handle')) {
+            this.isResizing = true;
+            this.startX = e.clientX;
+            this.startY = e.clientY;
+            this.startWidth = this.canvas.offsetWidth;
+            this.startHeight = this.canvas.offsetHeight;
+            e.preventDefault();
+            e.stopPropagation();
+        }
     }
 
     private onMouseMove(e: MouseEvent) {
         if (this.isDragging) {
             const newX = e.clientX - this.startX;
             const newY = e.clientY - this.startY;
-            this.canvas.style.left = `${newX}px`;
-            this.canvas.style.top = `${newY}px`;
+            
+            // Ensure the canvas stays within viewport bounds
+            const maxX = window.innerWidth - this.canvas.offsetWidth;
+            const maxY = window.innerHeight - this.canvas.offsetHeight;
+            
+            this.canvas.style.left = `${Math.max(0, Math.min(maxX, newX))}px`;
+            this.canvas.style.top = `${Math.max(0, Math.min(maxY, newY))}px`;
+            e.preventDefault();
+            e.stopPropagation();
         } else if (this.isResizing) {
-            const newWidth = this.startWidth + (e.clientX - this.startX);
-            const newHeight = this.startHeight + (e.clientY - this.startY);
-            this.canvas.style.width = `${newWidth}px`;
-            this.canvas.style.height = `${newHeight}px`;
+            const newWidth = Math.max(300, this.startWidth + (e.clientX - this.startX));
+            const newHeight = Math.max(200, this.startHeight + (e.clientY - this.startY));
+            
+            // Ensure the canvas doesn't resize beyond viewport bounds
+            const maxWidth = window.innerWidth - parseInt(this.canvas.style.left);
+            const maxHeight = window.innerHeight - parseInt(this.canvas.style.top);
+            
+            const width = Math.min(maxWidth, newWidth);
+            const height = Math.min(maxHeight, newHeight);
+            
+            this.canvas.style.width = `${width}px`;
+            this.canvas.style.height = `${height}px`;
+            
+            // Update the graph transform to scale proportionally
+            this.updateGraphTransform();
+            
+            e.preventDefault();
+            e.stopPropagation();
         }
     }
 
-    private onMouseUp() {
+    private onMouseUp(e: MouseEvent) {
         this.isDragging = false;
         this.isResizing = false;
     }
 
     public onunload() {
         // Clean up event listeners
-        document.removeEventListener('mousemove', this.onMouseMove.bind(this));
-        document.removeEventListener('mouseup', this.onMouseUp.bind(this));
+        document.removeEventListener('mousemove', this.boundMouseMove);
+        document.removeEventListener('mouseup', this.boundMouseUp);
+        
+        // Clean up D3
+        if (this.simulation) {
+            this.simulation.stop();
+        }
     }
 } 
