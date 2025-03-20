@@ -1,14 +1,20 @@
-import { App } from 'obsidian';
+import { App, TFile, Notice } from 'obsidian';
 import * as d3 from 'd3';
 
 interface GraphNode extends d3.SimulationNodeDatum {
     id: string;
     name: string;
+    path?: string;
 }
 
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
     source: string;
     target: string;
+}
+
+interface GraphData {
+    nodes: string[];
+    edges: [number, number][];
 }
 
 export class GraphView {
@@ -31,6 +37,7 @@ export class GraphView {
     private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
     private initialWidth: number;
     private initialHeight: number;
+    private loadingIndicator: HTMLElement | null = null;
 
     // Bound event handlers
     private boundMouseMove: (e: MouseEvent) => void;
@@ -98,8 +105,28 @@ export class GraphView {
         // Initialize D3 visualization
         await this.initializeD3();
         
-        // Add some test data
-        this.addTestData();
+        // Load real vault data
+        this.showLoadingIndicator();
+        try {
+            await this.loadVaultData();
+        } catch (error) {
+            console.error('Error loading vault data:', error);
+            new Notice(`Error loading graph data: ${(error as Error).message}`);
+        } finally {
+            this.hideLoadingIndicator();
+        }
+    }
+
+    private showLoadingIndicator() {
+        this.loadingIndicator = this.canvas.createDiv({ cls: 'graph-analysis-loading' });
+        this.loadingIndicator.createSpan({ text: 'Loading graph data...' });
+    }
+
+    private hideLoadingIndicator() {
+        if (this.loadingIndicator) {
+            this.loadingIndicator.remove();
+            this.loadingIndicator = null;
+        }
     }
 
     private async initializeD3() {
@@ -164,6 +191,21 @@ export class GraphView {
     }
 
     private updateGraph() {
+        // Update links
+        this.graphContainer.selectAll<SVGLineElement, GraphLink>('line')
+            .data(this.links)
+            .join(
+                enter => enter.append('line')
+                    .attr('stroke-width', 2)
+                    .attr('class', 'graph-link'),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr('x1', d => (d.source as unknown as GraphNode).x!)
+            .attr('y1', d => (d.source as unknown as GraphNode).y!)
+            .attr('x2', d => (d.target as unknown as GraphNode).x!)
+            .attr('y2', d => (d.target as unknown as GraphNode).y!);
+
         // Update nodes
         const nodes = this.graphContainer.selectAll<SVGCircleElement, GraphNode>('circle')
             .data(this.nodes, d => d.id)
@@ -172,7 +214,9 @@ export class GraphView {
                     .attr('r', 20)
                     .attr('fill', 'var(--text-accent)')
                     .attr('opacity', 0.6)
-                    .call(this.drag()),
+                    .attr('class', 'graph-node')
+                    .call(this.drag())
+                    .on('click', (event, d) => this.handleNodeClick(d)),
                 update => update,
                 exit => exit.remove()
             )
@@ -181,17 +225,11 @@ export class GraphView {
 
         // Add hover effect
         nodes
-            .on('mouseover', function() {
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr('opacity', 1);
+            .on('mouseover', (event, d) => {
+                this.highlightConnections(d.id, true);
             })
-            .on('mouseout', function() {
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr('opacity', 0.6);
+            .on('mouseout', (event, d) => {
+                this.highlightConnections(d.id, false);
             });
 
         // Add labels
@@ -203,6 +241,7 @@ export class GraphView {
                     .attr('text-anchor', 'middle')
                     .style('fill', 'var(--text-normal)')
                     .style('font-size', '12px')
+                    .attr('class', 'graph-label')
                     .text(d => d.name),
                 update => update,
                 exit => exit.remove()
@@ -211,12 +250,79 @@ export class GraphView {
             .attr('y', d => (d as any).y);
     }
 
+    private highlightConnections(nodeId: string, highlight: boolean) {
+        // Find all connected links
+        const connectedLinks = this.links.filter(link => 
+            link.source === nodeId || (link.source as any).id === nodeId || 
+            link.target === nodeId || (link.target as any).id === nodeId
+        );
+        
+        // Get connected node IDs (both source and target)
+        const connectedNodeIds = new Set<string>();
+        connectedLinks.forEach(link => {
+            const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+            const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+            connectedNodeIds.add(sourceId);
+            connectedNodeIds.add(targetId);
+        });
+        
+        // Highlight the selected node
+        this.graphContainer.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .filter(d => d.id === nodeId)
+            .transition()
+            .duration(200)
+            .attr('r', highlight ? 25 : 20)
+            .attr('opacity', highlight ? 1 : 0.6);
+            
+        // Highlight connected nodes
+        this.graphContainer.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
+            .transition()
+            .duration(200)
+            .attr('opacity', highlight ? 0.9 : 0.6);
+            
+        // Define the colors explicitly
+        const accentColor = '#705dcf'; // Purple color similar to default Obsidian accent
+            
+        // Highlight connected links with direct color
+        this.graphContainer.selectAll<SVGLineElement, GraphLink>('.graph-link')
+            .filter(d => {
+                const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
+                const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
+                return sourceId === nodeId || targetId === nodeId;
+            })
+            .style('stroke', highlight ? accentColor : '')
+            .style('stroke-opacity', highlight ? '1' : '')
+            .style('stroke-width', highlight ? '3px' : '2px');
+            
+        // Also highlight the labels of connected nodes
+        this.graphContainer.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            .filter(d => connectedNodeIds.has(d.id))
+            .transition()
+            .duration(200)
+            .style('font-weight', highlight ? 'bold' : 'normal')
+            .style('opacity', highlight ? 1 : 0.8);
+    }
+
+    private handleNodeClick(node: GraphNode) {
+        if (node.path) {
+            // Open the note when the node is clicked
+            const file = this.app.vault.getAbstractFileByPath(node.path);
+            if (file instanceof TFile) {
+                this.app.workspace.getLeaf().openFile(file);
+            }
+        }
+    }
+
     private drag() {
         return d3.drag<SVGCircleElement, GraphNode>()
             .on('start', (event, d) => {
                 if (!event.active) this.simulation.alphaTarget(0.3).restart();
                 (d as any).fx = (d as any).x;
                 (d as any).fy = (d as any).y;
+                
+                // Highlight connections when dragging starts
+                this.highlightConnections(d.id, true);
             })
             .on('drag', (event, d) => {
                 (d as any).fx = event.x;
@@ -226,22 +332,96 @@ export class GraphView {
                 if (!event.active) this.simulation.alphaTarget(0);
                 (d as any).fx = null;
                 (d as any).fy = null;
+                
+                // Remove highlighting when dragging ends
+                this.highlightConnections(d.id, false);
             });
     }
 
-    private addTestData() {
-        // Add some test nodes
-        this.nodes = [
-            { id: '1', name: 'Node 1' },
-            { id: '2', name: 'Node 2' },
-            { id: '3', name: 'Node 3' },
-            { id: '4', name: 'Node 4' },
-            { id: '5', name: 'Node 5' }
-        ];
-
-        // Update simulation with new nodes
+    private async loadVaultData() {
+        // Build graph data from vault
+        const graphData = await this.buildGraphData();
+        
+        // Convert to D3 format
+        this.nodes = [];
+        this.links = [];
+        
+        // Create nodes
+        graphData.nodes.forEach((nodePath, index) => {
+            const fileName = nodePath.split('/').pop() || nodePath;
+            const displayName = fileName.replace('.md', '');
+            
+            this.nodes.push({
+                id: index.toString(),
+                name: displayName,
+                path: nodePath
+            });
+        });
+        
+        // Create links
+        graphData.edges.forEach(([sourceIdx, targetIdx]) => {
+            this.links.push({
+                source: sourceIdx.toString(),
+                target: targetIdx.toString()
+            });
+        });
+        
+        // Update simulation
         this.simulation.nodes(this.nodes);
+        const linkForce = this.simulation.force('link') as d3.ForceLink<GraphNode, GraphLink>;
+        linkForce.links(this.links);
+        
+        // Restart simulation
         this.simulation.alpha(1).restart();
+    }
+
+    private async buildGraphData(): Promise<GraphData> {
+        const files = this.app.vault.getMarkdownFiles();
+        const nodes: string[] = [];
+        const nodeMap: Map<string, number> = new Map();
+        const edges: [number, number][] = [];
+        
+        // Create nodes
+        for (const file of files) {
+            // Skip files in excluded folders (if we had settings)
+            // For now, we'll include all files
+            
+            const nodeId = nodes.length;
+            nodes.push(file.path);
+            nodeMap.set(file.path, nodeId);
+        }
+        
+        // Create edges (links between notes)
+        for (const file of files) {
+            const sourceId = nodeMap.get(file.path);
+            if (sourceId === undefined) continue;
+            
+            // Get all links in the file
+            const content = await this.app.vault.read(file);
+            const linkRegex = /\[\[([^\]]+?)\]\]/g;
+            let match;
+            
+            while ((match = linkRegex.exec(content)) !== null) {
+                let linkPath = match[1];
+                
+                // Handle aliases in links
+                if (linkPath.includes('|')) {
+                    linkPath = linkPath.split('|')[0];
+                }
+                
+                // Try to resolve the link to a file
+                const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path);
+                
+                if (linkedFile) {
+                    const targetId = nodeMap.get(linkedFile.path);
+                    if (targetId !== undefined) {
+                        edges.push([sourceId, targetId]);
+                    }
+                }
+            }
+        }
+        
+        return { nodes, edges };
     }
 
     private onMouseDown(e: MouseEvent) {
