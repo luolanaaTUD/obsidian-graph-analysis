@@ -144,7 +144,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.addSettingTab(new GraphAnalysisSettingTab(this.app, this));
 
         // Add a ribbon icon to show the graph view
-        this.addRibbonIcon('network', 'Graph Analysis View', async () => {
+        this.addRibbonIcon('lucide-network-analytics', 'Graph Analysis View', async () => {
             if (this.graphView) {
                 // If view exists, show a notice instead of opening a new one
                 new Notice('Graph view is already open');
