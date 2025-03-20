@@ -137,12 +137,18 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add a ribbon icon to show the graph view
         this.addRibbonIcon('network', 'Graph Analysis View', async () => {
             if (this.graphView) {
-                // If view exists, remove it
-                this.graphView.onunload();
-                this.graphView = null;
+                // If view exists, show a notice instead of opening a new one
+                new Notice('Graph view is already open');
+                
+                // Flash the existing canvas to help user locate it
+                const canvas = this.graphView.getCanvas();
+                canvas.addClass('graph-analysis-canvas-flash');
+                setTimeout(() => {
+                    canvas.removeClass('graph-analysis-canvas-flash');
+                }, 1000);
             } else {
                 // Create and show new graph view
-                this.graphView = new GraphView(this.app);
+                this.graphView = new GraphView(this.app, this.calculateDegreeCentrality.bind(this));
                 await this.graphView.onload(this.app.workspace.containerEl);
             }
         });
@@ -309,6 +315,20 @@ export default class GraphAnalysisPlugin extends Plugin {
         
         // Log full results to console
         console.log(`Graph Analysis Results (${algorithmName}):`, results);
+    }
+
+    // Method to calculate degree centrality using WASM
+    public calculateDegreeCentrality(graphDataJson: string): string {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            return calculate_degree_centrality(graphDataJson);
+        } catch (error) {
+            console.error('Error in WASM degree centrality calculation:', error);
+            throw new Error('Failed to calculate degree centrality');
+        }
     }
 }
 

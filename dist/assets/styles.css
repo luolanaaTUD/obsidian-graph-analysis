@@ -53,14 +53,12 @@
 }
 
 .graph-analysis-canvas {
-    position: fixed;
-    background: rgba(var(--background-primary-rgb), 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
+    position: absolute;
+    background: var(--background-primary);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     overflow: hidden;
+    z-index: 100;
 }
 
 .graph-analysis-drag-handle {
@@ -253,4 +251,19 @@
 .graph-node:hover {
     stroke: var(--text-accent-hover);
     stroke-width: 2px;
+}
+
+/* Flash animation for when trying to open a duplicate canvas */
+.graph-analysis-canvas-flash {
+    animation: flash-canvas 1s ease;
+    z-index: 1000 !important;
+}
+
+@keyframes flash-canvas {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(112, 93, 207, 0);
+    }
+    50% {
+        box-shadow: 0 0 0 15px rgba(112, 93, 207, 0.5);
+    }
 } 

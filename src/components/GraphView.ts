@@ -5,6 +5,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
     id: string;
     name: string;
     path?: string;
+    centralityScore?: number;
 }
 
 interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
@@ -16,6 +17,15 @@ interface GraphData {
     nodes: string[];
     edges: [number, number][];
 }
+
+interface CentralityResult {
+    node_id: number;
+    node_name: string;
+    score: number;
+}
+
+// Type for centrality calculation function
+type CentralityCalculator = (graphDataJson: string) => string;
 
 export class GraphView {
     private container: HTMLElement;
@@ -38,6 +48,8 @@ export class GraphView {
     private initialWidth: number;
     private initialHeight: number;
     private loadingIndicator: HTMLElement | null = null;
+    private nodeSizeScale: d3.ScaleLinear<number, number>;
+    private calculateDegreeCentrality: CentralityCalculator | null = null;
 
     // Bound event handlers
     private boundMouseMove: (e: MouseEvent) => void;
@@ -45,14 +57,18 @@ export class GraphView {
     private boundMouseDown: (e: MouseEvent) => void;
     private boundResizeStart: (e: MouseEvent) => void;
 
-    constructor(app: App) {
+    constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
+        this.calculateDegreeCentrality = calculateDegreeCentrality || null;
         
         // Bind event handlers once
         this.boundMouseMove = this.onMouseMove.bind(this);
         this.boundMouseUp = this.onMouseUp.bind(this);
         this.boundMouseDown = this.onMouseDown.bind(this);
         this.boundResizeStart = this.onResizeStart.bind(this);
+        
+        // Initialize node size scale (will be updated later with actual data)
+        this.nodeSizeScale = d3.scaleLinear().range([10, 30]);
     }
 
     public async onload(container: HTMLElement) {
@@ -85,8 +101,16 @@ export class GraphView {
         closeButton.setAttribute('aria-label', 'Close graph view');
         closeButton.setAttribute('role', 'button');
         closeButton.addEventListener('click', () => {
+            // Clean up
             this.onunload();
             this.canvas.remove();
+            
+            // Notify plugin that we've been closed
+            // Find the plugin instance
+            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+            if (plugin) {
+                plugin.graphView = null;
+            }
         });
 
         // Add resize handle
@@ -160,14 +184,75 @@ export class GraphView {
         this.simulation = d3.forceSimulation<GraphNode>()
             .force('charge', d3.forceManyBody().strength(-100))
             .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide().radius(30))
+            .force('collision', d3.forceCollide<GraphNode>().radius(d => this.getNodeRadius(d) + 5))
             .force('link', d3.forceLink<GraphNode, GraphLink>()
                 .id(d => d.id)
-                .distance(100))
+                .distance(d => this.getLinkDistance(d)))
             .on('tick', () => this.updateGraph());
             
         // Set the initial transform to center the graph properly
         this.updateGraphTransform();
+    }
+
+    private getNodeRadius(node: GraphNode): number {
+        // Default size if no centrality score is available
+        if (node.centralityScore === undefined) {
+            return 8;
+        }
+        
+        // Get max centrality score
+        const maxScore = this.getMaxCentralityScore();
+        if (maxScore === 0) return 8; // Avoid division by zero
+        
+        // Adaptive sizing based on graph density
+        const nodeCount = this.nodes.length;
+        
+        // Calculate adaptive scale factor based on node count
+        // Use logarithmic scaling to handle both small and large graphs
+        // For small graphs: smaller scale factor (starting at 1.5x)
+        // For large graphs: larger scale factor (up to 3x)
+        let scaleFactor = 1.5;
+        if (nodeCount > 10) {
+            // Increase scale factor as node count increases
+            // Using logarithmic function to make it more gradual
+            // 10 nodes: ~1.5x, 100 nodes: ~2x, 1000 nodes: ~2.5x, 10000 nodes: ~3x
+            scaleFactor = 1.5 + Math.min(1.5, Math.log10(nodeCount) * 0.5);
+        }
+        
+        // Base size range
+        const minRadius = 9;
+        const maxRadius = minRadius * scaleFactor;
+        
+        // Normalized score (0-1)
+        const normalizedScore = node.centralityScore / maxScore;
+        
+        // Apply the scale factor to determine the final radius
+        const radius = minRadius + normalizedScore * (maxRadius - minRadius);
+        
+        return radius;
+    }
+    
+    private getMaxCentralityScore(): number {
+        if (!this.nodes || this.nodes.length === 0) return 1;
+        
+        let maxScore = 0;
+        for (const node of this.nodes) {
+            if (node.centralityScore !== undefined && node.centralityScore > maxScore) {
+                maxScore = node.centralityScore;
+            }
+        }
+        return maxScore > 0 ? maxScore : 1; // Avoid returning 0
+    }
+
+    private getLinkDistance(link: GraphLink): number {
+        // Get source and target nodes
+        const source = this.nodes.find(n => n.id === (typeof link.source === 'string' ? link.source : (link.source as any).id));
+        const target = this.nodes.find(n => n.id === (typeof link.target === 'string' ? link.target : (link.target as any).id));
+        
+        if (!source || !target) return 100;
+        
+        // Base distance plus the sum of the node radii
+        return 50 + this.getNodeRadius(source) + this.getNodeRadius(target);
     }
 
     private updateGraphTransform() {
@@ -211,13 +296,13 @@ export class GraphView {
             .data(this.nodes, d => d.id)
             .join(
                 enter => enter.append('circle')
-                    .attr('r', 20)
+                    .attr('r', d => this.getNodeRadius(d))
                     .attr('fill', 'var(--text-accent)')
                     .attr('opacity', 0.6)
                     .attr('class', 'graph-node')
                     .call(this.drag())
                     .on('click', (event, d) => this.handleNodeClick(d)),
-                update => update,
+                update => update.attr('r', d => this.getNodeRadius(d)),
                 exit => exit.remove()
             )
             .attr('cx', d => (d as any).x)
@@ -237,13 +322,13 @@ export class GraphView {
             .data(this.nodes, d => d.id)
             .join(
                 enter => enter.append('text')
-                    .attr('dy', 30)
+                    .attr('dy', d => this.getNodeRadius(d) + 15)
                     .attr('text-anchor', 'middle')
                     .style('fill', 'var(--text-normal)')
                     .style('font-size', '12px')
                     .attr('class', 'graph-label')
                     .text(d => d.name),
-                update => update,
+                update => update.attr('dy', d => this.getNodeRadius(d) + 15),
                 exit => exit.remove()
             )
             .attr('x', d => (d as any).x)
@@ -271,7 +356,7 @@ export class GraphView {
             .filter(d => d.id === nodeId)
             .transition()
             .duration(200)
-            .attr('r', highlight ? 25 : 20)
+            .attr('r', d => highlight ? this.getNodeRadius(d) * 1.2 : this.getNodeRadius(d))
             .attr('opacity', highlight ? 1 : 0.6);
             
         // Highlight connected nodes
@@ -338,9 +423,40 @@ export class GraphView {
             });
     }
 
+    private calculateCentrality(graphData: GraphData): CentralityResult[] {
+        try {
+            // Check if we have the WASM calculation function
+            if (!this.calculateDegreeCentrality) {
+                console.error('WASM centrality calculation function not available');
+                return [];
+            }
+            
+            // Call the WASM function to calculate degree centrality
+            const graphDataJson = JSON.stringify(graphData);
+            const resultsJson = this.calculateDegreeCentrality(graphDataJson);
+            
+            // Parse results
+            const results = JSON.parse(resultsJson) as CentralityResult[];
+            
+            // Check for error
+            if (results.length === 1 && 'error' in results[0]) {
+                console.error('Error calculating centrality:', (results[0] as any).error);
+                return [];
+            }
+            
+            return results;
+        } catch (error) {
+            console.error('Error calculating centrality:', error);
+            return [];
+        }
+    }
+
     private async loadVaultData() {
         // Build graph data from vault
         const graphData = await this.buildGraphData();
+        
+        // Calculate degree centrality using WASM
+        const centralityResults = this.calculateCentrality(graphData);
         
         // Convert to D3 format
         this.nodes = [];
@@ -351,10 +467,15 @@ export class GraphView {
             const fileName = nodePath.split('/').pop() || nodePath;
             const displayName = fileName.replace('.md', '');
             
+            // Find corresponding centrality result
+            const centralityResult = centralityResults.find(r => r.node_id === index);
+            const centralityScore = centralityResult ? centralityResult.score : 0;
+            
             this.nodes.push({
                 id: index.toString(),
                 name: displayName,
-                path: nodePath
+                path: nodePath,
+                centralityScore: centralityScore
             });
         });
         
@@ -370,6 +491,10 @@ export class GraphView {
         this.simulation.nodes(this.nodes);
         const linkForce = this.simulation.force('link') as d3.ForceLink<GraphNode, GraphLink>;
         linkForce.links(this.links);
+        
+        // Update collision detection radius based on node sizes
+        const collisionForce = this.simulation.force('collision') as d3.ForceCollide<GraphNode>;
+        collisionForce.radius(d => this.getNodeRadius(d) + 5);
         
         // Restart simulation
         this.simulation.alpha(1).restart();
@@ -484,6 +609,11 @@ export class GraphView {
     private onMouseUp(e: MouseEvent) {
         this.isDragging = false;
         this.isResizing = false;
+    }
+
+    // Return the canvas element for external access
+    public getCanvas(): HTMLElement {
+        return this.canvas;
     }
 
     public onunload() {
