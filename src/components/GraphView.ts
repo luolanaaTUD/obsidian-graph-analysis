@@ -133,6 +133,74 @@ export class GraphView {
         document.addEventListener('mousemove', this.boundMouseMove);
         document.addEventListener('mouseup', this.boundMouseUp);
 
+        // Add help icon with direct text
+        const helpIconContainer = this.canvas.createDiv({ cls: 'graph-analysis-help-icon-container' });
+        helpIconContainer.style.position = 'absolute';
+        helpIconContainer.style.bottom = '10px';
+        helpIconContainer.style.right = '10px';
+        helpIconContainer.style.zIndex = '9999';
+        helpIconContainer.style.width = '24px';
+        helpIconContainer.style.height = '24px';
+        helpIconContainer.style.borderRadius = '50%';
+        helpIconContainer.style.backgroundColor = 'var(--background-modifier-border)';
+        helpIconContainer.style.display = 'flex';
+        helpIconContainer.style.alignItems = 'center';
+        helpIconContainer.style.justifyContent = 'center';
+        helpIconContainer.style.cursor = 'pointer';
+        helpIconContainer.style.opacity = '0.7';
+        helpIconContainer.style.transition = 'opacity 0.2s ease';
+        
+        // Use a simple text question mark instead of SVG
+        helpIconContainer.setText('?');
+        helpIconContainer.style.fontWeight = 'normal';
+        helpIconContainer.style.fontSize = '14px';
+        helpIconContainer.style.color = 'var(--text-muted)';
+
+        // Create tooltip content
+        const tooltipContainer = this.canvas.createDiv();
+        tooltipContainer.style.position = 'absolute';
+        tooltipContainer.style.bottom = '40px';
+        tooltipContainer.style.right = '10px';
+        tooltipContainer.style.width = '250px';
+        tooltipContainer.style.backgroundColor = 'var(--background-primary)';
+        tooltipContainer.style.border = '1px solid var(--background-modifier-border)';
+        tooltipContainer.style.borderRadius = '6px';
+        tooltipContainer.style.padding = '10px';
+        tooltipContainer.style.boxShadow = '0 4px 14px rgba(0, 0, 0, 0.15)';
+        tooltipContainer.style.zIndex = '9999';
+        tooltipContainer.style.opacity = '0';
+        tooltipContainer.style.pointerEvents = 'none';
+        tooltipContainer.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+        tooltipContainer.style.transform = 'translateY(10px)';
+        
+        // Show/hide tooltip on hover
+        helpIconContainer.addEventListener('mouseenter', () => {
+            tooltipContainer.style.opacity = '1';
+            tooltipContainer.style.transform = 'translateY(0)';
+            helpIconContainer.style.opacity = '1';
+        });
+        helpIconContainer.addEventListener('mouseleave', () => {
+            tooltipContainer.style.opacity = '0';
+            tooltipContainer.style.transform = 'translateY(10px)';
+            helpIconContainer.style.opacity = '0.7';
+        });
+
+        // Add tooltip content
+        const tooltipTitle = tooltipContainer.createEl('h3', { text: 'Graph Visualization Guide' });
+        tooltipTitle.style.margin = '0 0 10px 0';
+        tooltipTitle.style.fontSize = '1.1em';
+        tooltipTitle.style.borderBottom = '1px solid var(--background-modifier-border)';
+        tooltipTitle.style.paddingBottom = '5px';
+
+        const nodeSection = tooltipContainer.createDiv();
+        nodeSection.style.marginBottom = '10px';
+        const nodeTitle = nodeSection.createEl('h4', { text: 'Node Size' });
+        nodeTitle.style.margin = '0 0 5px 0';
+        nodeTitle.style.fontSize = '1em';
+        const nodeText = nodeSection.createEl('p', { text: 'Node size represents the degree centrality of each note - larger nodes have more connections in your vault.' });
+        nodeText.style.margin = '0';
+        nodeText.style.color = 'var(--text-muted)';
+
         // Initialize D3 visualization
         await this.initializeD3();
         
@@ -169,7 +237,7 @@ export class GraphView {
             .style('position', 'absolute')
             .style('top', 0)
             .style('left', 0);
-        
+            
         // Add zoom behavior
         this.zoom = d3.zoom<SVGSVGElement, unknown>()
             .scaleExtent([0.1, 4])
@@ -348,6 +416,21 @@ export class GraphView {
     }
 
     private updateGraph() {
+        // Check if nodes and links exist
+        if (this.nodes.length === 0) {
+            return;
+        }
+        
+        // Force an initial position for nodes if not set
+        this.nodes.forEach(node => {
+            if (node.x === undefined || node.y === undefined) {
+                const width = this.canvas.clientWidth;
+                const height = this.canvas.clientHeight - 32;
+                node.x = width / 2 + (Math.random() - 0.5) * 100;
+                node.y = height / 2 + (Math.random() - 0.5) * 100;
+            }
+        });
+        
         // Update links
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('line')
             .data(this.links)
@@ -358,10 +441,10 @@ export class GraphView {
                 update => update,
                 exit => exit.remove()
             )
-            .attr('x1', d => (d.source as unknown as GraphNode).x!)
-            .attr('y1', d => (d.source as unknown as GraphNode).y!)
-            .attr('x2', d => (d.target as unknown as GraphNode).x!)
-            .attr('y2', d => (d.target as unknown as GraphNode).y!);
+            .attr('x1', d => (d.source as unknown as GraphNode).x || 0)
+            .attr('y1', d => (d.source as unknown as GraphNode).y || 0)
+            .attr('x2', d => (d.target as unknown as GraphNode).x || 0)
+            .attr('y2', d => (d.target as unknown as GraphNode).y || 0);
 
         // Update nodes
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('circle')
@@ -542,8 +625,11 @@ export class GraphView {
             const collisionForce = this.simulation.force('collision') as d3.ForceCollide<GraphNode>;
             collisionForce.radius(d => this.getNodeRadius(d) + 5);
             
-            // Restart simulation
+            // Restart simulation with higher alpha for better initial layout
             this.simulation.alpha(1).restart();
+            
+            // Force immediate update for initial rendering
+            for (let i = 0; i < 20; ++i) this.simulation.tick();
         } catch (error) {
             console.error('Error loading vault data:', error);
             throw error;
