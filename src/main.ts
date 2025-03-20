@@ -1,4 +1,5 @@
 import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal, MarkdownRenderer } from 'obsidian';
+import { GraphView } from './components/GraphView';
 
 // The WASM module code will be injected at the top of this file during build
 // We need to declare the functions that will be available
@@ -91,37 +92,23 @@ class ResultsModal extends Modal {
 export default class GraphAnalysisPlugin extends Plugin {
     settings: GraphAnalysisSettings;
     wasmInitialized: boolean = false;
+    graphView: GraphView | null = null;
 
     async onload() {
         await this.loadSettings();
 
         // Initialize WASM module
         try {
-            // We need to use Obsidian's resource loading mechanism
-            // First, get the plugin's resource path
             const wasmBinaryPath = this.manifest.dir ? 
                 `${this.manifest.dir}/graph_analysis_wasm_bg.wasm` : 
                 'graph_analysis_wasm_bg.wasm';
             
-            console.log('Loading WASM binary from path:', wasmBinaryPath);
-            
-            // Get the absolute path to the WASM file
             const adapter = this.app.vault.adapter;
             const wasmAbsPath = adapter.getResourcePath(wasmBinaryPath);
             
-            console.log('Resolved WASM path:', wasmAbsPath);
-            
-            // Initialize the WASM module with the absolute path
-            // First fetch the WASM file
+            // Initialize the WASM module
             const response = await fetch(wasmAbsPath);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch WASM file: ${response.statusText}`);
-            }
-            
-            // Get the WASM binary
             const wasmBinary = await response.arrayBuffer();
-            
-            // Initialize with the binary using the correct object parameter format
             await __wbg_init({ module_or_path: wasmBinary });
             
             this.wasmInitialized = true;
@@ -146,9 +133,26 @@ export default class GraphAnalysisPlugin extends Plugin {
 
         // Add settings tab
         this.addSettingTab(new GraphAnalysisSettingTab(this.app, this));
+
+        // Add a ribbon icon to show the graph view
+        this.addRibbonIcon('network', 'Graph Analysis View', async () => {
+            if (this.graphView) {
+                // If view exists, remove it
+                this.graphView.onunload();
+                this.graphView = null;
+            } else {
+                // Create and show new graph view
+                this.graphView = new GraphView(this.app);
+                await this.graphView.onload(this.app.workspace.containerEl);
+            }
+        });
     }
 
     onunload() {
+        if (this.graphView) {
+            this.graphView.onunload();
+            this.graphView = null;
+        }
         console.log('Unloading Graph Analysis plugin');
     }
 

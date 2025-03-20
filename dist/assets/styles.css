@@ -50,4 +50,100 @@
 
 .graph-analysis-button-container button:hover {
     background-color: var(--interactive-accent-hover);
+}
+
+.graph-analysis-canvas {
+    position: fixed;
+    background: rgba(var(--background-primary-rgb), 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    cursor: move;
+    overflow: hidden;
+}
+
+.graph-analysis-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    cursor: se-resize;
+    background: linear-gradient(135deg, transparent 50%, var(--background-modifier-border) 50%);
+    border-radius: 0 0 10px 0;
+}
+
+.graph-analysis-canvas::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 10px;
+    pointer-events: none;
+    background: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.03) 0%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+}
+
+/* Add minimal scrollbars if content overflows */
+.graph-analysis-canvas::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.graph-analysis-canvas::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.graph-analysis-canvas::-webkit-scrollbar-thumb {
+    background: var(--background-modifier-border);
+    border-radius: 3px;
+}
+
+.graph-analysis-canvas::-webkit-scrollbar-thumb:hover {
+    background: var(--background-modifier-border-hover);
+}
+
+.graph-analysis-close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    border-radius: 12px;
+    background-color: var(--background-modifier-border);
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+    z-index: 1001;
+}
+
+.graph-analysis-close-button:hover {
+    opacity: 1;
+}
+
+.graph-analysis-close-button::before,
+.graph-analysis-close-button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 2px;
+    background-color: var(--text-normal);
+    transform-origin: center;
+}
+
+.graph-analysis-close-button::before {
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.graph-analysis-close-button::after {
+    transform: translate(-50%, -50%) rotate(-45deg);
 } 
