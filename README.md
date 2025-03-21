@@ -60,6 +60,18 @@ This plugin combines:
 - Rust compiled to WebAssembly for high-performance graph analysis
 - The [petgraph](https://github.com/petgraph/petgraph) Rust crate for graph algorithms
 
+### Recent Performance Improvements
+
+The `refactor/move-graph-calculations-to-rust` branch contains significant performance improvements:
+
+- **Graph Construction in Rust**: Moved the graph building process from TypeScript to Rust for better performance
+- **Advanced Centrality Algorithms**: Implemented proper eigenvector centrality and betweenness centrality algorithms in Rust
+- **Optimized Data Flow**: Reduced data transfer between TypeScript and Rust by processing entire vault data in one operation
+- **Interactive Centrality Selection**: Added ability to switch between different centrality measures in the graph view
+- **Fallback Mechanisms**: Implemented graceful fallbacks to TypeScript if the Rust implementation fails
+
+These changes provide better performance especially for larger vaults, with minimal changes to the user interface.
+
 ## Development
 
 ### Prerequisites

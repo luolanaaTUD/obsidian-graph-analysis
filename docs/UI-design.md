@@ -66,3 +66,16 @@ GOAL
 	- Betweenness Centrality and  Closeness Centrality will be developed later, right now we use degree score for testing UI.
 	- Node and link using same color based on user choosing between Betweenness mode and Closeness mode. 
 - **Minimalist Aesthetics:** The overall design is clean and uncluttered.
+
+
+
+## Interactions
+
+- Hover
+	- highlight neighbour's nodes and animation for influenced nodes.
+- Drag
+	- move node and connected cluster
+	- highlight neighbour's nodes and animation for influenced nodes.
+- Click
+	- single click: display note metadata and basic info at the right top of node.
+	- double click: open note directly and close graph canvas.

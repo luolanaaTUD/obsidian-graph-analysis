@@ -52,16 +52,39 @@
     background-color: var(--interactive-accent-hover);
 }
 
+/* Graph Analysis Canvas */
 .graph-analysis-canvas {
-    position: fixed;
+    position: absolute;
     background: rgba(var(--background-primary-rgb), 0.8);
     backdrop-filter: blur(10px);
     border: 1px solid var(--background-modifier-border);
     border-radius: 10px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
-    cursor: move;
     overflow: hidden;
+    z-index: 100;
+}
+
+.graph-analysis-drag-handle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    border-radius: 10px 10px 0 0;
+    cursor: move;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    z-index: 1002;
+}
+
+.graph-analysis-drag-handle span {
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 500;
 }
 
 .graph-analysis-resize-handle {
@@ -71,8 +94,25 @@
     width: 20px;
     height: 20px;
     cursor: se-resize;
-    background: linear-gradient(135deg, transparent 50%, var(--background-modifier-border) 50%);
-    border-radius: 0 0 10px 0;
+    z-index: 1002;
+}
+
+.graph-analysis-resize-handle::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 0 20px 20px;
+    border-color: transparent transparent var(--background-modifier-border) transparent;
+}
+
+/* Add padding to the SVG container to account for the title bar */
+.graph-analysis-canvas svg {
+    padding-top: 32px;
+    background-color: rgba(var(--background-primary-rgb), 0.7);
 }
 
 .graph-analysis-canvas::before {
@@ -112,8 +152,8 @@
 
 .graph-analysis-close-button {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 4px;
+    right: 4px;
     width: 24px;
     height: 24px;
     cursor: pointer;
@@ -121,19 +161,21 @@
     background-color: var(--background-modifier-border);
     opacity: 0.6;
     transition: opacity 0.2s ease;
-    z-index: 1001;
+    z-index: 1003;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .graph-analysis-close-button:hover {
     opacity: 1;
+    background-color: var(--background-modifier-border-hover);
 }
 
 .graph-analysis-close-button::before,
 .graph-analysis-close-button::after {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
     width: 14px;
     height: 2px;
     background-color: var(--text-normal);
@@ -141,9 +183,132 @@
 }
 
 .graph-analysis-close-button::before {
-    transform: translate(-50%, -50%) rotate(45deg);
+    transform: rotate(45deg);
 }
 
 .graph-analysis-close-button::after {
-    transform: translate(-50%, -50%) rotate(-45deg);
+    transform: rotate(-45deg);
+}
+
+/* Loading indicator */
+.graph-analysis-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--background-secondary);
+    padding: 10px 20px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1004;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.graph-analysis-loading::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    margin-right: 10px;
+    border: 2px solid var(--background-modifier-border);
+    border-top-color: var(--text-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Graph visualization styles */
+.graph-node {
+    /* Use transform instead of r for better performance */
+    transform-origin: center;
+    transition: transform 200ms ease-out, opacity 200ms ease-out, fill 200ms ease-out;
+    cursor: pointer;
+    will-change: transform, opacity, fill;
+}
+
+.graph-link {
+    transition: stroke 200ms ease-out, stroke-opacity 200ms ease-out, stroke-width 200ms ease-out;
+    /* Base link color - will be overridden by theme-specific styles */
+    stroke: var(--background-modifier-border);
+    will-change: stroke, stroke-opacity, stroke-width;
+}
+
+/* Theme-specific link styles */
+.theme-light .graph-link {
+    stroke: var(--background-modifier-border);
+    stroke-opacity: 0.6;
+}
+
+.theme-dark .graph-link {
+    stroke: var(--text-faint);
+    stroke-opacity: 0.8;
+}
+
+.graph-label {
+    transition: font-weight 200ms ease-out, opacity 200ms ease-out, font-size 200ms ease-out;
+    pointer-events: none;
+    will-change: font-weight, opacity, font-size;
+}
+
+.graph-node:hover {
+    stroke: var(--text-accent-hover);
+    stroke-width: 2px;
+}
+
+/* Disable all transitions during drag operations */
+.dragging .graph-node,
+.dragging .graph-link,
+.dragging .graph-label {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Preserve styles during drag */
+.dragging .graph-node[fill="var(--text-accent)"],
+.dragging .graph-link[stroke="var(--text-accent)"] {
+    fill: var(--text-accent);
+    stroke: var(--text-accent);
+}
+
+.dragging .graph-node[opacity="0.3"],
+.dragging .graph-link[stroke-opacity="0.3"] {
+    opacity: 0.3;
+    stroke-opacity: 0.3;
+}
+
+/* Preserve label styles during drag */
+.dragging .graph-label[font-weight="bold"] {
+    font-weight: bold;
+    font-size: 13px;
+}
+
+.dragging .graph-label[opacity="0.3"] {
+    opacity: 0.3;
+}
+
+/* Optimize performance during drag */
+.dragging {
+    contain: strict;
+    will-change: transform;
+}
+
+/* Flash animation for when trying to open a duplicate canvas */
+.graph-analysis-canvas-flash {
+    animation: flash-canvas 1s ease;
+    z-index: 1000 !important;
+}
+
+@keyframes flash-canvas {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(112, 93, 207, 0);
+    }
+    50% {
+        box-shadow: 0 0 0 15px rgba(112, 93, 207, 0.5);
+    }
 } 
