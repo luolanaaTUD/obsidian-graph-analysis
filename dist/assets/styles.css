@@ -311,4 +311,86 @@
     50% {
         box-shadow: 0 0 0 15px rgba(112, 93, 207, 0.5);
     }
+}
+
+/* Graph node tooltip styles */
+.graph-node-tooltip {
+    position: absolute;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    padding: 10px 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--background-modifier-box-shadow);
+    z-index: 1100; /* Higher than other elements */
+    width: 320px;
+    min-height: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: var(--font-ui-small);
+    border: 1px solid var(--background-modifier-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto !important; /* Ensure tooltip is interactive */
+}
+
+.graph-node-tooltip::-webkit-scrollbar {
+    width: 6px;
+}
+
+.graph-node-tooltip::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.graph-node-tooltip::-webkit-scrollbar-thumb {
+    background-color: var(--background-modifier-border);
+    border-radius: 3px;
+}
+
+.metadata-container {
+    margin-top: 10px;
+}
+
+.metadata-label {
+    font-weight: var(--font-medium);
+    color: var(--text-muted);
+    display: inline-block;
+    min-width: 80px;
+}
+
+.metadata-value {
+    word-break: break-word;
+}
+
+.metadata-field {
+    margin-bottom: 6px;
+}
+
+.note-preview-section {
+    margin-top: 15px;
+    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 8px;
+}
+
+.preview-section-title {
+    font-weight: var(--font-medium);
+    font-size: var(--font-ui-small);
+    margin-bottom: 6px;
+    color: var(--text-accent);
+}
+
+.open-note-button {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-weight: var(--font-medium);
+    font-size: var(--font-ui-small);
+    transition: background-color 0.1s ease;
+    outline: none;
+}
+
+.open-note-button:hover {
+    background-color: var(--interactive-accent-hover);
 } 
