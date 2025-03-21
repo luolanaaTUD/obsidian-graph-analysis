@@ -314,7 +314,8 @@ export class GraphView {
             .duration(200)
             .attr('fill', primaryNodeColor)
             .attr('opacity', 1.0)
-            .attr('r', d => this.getNodeRadius(d));
+            .attr('r', d => this.getNodeRadius(d))
+            .style('filter', null);
             
         // Reset all links to default state
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
@@ -524,7 +525,7 @@ export class GraphView {
                     .attr('class', 'graph-node')
                     .call(this.drag())
                     .on('dblclick', (event, d) => this.openNoteAndCloseGraph(d))
-                    .on('mouseover', (event, d) => this.onNodeMouseOver(d))
+                    .on('mouseover', (event, d) => this.onNodeMouseOver(event, d))
                     .on('mouseout', (event, d) => this.onNodeMouseOut(d)),
                 update => update
                     .attr('r', d => this.getNodeRadius(d))
@@ -538,7 +539,7 @@ export class GraphView {
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .on('mouseover', (event, d) => {
                 this.highlightConnections(d.id, true);
-                this.onNodeMouseOver(d);
+                this.onNodeMouseOver(event, d);
             })
             .on('mouseout', (event, d) => {
                 this.highlightConnections(d.id, false);
@@ -582,8 +583,6 @@ export class GraphView {
         // Use Obsidian CSS variables for colors
         const primaryNodeColor = 'var(--interactive-accent)';
         const primaryNodeHighlightColor = 'var(--interactive-accent-hover)';
-        const secondaryNodeColor = 'var(--interactive-accent)';
-        const fadedNodeColor = 'var(--text-faint)';
         
         // Reset all nodes to default state first if we're canceling a highlight
         if (!highlight) {
@@ -592,7 +591,8 @@ export class GraphView {
                 .duration(200)
                 .attr('fill', primaryNodeColor)
                 .attr('opacity', 1.0)
-                .attr('r', d => this.getNodeRadius(d));
+                .attr('r', d => this.getNodeRadius(d))
+                .style('filter', null);
                 
             // Reset all links
             this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
@@ -621,23 +621,26 @@ export class GraphView {
             .duration(200)
             .attr('r', d => this.getNodeRadius(d) * 1.2)
             .attr('fill', primaryNodeHighlightColor)
-            .attr('opacity', 1.0);
+            .attr('opacity', 1.0)
+            .style('filter', null);
             
         // 2. Highlight connected nodes
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
             .transition()
             .duration(200)
-            .attr('fill', secondaryNodeColor)
-            .attr('opacity', 0.9);
+            .attr('fill', primaryNodeColor)
+            .attr('opacity', 1.0)
+            .style('filter', null);
             
-        // 3. Fade non-connected nodes
+        // 3. Fade non-connected nodes (using the same color with opacity)
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id))
             .transition()
             .duration(200)
-            .attr('fill', fadedNodeColor)
-            .attr('opacity', 0.3);
+            .attr('fill', primaryNodeColor)
+            .attr('opacity', 0.3)
+            .style('filter', null);
             
         // 4. Highlight connected links
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
@@ -675,13 +678,22 @@ export class GraphView {
             .transition()
             .duration(200)
             .style('font-weight', 'normal')
-            .style('opacity', 0.3);
+            .style('opacity', 0.5);
     }
 
-    private onNodeMouseOver(node: GraphNode) {
-        // Store the node being hovered
+    private onNodeMouseOver(event: MouseEvent, node: GraphNode) {
+        // Prevent tooltip from showing if dragging is active
+        if (this.isDragging) {
+            return;
+        }
+
+        // Prevent tooltip from showing if the mouse button is still pressed
+        if (this.isMouseButtonPressed(event)) {
+            return;
+        }
+
         this.hoverNode = node;
-        
+
         // Clear any existing timeout
         if (this.hoverTimeout !== null) {
             window.clearTimeout(this.hoverTimeout);
@@ -1440,4 +1452,9 @@ export class GraphView {
             this.simulation.stop();
         }
     }
-} 
+
+    // Check if mouse buttons are pressed (used during mousemove event)
+    private isMouseButtonPressed(event: MouseEvent): boolean {
+        return event && event.buttons !== 0;
+    }
+}
