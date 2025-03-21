@@ -225,14 +225,18 @@
 
 /* Graph visualization styles */
 .graph-node {
-    transition: r 200ms ease, opacity 200ms ease, fill 200ms ease;
+    /* Use transform instead of r for better performance */
+    transform-origin: center;
+    transition: transform 200ms ease-out, opacity 200ms ease-out, fill 200ms ease-out;
     cursor: pointer;
+    will-change: transform, opacity, fill;
 }
 
 .graph-link {
-    transition: stroke 200ms ease, stroke-opacity 200ms ease, stroke-width 200ms ease;
+    transition: stroke 200ms ease-out, stroke-opacity 200ms ease-out, stroke-width 200ms ease-out;
     /* Base link color - will be overridden by theme-specific styles */
     stroke: var(--background-modifier-border);
+    will-change: stroke, stroke-opacity, stroke-width;
 }
 
 /* Theme-specific link styles */
@@ -247,13 +251,51 @@
 }
 
 .graph-label {
-    transition: font-weight 200ms ease, opacity 200ms ease;
+    transition: font-weight 200ms ease-out, opacity 200ms ease-out, font-size 200ms ease-out;
     pointer-events: none;
+    will-change: font-weight, opacity, font-size;
 }
 
 .graph-node:hover {
     stroke: var(--text-accent-hover);
     stroke-width: 2px;
+}
+
+/* Disable all transitions during drag operations */
+.dragging .graph-node,
+.dragging .graph-link,
+.dragging .graph-label {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Preserve styles during drag */
+.dragging .graph-node[fill="var(--text-accent)"],
+.dragging .graph-link[stroke="var(--text-accent)"] {
+    fill: var(--text-accent);
+    stroke: var(--text-accent);
+}
+
+.dragging .graph-node[opacity="0.3"],
+.dragging .graph-link[stroke-opacity="0.3"] {
+    opacity: 0.3;
+    stroke-opacity: 0.3;
+}
+
+/* Preserve label styles during drag */
+.dragging .graph-label[font-weight="bold"] {
+    font-weight: bold;
+    font-size: 13px;
+}
+
+.dragging .graph-label[opacity="0.3"] {
+    opacity: 0.3;
+}
+
+/* Optimize performance during drag */
+.dragging {
+    contain: strict;
+    will-change: transform;
 }
 
 /* Flash animation for when trying to open a duplicate canvas */

@@ -495,16 +495,15 @@ export class GraphView {
             }
         });
         
-        // Use consistent node colors from CSS variables
-        const primaryNodeColor = 'var(--interactive-accent)';
-        const defaultLinkColor = 'var(--graph-line)';
+        // Skip style updates during drag operations to prevent flashing
+        const shouldUpdateStyles = !this.isDragging;
         
-        // Update links
+        // Update links positions
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('line')
             .data(this.links)
             .join(
                 enter => enter.append('line')
-                    .attr('stroke', defaultLinkColor)
+                    .attr('stroke', 'var(--graph-line)')
                     .attr('stroke-opacity', 0.5)
                     .attr('stroke-width', 2)
                     .attr('class', 'graph-link'),
@@ -516,39 +515,26 @@ export class GraphView {
             .attr('x2', d => (d.target as unknown as GraphNode).x || 0)
             .attr('y2', d => (d.target as unknown as GraphNode).y || 0);
 
-        // Update nodes
+        // Update nodes positions
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('circle')
             .data(this.nodes, d => d.id)
             .join(
                 enter => enter.append('circle')
                     .attr('r', d => this.getNodeRadius(d))
-                    .attr('fill', primaryNodeColor)
+                    .attr('fill', 'var(--interactive-accent)')
                     .attr('opacity', 1.0)
                     .attr('class', 'graph-node')
                     .call(this.drag())
                     .on('dblclick', (event, d) => this.openNoteAndCloseGraph(d))
                     .on('mouseover', (event, d) => this.onNodeMouseOver(event, d))
                     .on('mouseout', (event, d) => this.onNodeMouseOut(d)),
-                update => update
-                    .attr('r', d => this.getNodeRadius(d))
-                    .attr('fill', primaryNodeColor),
+                update => update,
                 exit => exit.remove()
             )
             .attr('cx', d => (d as any).x)
             .attr('cy', d => (d as any).y);
 
-        // Add hover effect (for connections highlighting)
-        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-            .on('mouseover', (event, d) => {
-                this.highlightConnections(d.id, true);
-                this.onNodeMouseOver(event, d);
-            })
-            .on('mouseout', (event, d) => {
-                this.highlightConnections(d.id, false);
-                this.onNodeMouseOut(d);
-            });
-
-        // Add labels
+        // Update labels positions
         this.svgGroup.selectAll<SVGTextElement, GraphNode>('text')
             .data(this.nodes, d => d.id)
             .join(
@@ -559,90 +545,87 @@ export class GraphView {
                     .style('font-size', '12px')
                     .attr('class', 'graph-label')
                     .text(d => d.name),
-                update => update.attr('dy', d => this.getNodeRadius(d) + 15),
+                update => update,
                 exit => exit.remove()
             )
             .attr('x', d => (d as any).x)
             .attr('y', d => (d as any).y);
+            
+        // If we're dragging, maintain the highlight state
+        if (this.draggedNode) {
+            this.highlightConnections(this.draggedNode.id, true, false);
+        }
     }
 
-    private highlightConnections(nodeId: string, highlight: boolean) {
+    private highlightConnections(nodeId: string, highlight: boolean, useTransition: boolean = true) {
         // Find all connected links
-        const connectedLinks = this.links.filter(link => 
-            link.source === nodeId || (link.source as any).id === nodeId || 
-            link.target === nodeId || (link.target as any).id === nodeId
-        );
-        
-        // Get connected node IDs (both source and target)
         const connectedNodeIds = new Set<string>();
-        connectedLinks.forEach(link => {
+        this.links.forEach(link => {
             const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
             const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
-            connectedNodeIds.add(sourceId);
-            connectedNodeIds.add(targetId);
+            if (sourceId === nodeId) {
+                connectedNodeIds.add(targetId);
+            } else if (targetId === nodeId) {
+                connectedNodeIds.add(sourceId);
+            }
         });
-        
-        // Use Obsidian CSS variables for colors
+
         const primaryNodeColor = 'var(--interactive-accent)';
-        const primaryNodeHighlightColor = 'var(--interactive-accent-hover)';
+        const primaryNodeHighlightColor = 'var(--text-accent)';
         const defaultLinkColor = 'var(--graph-line)';
         
         // Reset all nodes to default state first if we're canceling a highlight
         if (!highlight) {
             this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-                .transition()
-                .duration(200)
-                .attr('fill', primaryNodeColor)
-                .attr('opacity', 1.0)
-                .attr('r', d => this.getNodeRadius(d))
+                .style('fill', primaryNodeColor)
+                .style('opacity', 1.0)
+                .style('r', d => this.getNodeRadius(d))
                 .style('filter', null);
                 
             // Reset all links
             this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
-                .transition()
-                .duration(200)
                 .style('stroke', defaultLinkColor)
                 .style('stroke-opacity', 0.9)
                 .style('stroke-width', 2);
                 
             // Reset all labels
             this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
-                .transition()
-                .duration(200)
                 .style('font-weight', 'normal')
-                .style('opacity', 0.8);
+                .style('opacity', 0.8)
+                .style('font-size', '12px');
                 
             return;
         }
         
-        // If highlighting:
+        // If highlighting, apply styles immediately without transitions during drag
         
-        // 1. Highlight the selected node
+        // 1. Highlight the selected node and its label
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id === nodeId)
-            .transition()
-            .duration(200)
-            .attr('r', d => this.getNodeRadius(d) * 1.2)
-            .attr('fill', primaryNodeHighlightColor)
-            .attr('opacity', 1.0)
+            .style('r', d => this.getNodeRadius(d) * 1.2)
+            .style('fill', primaryNodeHighlightColor)
+            .style('opacity', 1.0)
             .style('filter', null);
+            
+        // Highlight the active node's label
+        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            .filter(d => d.id === nodeId)
+            .style('font-weight', 'bold')
+            .style('opacity', 1.0)
+            .style('font-size', '13px');
             
         // 2. Highlight connected nodes
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
-            .transition()
-            .duration(200)
-            .attr('fill', primaryNodeColor)
-            .attr('opacity', 1.0)
+            .style('fill', primaryNodeColor)
+            .style('opacity', 1.0)
             .style('filter', null);
             
-        // 3. Fade non-connected nodes (using the same color with opacity)
+        // 3. Fade non-connected nodes
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id))
-            .transition()
-            .duration(200)
-            .attr('fill', primaryNodeColor)
-            .attr('opacity', 0.3)
+            .style('fill', primaryNodeColor)
+            .style('opacity', 0.3)
             .style('filter', null);
             
         // 4. Highlight connected links
@@ -667,20 +650,16 @@ export class GraphView {
             .style('stroke-opacity', 0.3)
             .style('stroke-width', 1);
             
-        // 6. Highlight labels of connected nodes
+        // 6. Style connected node labels
         this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
-            .filter(d => connectedNodeIds.has(d.id))
-            .transition()
-            .duration(200)
-            .style('font-weight', 'bold')
-            .style('opacity', 1);
-            
-        // 7. Fade labels of non-connected nodes
-        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
-            .filter(d => !connectedNodeIds.has(d.id))
-            .transition()
-            .duration(200)
+            .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
             .style('font-weight', 'normal')
+            .style('opacity', 0.8)
+            .style('font-size', '12px');
+            
+        // 7. Fade non-connected node labels
+        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            .filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id))
             .style('opacity', 0.3);
     }
 
@@ -1176,7 +1155,13 @@ export class GraphView {
         
         return d3.drag<SVGCircleElement, GraphNode>()
             .on('start', (event, d) => {
-                if (!event.active) this.simulation.alphaTarget(0.3).restart();
+                // Set dragging state first
+                this.isDragging = true;
+                
+                if (!event.active) {
+                    // Reduce alpha target to make movement smoother
+                    this.simulation.alphaTarget(0.1).restart();
+                }
                 (d as any).fx = (d as any).x;
                 (d as any).fy = (d as any).y;
                 
@@ -1188,28 +1173,38 @@ export class GraphView {
                 }
                 this.removeNodeTooltip();
                 
-                // Highlight connections when dragging starts
-                this.highlightConnections(d.id, true);
+                // Add dragging class to parent SVG to disable transitions
+                this.svg.classed('dragging', true);
+                
+                // Highlight connections when dragging starts - without transitions
+                this.highlightConnections(d.id, true, false);
+                
+                // Store the dragged node ID
+                this.draggedNode = d;
             })
             .on('drag', (event, d) => {
                 (d as any).fx = event.x;
                 (d as any).fy = event.y;
+                
+                // Update highlighting without transitions during drag
+                if (this.draggedNode) {
+                    this.highlightConnections(this.draggedNode.id, true, false);
+                }
             })
             .on('end', (event, d) => {
                 if (!event.active) this.simulation.alphaTarget(0);
                 (d as any).fx = null;
                 (d as any).fy = null;
                 
-                // Remove highlighting when dragging ends
-                this.highlightConnections(d.id, false);
+                // Remove dragging class to re-enable transitions
+                this.svg.classed('dragging', false);
                 
-                // Ensure all link colors are reset
-                this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
-                    .transition()
-                    .duration(200)
-                    .style('stroke', defaultLinkColor)
-                    .style('stroke-opacity', 0.9)
-                    .style('stroke-width', 2);
+                // Remove highlighting when dragging ends - with transitions
+                this.highlightConnections(d.id, false, true);
+                
+                // Reset dragging states
+                this.isDragging = false;
+                this.draggedNode = null;
             });
     }
 
