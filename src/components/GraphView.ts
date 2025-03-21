@@ -307,6 +307,7 @@ export class GraphView {
         
         // Use consistent colors
         const primaryNodeColor = 'var(--interactive-accent)';
+        const defaultLinkColor = 'var(--graph-line)';
         
         // Reset all nodes to default state
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
@@ -321,7 +322,7 @@ export class GraphView {
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
             .transition()
             .duration(200)
-            .style('stroke', 'var(--background-modifier-border)')
+            .style('stroke', defaultLinkColor)
             .style('stroke-opacity', 0.5)
             .style('stroke-width', 2);
             
@@ -496,13 +497,14 @@ export class GraphView {
         
         // Use consistent node colors from CSS variables
         const primaryNodeColor = 'var(--interactive-accent)';
+        const defaultLinkColor = 'var(--graph-line)';
         
         // Update links
         this.svgGroup.selectAll<SVGLineElement, GraphLink>('line')
             .data(this.links)
             .join(
                 enter => enter.append('line')
-                    .attr('stroke', 'var(--background-modifier-border)')
+                    .attr('stroke', defaultLinkColor)
                     .attr('stroke-opacity', 0.5)
                     .attr('stroke-width', 2)
                     .attr('class', 'graph-link'),
@@ -583,6 +585,7 @@ export class GraphView {
         // Use Obsidian CSS variables for colors
         const primaryNodeColor = 'var(--interactive-accent)';
         const primaryNodeHighlightColor = 'var(--interactive-accent-hover)';
+        const defaultLinkColor = 'var(--graph-line)';
         
         // Reset all nodes to default state first if we're canceling a highlight
         if (!highlight) {
@@ -598,8 +601,8 @@ export class GraphView {
             this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
                 .transition()
                 .duration(200)
-                .style('stroke', 'var(--background-modifier-border)')
-                .style('stroke-opacity', 0.5)
+                .style('stroke', defaultLinkColor)
+                .style('stroke-opacity', 0.9)
                 .style('stroke-width', 2);
                 
             // Reset all labels
@@ -660,8 +663,8 @@ export class GraphView {
                 const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
                 return sourceId !== nodeId && targetId !== nodeId;
             })
-            .style('stroke', 'var(--background-modifier-border)')
-            .style('stroke-opacity', 0.2)
+            .style('stroke', defaultLinkColor)
+            .style('stroke-opacity', 0.3)
             .style('stroke-width', 1);
             
         // 6. Highlight labels of connected nodes
@@ -678,7 +681,7 @@ export class GraphView {
             .transition()
             .duration(200)
             .style('font-weight', 'normal')
-            .style('opacity', 0.5);
+            .style('opacity', 0.3);
     }
 
     private onNodeMouseOver(event: MouseEvent, node: GraphNode) {
@@ -1169,6 +1172,7 @@ export class GraphView {
     private drag() {
         // Use consistent colors
         const primaryNodeColor = 'var(--interactive-accent)';
+        const defaultLinkColor = 'var(--graph-line)';
         
         return d3.drag<SVGCircleElement, GraphNode>()
             .on('start', (event, d) => {
@@ -1198,6 +1202,14 @@ export class GraphView {
                 
                 // Remove highlighting when dragging ends
                 this.highlightConnections(d.id, false);
+                
+                // Ensure all link colors are reset
+                this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+                    .transition()
+                    .duration(200)
+                    .style('stroke', defaultLinkColor)
+                    .style('stroke-opacity', 0.9)
+                    .style('stroke-width', 2);
             });
     }
 
