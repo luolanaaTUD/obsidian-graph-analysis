@@ -241,7 +241,7 @@ export class GraphView {
         }
     }
 
-    private async initializeD3() {
+    private initializeD3() {
         // Reset hover state to ensure first hover works
         this.hoverNode = null;
         this.hoverTimeout = null;
@@ -285,15 +285,26 @@ export class GraphView {
         const width = this.canvas.clientWidth;
         const height = this.canvas.clientHeight - 32; // Account for title bar
         
-        // Initialize force simulation
+        // Initialize force simulation with improved parameters
         this.simulation = d3.forceSimulation<GraphNode>()
-            .force('charge', d3.forceManyBody().strength(-100))
-            .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide<GraphNode>().radius(d => this.getNodeRadius(d) + 5))
+            .force('charge', d3.forceManyBody()
+                .strength((d) => this.getNodeRepulsionStrength(d as GraphNode))
+                .distanceMax(400)) // Increased distance max for more spacing
+            .force('center', d3.forceCenter(width / 2, height / 2).strength(0.2)) // Stronger center force for circular shape
+            .force('collision', d3.forceCollide<GraphNode>()
+                .radius(d => this.getNodeRadius(d) + 15) // Increased padding between nodes
+                .strength(0.75)) 
             .force('link', d3.forceLink<GraphNode, GraphLink>()
                 .id(d => d.id)
-                .distance(d => this.getLinkDistance(d)))
+                .distance(d => this.getLinkDistance(d))
+                .strength(0.5)) // Balanced link strength
             .force('boundary', this.createBoundaryForce())
+            .force('radial', this.createRadialForce())
+            .force('circular', this.createCircularLayoutForce()) // Add circular layout force
+            .force('label', this.createLabelAvoidanceForce()) // Add force to prevent label overlaps
+            .velocityDecay(0.35) // Increased decay for more stable positions
+            .alpha(1.0)
+            .alphaDecay(0.01) // Slower decay for better settling
             .on('tick', () => this.updateGraph());
             
         // Set the initial transform to center the graph properly
@@ -334,14 +345,95 @@ export class GraphView {
             .style('opacity', 0.8);
     }
 
+    // Calculate adaptive repulsion strength based on node connectivity
+    private getNodeRepulsionStrength(node: GraphNode): number {
+        // Default repulsion for nodes without degree info
+        if (node.degree === undefined) return -120;
+        
+        // Orphan nodes get less repulsion to keep them closer to center
+        if (node.degree === 0) return -60;
+        
+        // More aggressive repulsion to increase spacing
+        const baseStrength = -100; // Increased base repulsion
+        const connectivityFactor = Math.min(1 + (node.degree / 12), 2.0); // Less aggressive scaling
+        
+        return baseStrength * connectivityFactor;
+    }
+
+    // Create a force to arrange nodes in a circular layout
+    private createCircularLayoutForce() {
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight - 32; // Account for title bar
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
+        // Create rings based on node connectivity
+        return (alpha: number) => {
+            const k = alpha * 0.1; // Force strength factor
+            
+            this.nodes.forEach(node => {
+                if (!node.x || !node.y) return;
+                
+                const connectivity = node.degree || 0;
+                
+                // Calculate desired radius based on connectivity
+                // Higher connectivity = larger radius from center
+                const minRadius = Math.min(width, height) * 0.15; // Minimum radius for orphan nodes
+                const maxRadius = Math.min(width, height) * 0.35; // Maximum radius for highly connected nodes
+                
+                // Calculate target radius based on connectivity
+                // Map connectivity to a value between minRadius and maxRadius
+                // Natural logarithm provides a nice distribution curve
+                let targetRadius: number;
+                
+                if (connectivity === 0) {
+                    // Orphan nodes get placed in inner ring
+                    targetRadius = minRadius;
+                } else {
+                    // Connected nodes get distributed based on connectivity
+                    // Using log scale to prevent highly connected nodes from going too far
+                    const logBase = Math.log(connectivity + 1) / Math.log(10);
+                    targetRadius = minRadius + (maxRadius - minRadius) * Math.min(logBase * 0.4, 1);
+                }
+                
+                // Calculate current distance from center
+                const dx = (node as any).x - centerX;
+                const dy = (node as any).y - centerY;
+                const distance = Math.sqrt(dx * dx + dy * dy) || 0.1; // Avoid division by zero
+                
+                // Move node toward the correct radius
+                // If too close, push outward; if too far, pull inward
+                const radiusDifference = targetRadius - distance;
+                
+                // Apply force proportional to distance from target radius
+                (node as any).vx += dx * radiusDifference * k / distance;
+                (node as any).vy += dy * radiusDifference * k / distance;
+            });
+        };
+    }
+
+    // Create a radial force specifically for orphan nodes
+    private createRadialForce() {
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight - 32; // Account for title bar
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) * 0.2; // Inner radius for orphans
+        
+        return d3.forceRadial<GraphNode>(
+            (d: any) => (d as GraphNode).degree === 0 ? radius : Math.min(width, height) * 0.35, // Distribute along radii
+            centerX, 
+            centerY
+        ).strength((d: any) => (d as GraphNode).degree === 0 ? 0.3 : 0.08); // Stronger for orphans, gentler for connected
+    }
+
     // Create a custom force to keep nodes within a circular boundary
     private createBoundaryForce() {
         const width = this.canvas.clientWidth;
         const height = this.canvas.clientHeight - 32; // Account for title bar
-        const boundaryRadius = Math.min(width, height) * 0.4; // 40% of the smallest dimension
+        const boundaryRadius = Math.min(width, height) * 0.4; // Boundary for all nodes 
         const centerX = width / 2;
         const centerY = height / 2;
-        const strength = 0.15; // Increased strength to keep orphan nodes closer
         
         return function(alpha: number) {
             return function(d: any) {
@@ -349,37 +441,88 @@ export class GraphView {
                 const dy = d.y - centerY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
-                // Always apply a gentle force toward the center for orphan nodes (no links)
+                // Apply different forces based on node connectivity
                 const isOrphan = d.degree === 0;
-                if (isOrphan) {
-                    // Stronger centering force for orphans
-                    d.vx -= dx * 0.03 * alpha;
-                    d.vy -= dy * 0.03 * alpha;
-                }
                 
-                if (distance > boundaryRadius) {
-                    // Calculate new position within boundary
-                    d.x = centerX + (dx / distance) * boundaryRadius;
-                    d.y = centerY + (dy / distance) * boundaryRadius;
-                } else if (distance > boundaryRadius * 0.85) {
-                    // Apply a stronger force as nodes approach the boundary
-                    const nudge = (boundaryRadius - distance) / boundaryRadius;
-                    d.vx -= dx * nudge * strength * alpha;
-                    d.vy -= dy * nudge * strength * alpha;
+                if (isOrphan) {
+                    // Orphans stay in inner circle
+                    const orphanStrength = 0.15 * alpha;
+                    d.vx -= dx * orphanStrength;
+                    d.vy -= dy * orphanStrength;
+                    
+                    // Keep orphans within their boundary
+                    const orphanBoundary = boundaryRadius * 0.5; // Tighter boundary for orphans
+                    if (distance > orphanBoundary) {
+                        d.x = centerX + (dx / distance) * orphanBoundary;
+                        d.y = centerY + (dy / distance) * orphanBoundary;
+                    }
+                } else {
+                    // Add a gentle pulling force toward center for all nodes
+                    // This helps maintain circular shape
+                    const centeringStrength = 0.03 * alpha;
+                    d.vx -= dx * centeringStrength;
+                    d.vy -= dy * centeringStrength;
+                    
+                    // Regular nodes get standard boundary behavior
+                    if (distance > boundaryRadius) {
+                        // Calculate new position within boundary
+                        d.x = centerX + (dx / distance) * boundaryRadius;
+                        d.y = centerY + (dy / distance) * boundaryRadius;
+                    } else if (distance > boundaryRadius * 0.85) {
+                        // Apply a gentle force as nodes approach the boundary
+                        const nudge = (boundaryRadius - distance) / boundaryRadius;
+                        d.vx -= dx * nudge * 0.06 * alpha; // Slightly stronger
+                        d.vy -= dy * nudge * 0.06 * alpha;
+                    }
                 }
             };
         };
     }
 
+    private getLinkDistance(link: GraphLink): number {
+        // Get source and target nodes
+        const source = this.nodes.find(n => n.id === (typeof link.source === 'string' ? link.source : (link.source as any).id));
+        const target = this.nodes.find(n => n.id === (typeof link.target === 'string' ? link.target : (link.target as any).id));
+        
+        if (!source || !target) return 100;
+        
+        // Base distance plus node radii - increased for more breathing room
+        const baseDistance = 90; // Increased from 60
+        
+        // Adjust distance based on graph density
+        const densityFactor = Math.max(0.7, 1 - (this.nodes.length / 500));
+        
+        // Enhanced bridge node handling
+        const sourceConnectivity = source.degree || 0;
+        const targetConnectivity = target.degree || 0;
+        
+        // Check if this is likely a bridge between clusters
+        const isBridgeLink = 
+            // Case 1: Both nodes have significant connectivity (connecting major nodes)
+            (sourceConnectivity > 3 && targetConnectivity > 3) ||
+            // Case 2: Large difference in connectivity (connecting hub to periphery)
+            (Math.abs(sourceConnectivity - targetConnectivity) > 3);
+        
+        // For bridge links, moderate the distance to maintain circular shape
+        if (isBridgeLink) {
+            return (baseDistance * 0.8 * densityFactor) + 
+                   this.getNodeRadius(source) + this.getNodeRadius(target);
+        }
+        
+        // For normal links within clusters, use a longer distance
+        return (baseDistance * densityFactor) + 
+               this.getNodeRadius(source) + this.getNodeRadius(target);
+    }
+
     private getNodeRadius(node: GraphNode): number {
         // Default size if no centrality score is available
         if (node.centralityScore === undefined) {
-            return 8;
+            return 6; // Reduced from 8
         }
         
         // Get max centrality score
         const maxScore = this.getMaxCentralityScore();
-        if (maxScore === 0) return 8; // Avoid division by zero
+        if (maxScore === 0) return 6; // Reduced from 8
         
         // Adaptive sizing based on graph density
         const nodeCount = this.nodes.length;
@@ -396,8 +539,8 @@ export class GraphView {
             scaleFactor = 1.5 + Math.min(1.5, Math.log10(nodeCount) * 0.5);
         }
         
-        // Base size range
-        const minRadius = 9;
+        // Base size range - reduced for smaller nodes
+        const minRadius = 7; // Reduced from 9
         const maxRadius = minRadius * scaleFactor;
         
         // Normalized score (0-1)
@@ -446,17 +589,6 @@ export class GraphView {
     private getMaxCentralityScore(): number {
         // Return the stored max score
         return this.maxCentralityScore > 0 ? this.maxCentralityScore : 1;
-    }
-
-    private getLinkDistance(link: GraphLink): number {
-        // Get source and target nodes
-        const source = this.nodes.find(n => n.id === (typeof link.source === 'string' ? link.source : (link.source as any).id));
-        const target = this.nodes.find(n => n.id === (typeof link.target === 'string' ? link.target : (link.target as any).id));
-        
-        if (!source || !target) return 100;
-        
-        // Base distance plus the sum of the node radii
-        return 50 + this.getNodeRadius(source) + this.getNodeRadius(target);
     }
 
     private updateGraphTransform() {
@@ -534,7 +666,14 @@ export class GraphView {
             .attr('cx', d => (d as any).x)
             .attr('cy', d => (d as any).y);
 
-        // Update labels positions
+        // Use our quadtree-based label positioning
+        const labelVisibility = this.calculateLabelPositions();
+        
+        // Get current zoom level to adjust label visibility
+        const transform = d3.zoomTransform(this.svg.node()!);
+        const zoomLevel = transform.k;
+        
+        // Update labels positions with improved collision detection
         this.svgGroup.selectAll<SVGTextElement, GraphNode>('text')
             .data(this.nodes, d => d.id)
             .join(
@@ -543,18 +682,228 @@ export class GraphView {
                     .attr('text-anchor', 'middle')
                     .style('fill', 'var(--text-normal)')
                     .style('font-size', '12px')
+                    .style('opacity', 0) // Start with opacity 0
                     .attr('class', 'graph-label')
+                    .on('mouseover', function(event, d) {
+                        // Highlight this label when hovered
+                        d3.select(this)
+                          .transition()
+                          .duration(200)
+                          .style('opacity', 1.0)
+                          .style('font-weight', 'bold');
+                    })
+                    .on('mouseout', function(event, d) {
+                        // Return to regular state
+                        d3.select(this)
+                          .transition()
+                          .duration(200)
+                          .style('opacity', (d: any, i: number) => {
+                              // Get the stored label visibility object
+                              const visibility = labelVisibility.find(v => v.id === d.id);
+                              if (!visibility) return 0.8;
+                              
+                              // Apply zoom and importance adjustments
+                              let opacity = visibility.opacity;
+                              if (d.degree && d.degree > 5) {
+                                  opacity = Math.min(1.0, opacity + 0.2);
+                              }
+                              if (zoomLevel > 1.5) {
+                                  opacity = Math.min(1.0, opacity + 0.1);
+                              }
+                              return opacity;
+                          })
+                          .style('font-weight', 'normal');
+                    })
                     .text(d => d.name),
                 update => update,
                 exit => exit.remove()
             )
             .attr('x', d => (d as any).x)
-            .attr('y', d => (d as any).y);
+            .attr('y', d => (d as any).y)
+            // Apply calculated opacity for each label with fallback
+            .style('opacity', d => {
+                // Find the visibility info for this node
+                const visibility = labelVisibility.find(v => v.id === d.id);
+                if (!visibility) return 0.8; // Default opacity if not found
+                
+                // Apply adaptive opacity based on importance and zoom
+                let opacity = visibility.opacity;
+                
+                // Enhance opacity for important nodes
+                if (d.degree && d.degree > 5) {
+                    opacity = Math.min(1.0, opacity + 0.2);
+                }
+                
+                // Show more labels when zoomed in
+                if (zoomLevel > 1.5) {
+                    opacity = Math.min(1.0, opacity + 0.1);
+                }
+                
+                return opacity;
+            })
+            .attr('dy', d => {
+                // Find the vertical shift for this node
+                const visibility = labelVisibility.find(v => v.id === d.id);
+                return this.getNodeRadius(d) + ((visibility?.shift || 0) * 15) + 15;
+            });
             
         // If we're dragging, maintain the highlight state
         if (this.draggedNode) {
             this.highlightConnections(this.draggedNode.id, true, false);
         }
+    }
+
+    // Calculate label positions to minimize collisions
+    private calculateLabelPositions(): { id: string, shift: number, opacity: number }[] {
+        if (!this.nodes.length) return [];
+        
+        // Create an array to store position info for each label
+        const labelPositions: { id: string, shift: number, opacity: number }[] = this.nodes.map(node => ({
+            id: node.id,
+            shift: 0, // Vertical shift (0 = default position, 1 = shift down by 1 line, etc.)
+            opacity: 0.8 // Default opacity
+        }));
+        
+        // Build a quadtree for spatial partitioning
+        const quad = d3.quadtree<{ id: string, x: number, y: number, width: number, height: number, priority: number }>()
+            .x(d => d.x)
+            .y(d => d.y)
+            .addAll(this.nodes.map(node => {
+                const name = node.name || '';
+                // Estimate text width based on character count and average character width
+                const estWidth = name.length * 6.5;
+                // Calculate priority based on node degree (higher degree = higher priority)
+                const priority = node.degree || 0;
+                return {
+                    id: node.id,
+                    x: (node as any).x,
+                    y: (node as any).y + this.getNodeRadius(node) + 15, // Label Y position (below node)
+                    width: estWidth,
+                    height: 15,
+                    priority
+                };
+            }));
+        
+        // Sort nodes by priority (degree) for processing
+        const sortedNodes = [...this.nodes].sort((a, b) => (b.degree || 0) - (a.degree || 0));
+        
+        // Process nodes in priority order
+        sortedNodes.forEach(node => {
+            if (!node.x || !node.y) return;
+            
+            const labelInfo = {
+                id: node.id,
+                x: (node as any).x,
+                y: (node as any).y + this.getNodeRadius(node) + 15,
+                width: (node.name?.length || 0) * 6.5,
+                height: 15,
+                priority: node.degree || 0
+            };
+            
+            // Check for collisions
+            const collisions: string[] = [];
+            const padding = 5; // Padding between labels
+            
+            // Search for nearby labels in the quadtree
+            quad.visit((quadNode, x1, y1, x2, y2) => {
+                // For internal nodes without data, we need to continue searching
+                if (!('data' in quadNode)) return true;
+                
+                const q = quadNode.data;
+                if (!q) return false;
+                
+                // Skip self
+                if (q.id === node.id) return false;
+                
+                // Calculate overlap
+                const dx = labelInfo.x - q.x;
+                const dy = labelInfo.y - q.y;
+                const halfWidthA = labelInfo.width / 2;
+                const halfWidthB = q.width / 2;
+                const halfHeightA = labelInfo.height / 2;
+                const halfHeightB = q.height / 2;
+                
+                // Check if there's horizontal overlap
+                const overlapX = Math.abs(dx) < (halfWidthA + halfWidthB + padding);
+                // Check if there's vertical overlap
+                const overlapY = Math.abs(dy) < (halfHeightA + halfHeightB + padding);
+                
+                // If both overlaps exist, there's a collision
+                if (overlapX && overlapY) {
+                    collisions.push(q.id);
+                }
+                
+                // Return true to continue visiting nodes in this quad
+                return true;
+            });
+            
+            // Find position in our labelPositions array
+            const positionIndex = labelPositions.findIndex(p => p.id === node.id);
+            if (positionIndex === -1) return;
+            
+            // If we have collisions, try to resolve them
+            if (collisions.length > 0) {
+                // First, check if the current label has higher priority than all collisions
+                const collidedNodes = this.nodes.filter(n => collisions.includes(n.id));
+                const allLowerPriority = collidedNodes.every(n => (n.degree || 0) < (node.degree || 0));
+                
+                // Calculate an overlap factor based on the number of collisions
+                const overlapFactor = Math.min(collisions.length, 5) / 5;
+                
+                if (allLowerPriority) {
+                    // Higher priority labels stay visible but affected labels get reduced opacity
+                    collisions.forEach(id => {
+                        const collidedNode = this.nodes.find(n => n.id === id);
+                        if (!collidedNode) return;
+                        
+                        const collidedIndex = labelPositions.findIndex(p => p.id === id);
+                        if (collidedIndex === -1) return;
+                        
+                        // Reduce opacity based on priority difference and proximity
+                        const priorityDiff = (node.degree || 0) - (collidedNode.degree || 0);
+                        const normalizedDiff = Math.min(1, priorityDiff / 10);
+                        // Calculate a reduced opacity that never goes below 0.2
+                        const reducedOpacity = Math.max(0.2, labelPositions[collidedIndex].opacity * (1 - normalizedDiff * 0.6));
+                        labelPositions[collidedIndex].opacity = reducedOpacity;
+                    });
+                } else {
+                    // Try to shift vertically first (for high priority nodes)
+                    if (node.degree && node.degree > 3) { // Only shift important nodes
+                        // Try positions below the node with increasing shifts
+                        for (let shift = 1; shift <= 2; shift++) {
+                            // Calculate new position with shift
+                            const newY = (node as any).y + this.getNodeRadius(node) + 15 + (shift * 15);
+                            
+                            // Check if the new position would avoid collisions
+                            const wouldCollide = collisions.some(id => {
+                                const collidedNode = this.nodes.find(n => n.id === id);
+                                if (!collidedNode) return false;
+                                
+                                const collidedIndex = labelPositions.findIndex(p => p.id === id);
+                                if (collidedIndex === -1) return false;
+                                
+                                const otherY = (collidedNode as any).y + this.getNodeRadius(collidedNode) + 15 + 
+                                              (labelPositions[collidedIndex].shift * 15);
+                                
+                                return Math.abs(newY - otherY) < 15;
+                            });
+                            
+                            if (!wouldCollide) {
+                                // Apply the shift
+                                labelPositions[positionIndex].shift = shift;
+                                return; // Successfully resolved
+                            }
+                        }
+                    }
+                    
+                    // If we're still here, we couldn't shift to avoid collision
+                    // Reduce opacity based on number of collisions
+                    labelPositions[positionIndex].opacity = Math.max(0.3, 0.8 - (overlapFactor * 0.5));
+                }
+            }
+        });
+        
+        return labelPositions;
     }
 
     private highlightConnections(nodeId: string, highlight: boolean, useTransition: boolean = true) {
@@ -1239,7 +1588,7 @@ export class GraphView {
                     name: displayName,
                     path: nodePath,
                     centralityScore: centralityScore,
-                    degree: centralityScore // For degree centrality, the score is the degree
+                    degree: centralityScore // Ensure we're using the Rust-calculated degree score
                 });
             });
             
@@ -1258,13 +1607,19 @@ export class GraphView {
             
             // Update collision detection radius based on node sizes
             const collisionForce = this.simulation.force('collision') as d3.ForceCollide<GraphNode>;
-            collisionForce.radius(d => this.getNodeRadius(d) + 5);
+            collisionForce.radius(d => this.getNodeRadius(d) + 24); // Match the padding with initialization
+            
+            // Arrange nodes in an initial circular layout
+            this.initializeCircularPositions();
             
             // Restart simulation with higher alpha for better initial layout
             this.simulation.alpha(1).restart();
             
             // Force immediate update for initial rendering
-            for (let i = 0; i < 20; ++i) this.simulation.tick();
+            for (let i = 0; i < 30; ++i) this.simulation.tick();
+            
+            // Ensure all nodes are visible in the canvas
+            setTimeout(() => this.ensureNodesAreVisible(), 100);
         } catch (error) {
             console.error('Error loading vault data:', error);
             throw error;
@@ -1463,5 +1818,230 @@ export class GraphView {
     // Check if mouse buttons are pressed (used during mousemove event)
     private isMouseButtonPressed(event: MouseEvent): boolean {
         return event && event.buttons !== 0;
+    }
+
+    // Add method to ensure all nodes are visible within canvas
+    private ensureNodesAreVisible() {
+        if (!this.nodes.length) return;
+        
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight - 32; // Account for title bar
+        
+        // Find the bounds of all nodes
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+        
+        this.nodes.forEach(node => {
+            const x = (node as any).x || 0;
+            const y = (node as any).y || 0;
+            const r = this.getNodeRadius(node);
+            
+            minX = Math.min(minX, x - r);
+            minY = Math.min(minY, y - r);
+            maxX = Math.max(maxX, x + r);
+            maxY = Math.max(maxY, y + r);
+        });
+        
+        // Calculate current graph dimensions
+        const graphWidth = maxX - minX;
+        const graphHeight = maxY - minY;
+        
+        // Calculate center points
+        const graphCenterX = minX + graphWidth / 2;
+        const graphCenterY = minY + graphHeight / 2;
+        const canvasCenterX = width / 2;
+        const canvasCenterY = height / 2;
+        
+        // Calculate scale to fit everything
+        const scaleX = width * 0.9 / graphWidth; // Leave 5% margin on each side
+        const scaleY = height * 0.9 / graphHeight;
+        const scale = Math.min(scaleX, scaleY);
+        
+        // Set initial zoom transform to fit all nodes
+        const initialTransform = d3.zoomIdentity
+            .translate(canvasCenterX, canvasCenterY)
+            .scale(scale > 1 ? 1 : scale) // Don't zoom in, only zoom out if needed
+            .translate(-graphCenterX, -graphCenterY);
+            
+        this.svg.call(this.zoom.transform, initialTransform);
+    }
+
+    // Initialize node positions in a circular layout
+    private initializeCircularPositions() {
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight - 32;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
+        // Sort nodes by degree (highest to lowest)
+        // This places the most connected nodes on the outer rings
+        const sortedNodes = [...this.nodes].sort((a, b) => {
+            const degreeA = a.degree || 0;
+            const degreeB = b.degree || 0;
+            return degreeB - degreeA;
+        });
+        
+        // Calculate radius steps based on node count
+        const numNodes = sortedNodes.length;
+        const minRadius = Math.min(width, height) * 0.15;
+        const maxRadius = Math.min(width, height) * 0.35;
+        
+        // Position nodes along concentric circles
+        sortedNodes.forEach((node, i) => {
+            // Distribute nodes along multiple concentric circles
+            // Nodes with higher connectivity go to outer rings
+            const connectivity = node.degree || 0;
+            
+            // Calculate which ring this node belongs to (based on connectivity)
+            // Generate a radius value that increases with connectivity (with some randomness)
+            let radiusRatio: number;
+            
+            if (connectivity === 0) {
+                // Orphan nodes stay in inner circle
+                radiusRatio = 0.2 + Math.random() * 0.1; // 20-30% radius
+            } else {
+                // Connected nodes get placed between 30% and 90% of max radius
+                // Higher connectivity = larger radius
+                const logBase = Math.log(connectivity + 1) / Math.log(10); // log10 of connectivity
+                radiusRatio = 0.3 + Math.min(logBase * 0.3, 0.6) + Math.random() * 0.1;
+            }
+            
+            const radius = minRadius + (maxRadius - minRadius) * radiusRatio;
+            
+            // Calculate position on circle (distribute nodes evenly around circle)
+            // Use golden ratio to avoid clustering
+            const angle = i * 2.39996; // Close to golden angle in radians
+            
+            // Set initial position
+            (node as any).x = centerX + radius * Math.cos(angle);
+            (node as any).y = centerY + radius * Math.sin(angle);
+        });
+    }
+
+    // Create a force to prevent label overlaps
+    private createLabelAvoidanceForce() {
+        return (alpha: number) => {
+            const k = alpha * 0.2; // Force strength factor
+            
+            // Use quadtree for efficient collision detection
+            const quadtree = d3.quadtree<{x: number, y: number, node: GraphNode, isLabel: boolean, width: number, height: number}>()
+                .x(d => d.x)
+                .y(d => d.y)
+                .addAll(
+                    // First add all nodes
+                    this.nodes.map(node => ({
+                        x: (node as any).x,
+                        y: (node as any).y,
+                        node: node,
+                        isLabel: false,
+                        width: this.getNodeRadius(node) * 2,
+                        height: this.getNodeRadius(node) * 2
+                    }))
+                    // Then add all labels (positioned below their nodes)
+                    .concat(this.nodes.map(node => ({
+                        x: (node as any).x,
+                        y: (node as any).y + this.getNodeRadius(node) + 15,
+                        node: node,
+                        isLabel: true,
+                        width: (node.name?.length || 0) * 6.5,
+                        height: 14
+                    })))
+                );
+            
+            // Process each label to avoid overlaps
+            this.nodes.forEach(node => {
+                if (!node.x || !node.y) return;
+                
+                // Skip nodes that are being dragged
+                if ((node as any).fx !== undefined && (node as any).fy !== undefined) return;
+                
+                // Get the label position (below the node)
+                const labelX = (node as any).x;
+                const labelY = (node as any).y + this.getNodeRadius(node) + 15;
+                const labelWidth = (node.name?.length || 0) * 6.5;
+                const labelHeight = 14;
+                
+                // Keep track of overlaps
+                let overlaps = 0;
+                let totalDisplacementX = 0;
+                let totalDisplacementY = 0;
+                
+                // Use the quadtree to efficiently find nearby entities
+                quadtree.visit((quad, x1, y1, x2, y2) => {
+                    if (!('data' in quad)) return true;
+                    
+                    const d = quad.data;
+                    if (!d || d.node === node) return true; // Skip self
+                    
+                    // Calculate distance between centers
+                    const dx = labelX - d.x;
+                    const dy = labelY - d.y;
+                    
+                    // For distance check, nodes are circular but labels are rectangular
+                    let collision = false;
+                    
+                    if (d.isLabel) {
+                        // Label-label collision (rectangle-rectangle)
+                        const halfWidthA = labelWidth / 2;
+                        const halfHeightA = labelHeight / 2;
+                        const halfWidthB = d.width / 2;
+                        const halfHeightB = d.height / 2;
+                        
+                        // Check for overlap
+                        const overlapX = Math.abs(dx) < (halfWidthA + halfWidthB);
+                        const overlapY = Math.abs(dy) < (halfHeightA + halfHeightB);
+                        
+                        collision = overlapX && overlapY;
+                    } else {
+                        // Label-node collision (rectangle-circle)
+                        // Convert circle (node) to a square for simpler collision check
+                        const nodeRadius = d.width / 2;
+                        const halfLabelWidth = labelWidth / 2;
+                        const halfLabelHeight = labelHeight / 2;
+                        
+                        // Check if the rectangle (label) overlaps with the circle (node)
+                        // Simplify by checking if the rectangle overlaps with the square that bounds the circle
+                        const overlapX = Math.abs(dx) < (halfLabelWidth + nodeRadius);
+                        const overlapY = Math.abs(dy) < (halfLabelHeight + nodeRadius);
+                        
+                        collision = overlapX && overlapY;
+                    }
+                    
+                    if (collision) {
+                        overlaps++;
+                        
+                        // Calculate displacement vector
+                        const distance = Math.sqrt(dx * dx + dy * dy) || 0.1;
+                        const padding = d.isLabel ? 5 : 0; // Extra padding for label-label collisions
+                        
+                        // Strength is stronger for node-label collisions than label-label
+                        const strength = d.isLabel ? 0.5 : 1.5;
+                        
+                        // Normalized displacement
+                        const displacementX = (dx / distance) * strength;
+                        const displacementY = (dy / distance) * strength;
+                        
+                        totalDisplacementX += displacementX;
+                        totalDisplacementY += displacementY;
+                    }
+                    
+                    return true;
+                });
+                
+                // If we have overlaps, adjust the node position to resolve them
+                if (overlaps > 0) {
+                    // Apply average displacement to the node
+                    const avgDisplacementX = totalDisplacementX / overlaps;
+                    const avgDisplacementY = totalDisplacementY / overlaps;
+                    
+                    // Stronger force for highly connected nodes
+                    const connectivityFactor = 1 + Math.min((node.degree || 0) / 10, 1);
+                    
+                    // Apply displacement force to the node
+                    (node as any).vx += avgDisplacementX * k * connectivityFactor;
+                    (node as any).vy += avgDisplacementY * k * connectivityFactor;
+                }
+            });
+        };
     }
 }
