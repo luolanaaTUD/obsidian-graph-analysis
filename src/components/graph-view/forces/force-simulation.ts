@@ -10,6 +10,7 @@ export class ForceSimulation {
     private width: number;
     private height: number;
     private updateCallback: () => void;
+    private _tickUpdateScheduled: boolean = false;
 
     constructor(
         width: number, 
@@ -45,12 +46,26 @@ export class ForceSimulation {
             .alpha(1.0)
             .alphaDecay(0.01) // Slower decay for better settling
             .on('tick', () => {
-                // Request animation frame to sync with browser refresh rate
-                // This helps reduce flickering in the UI
-                requestAnimationFrame(() => {
-                    this.updateCallback();
-                });
+                // Use a debounced update during low-alpha periods
+                if (this.simulation.alpha() < 0.1) {
+                    // For settled simulation, we can throttle updates
+                    if (!this._tickUpdateScheduled) {
+                        this._tickUpdateScheduled = true;
+                        requestAnimationFrame(() => {
+                            this.updateCallback();
+                            this._tickUpdateScheduled = false;
+                        });
+                    }
+                } else {
+                    // For active simulation, request animation frame for smoother updates
+                    requestAnimationFrame(() => {
+                        this.updateCallback();
+                    });
+                }
             });
+            
+        // Flag to prevent too many tick updates
+        this._tickUpdateScheduled = false;
     }
 
     public getSimulation(): d3.Simulation<GraphNode, GraphLink> {

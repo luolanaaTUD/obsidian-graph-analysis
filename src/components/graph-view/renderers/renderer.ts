@@ -394,22 +394,24 @@ export class Renderer {
         // Only update positions during drag without changing styles
         // This prevents constant style updates that can cause flickering
         
-        // Update links positions
-        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
-            .attr('x1', d => (d.source as unknown as GraphNode).x || 0)
-            .attr('y1', d => (d.source as unknown as GraphNode).y || 0)
-            .attr('x2', d => (d.target as unknown as GraphNode).x || 0)
-            .attr('y2', d => (d.target as unknown as GraphNode).y || 0);
-            
-        // Update node positions only
-        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-            .attr('cx', d => (d as any).x)
-            .attr('cy', d => (d as any).y);
-            
-        // Update label positions only
-        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
-            .attr('x', d => (d as any).x)
-            .attr('y', d => (d as any).y);
+        // Use more efficient selectors during drag - select all at once and minimize DOM operations
+        const nodes = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node');
+        const links = this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link');
+        const labels = this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
+        
+        // Batch update link positions
+        links.attr('x1', d => (d.source as unknown as GraphNode).x || 0)
+             .attr('y1', d => (d.source as unknown as GraphNode).y || 0)
+             .attr('x2', d => (d.target as unknown as GraphNode).x || 0)
+             .attr('y2', d => (d.target as unknown as GraphNode).y || 0);
+        
+        // Batch update node positions
+        nodes.attr('cx', d => (d as any).x)
+             .attr('cy', d => (d as any).y);
+        
+        // Batch update label positions without changing any visibility properties
+        labels.attr('x', d => (d as any).x)
+              .attr('y', d => (d as any).y);
     }
 
     public resetGraphStyles() {

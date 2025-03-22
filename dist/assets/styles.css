@@ -251,9 +251,17 @@
 }
 
 .graph-label {
-    transition: font-weight 200ms ease-out, opacity 200ms ease-out, font-size 200ms ease-out;
+    /* Reduce the number of properties that transition for better performance */
+    transition: opacity 200ms ease-out;
     pointer-events: none;
-    will-change: font-weight, opacity, font-size;
+    /* Limit will-change to only opacity for better performance */
+    will-change: opacity;
+    /* Add transform translate3d to force hardware acceleration and reduce flickering */
+    transform: translate3d(0, 0, 0);
+    /* Prevent text layout shifts */
+    paint-order: stroke;
+    /* Set a fixed opacity during drag to avoid flickering */
+    backface-visibility: hidden;
 }
 
 .graph-node:hover {
@@ -267,6 +275,16 @@
 .dragging .graph-label {
     transition: none !important;
     animation: none !important;
+}
+
+/* More aggressive performance optimization during drag */
+.dragging .graph-label {
+    /* Faster hardware acceleration properties */
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
+    /* Prevent repaints */
+    contain: layout style paint;
 }
 
 /* Preserve styles during drag */

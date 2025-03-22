@@ -9,6 +9,8 @@ export class DragBehavior {
     private draggedNode: GraphNode | null = null;
     private onDragStartCallback?: (node: GraphNode) => void;
     private onDragEndCallback?: (node: GraphNode) => void;
+    private lastDragUpdate: number = 0;
+    private throttleDelay: number = 20; // Minimum ms between updates during drag
 
     constructor(
         simulation: d3.Simulation<GraphNode, any>, 
@@ -50,11 +52,18 @@ export class DragBehavior {
     }
 
     private onDragging(event: d3.D3DragEvent<SVGCircleElement, GraphNode, any>, d: GraphNode) {
+        // Set position immediately
         (d as any).fx = event.x;
         (d as any).fy = event.y;
         
-        // Update renderer if needed
-        this.renderer.updateDuringDrag(this.draggedNode);
+        // Throttle rendering updates based on time elapsed
+        const now = Date.now();
+        if (now - this.lastDragUpdate >= this.throttleDelay) {
+            this.lastDragUpdate = now;
+            
+            // Update renderer
+            this.renderer.updateDuringDrag(this.draggedNode);
+        }
     }
 
     private onDragEnd(event: d3.D3DragEvent<SVGCircleElement, GraphNode, any>, d: GraphNode) {
