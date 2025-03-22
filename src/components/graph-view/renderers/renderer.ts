@@ -150,22 +150,28 @@ export class Renderer {
         const primaryNodeHighlightColor = 'var(--text-accent)';
         const defaultLinkColor = 'var(--graph-line)';
         
+        // Get all selections upfront to minimize DOM operations
+        const allNodes = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node');
+        const allLinks = this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link');
+        const allLabels = this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
+        
         // Reset all nodes to default state first if we're canceling a highlight
         if (!highlight) {
-            this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            // Apply batch updates for better performance
+            allNodes
                 .style('fill', primaryNodeColor)
                 .style('opacity', 1.0)
                 .style('r', d => this.nodeStyler.getNodeRadius(d))
                 .style('filter', null);
                 
             // Reset all links
-            this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+            allLinks
                 .style('stroke', defaultLinkColor)
                 .style('stroke-opacity', 0.9)
                 .style('stroke-width', 2);
                 
             // Reset all labels
-            this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            allLabels
                 .style('font-weight', 'normal')
                 .style('opacity', 0.8)
                 .style('font-size', '12px');
@@ -175,67 +181,74 @@ export class Renderer {
         
         // If highlighting, apply styles immediately without transitions during drag
         
-        // 1. Highlight the selected node and its label
-        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-            .filter(d => d.id === nodeId)
+        // Pre-compute node groups for more efficient updates
+        const selectedNode = allNodes.filter(d => d.id === nodeId);
+        const connectedNodes = allNodes.filter(d => d.id !== nodeId && connectedNodeIds.has(d.id));
+        const nonConnectedNodes = allNodes.filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id));
+        
+        // Pre-compute link groups
+        const connectedLinks = allLinks.filter(d => {
+            const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
+            const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
+            return sourceId === nodeId || targetId === nodeId;
+        });
+        
+        const nonConnectedLinks = allLinks.filter(d => {
+            const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
+            const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
+            return sourceId !== nodeId && targetId !== nodeId;
+        });
+        
+        // Pre-compute label groups
+        const selectedNodeLabel = allLabels.filter(d => d.id === nodeId);
+        const connectedLabels = allLabels.filter(d => d.id !== nodeId && connectedNodeIds.has(d.id));
+        const nonConnectedLabels = allLabels.filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id));
+        
+        // 1. Highlight the selected node and its label - single batch update
+        selectedNode
             .style('r', d => this.nodeStyler.getNodeRadius(d) * 1.2)
             .style('fill', primaryNodeHighlightColor)
             .style('opacity', 1.0)
             .style('filter', null);
             
-        // Highlight the active node's label
-        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
-            .filter(d => d.id === nodeId)
+        // Highlight the active node's label - single batch update
+        selectedNodeLabel
             .style('font-weight', 'bold')
             .style('opacity', 1.0)
             .style('font-size', '13px');
             
-        // 2. Highlight connected nodes
-        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-            .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
+        // 2. Highlight connected nodes - single batch update
+        connectedNodes
             .style('fill', primaryNodeColor)
             .style('opacity', 1.0)
             .style('filter', null);
             
-        // 3. Fade non-connected nodes
-        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-            .filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id))
+        // 3. Fade non-connected nodes - single batch update
+        nonConnectedNodes
             .style('fill', primaryNodeColor)
             .style('opacity', 0.3)
             .style('filter', null);
             
-        // 4. Highlight connected links
-        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
-            .filter(d => {
-                const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
-                const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
-                return sourceId === nodeId || targetId === nodeId;
-            })
+        // 4. Highlight connected links - single batch update
+        connectedLinks
             .style('stroke', primaryNodeHighlightColor)
             .style('stroke-opacity', 1)
             .style('stroke-width', 3);
             
-        // 5. Fade non-connected links
-        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
-            .filter(d => {
-                const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
-                const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
-                return sourceId !== nodeId && targetId !== nodeId;
-            })
+        // 5. Fade non-connected links - single batch update
+        nonConnectedLinks
             .style('stroke', defaultLinkColor)
             .style('stroke-opacity', 0.3)
             .style('stroke-width', 1);
             
-        // 6. Style connected node labels
-        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
-            .filter(d => d.id !== nodeId && connectedNodeIds.has(d.id))
+        // 6. Style connected node labels - single batch update
+        connectedLabels
             .style('font-weight', 'normal')
             .style('opacity', 0.8)
             .style('font-size', '12px');
             
-        // 7. Fade non-connected node labels
-        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
-            .filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id))
+        // 7. Fade non-connected node labels - single batch update
+        nonConnectedLabels
             .style('opacity', 0.3);
     }
 

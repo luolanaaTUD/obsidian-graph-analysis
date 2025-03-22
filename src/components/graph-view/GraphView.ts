@@ -205,8 +205,12 @@ export class GraphView {
     
     // New method to setup node event handlers
     private setupNodeEventHandlers() {
+        // Cache the drag behavior setup to avoid recreating it on each update
+        const dragBehavior = this.dragBehavior.setupDrag();
+        
+        // Apply event handlers in a more efficient way
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-            .call(this.dragBehavior.setupDrag())
+            .call(dragBehavior)
             .on('dblclick', (event, d) => this.nodeInteractions.openNoteAndCloseGraph(d))
             .on('mouseover', (event, d) => this.nodeInteractions.onNodeMouseOver(event, d))
             .on('mouseout', (event, d) => this.nodeInteractions.onNodeMouseOut(d));
