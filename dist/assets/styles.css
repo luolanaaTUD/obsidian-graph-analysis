@@ -341,6 +341,29 @@
     -webkit-backface-visibility: hidden;
 }
 
+/* Optimizations for when zooming */
+.zooming {
+    /* Apply similar optimizations as during drag */
+    contain: layout style paint;
+}
+
+/* Disable transitions during zoom to prevent flickering */
+.zooming .graph-node,
+.zooming .graph-link,
+.zooming .graph-label {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Optimize text rendering during zoom */
+.zooming .graph-label {
+    /* Apply hardware acceleration */
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
+    will-change: transform;
+}
+
 /* Flash animation for when trying to open a duplicate canvas */
 .graph-analysis-canvas-flash {
     animation: flash-canvas 1s ease;

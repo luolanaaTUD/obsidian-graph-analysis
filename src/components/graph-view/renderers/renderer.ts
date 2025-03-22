@@ -12,6 +12,10 @@ export class Renderer {
     private nodeStyler: NodeStyler;
     private isDragging: boolean = false;
     
+    // Track the last calculateLabelPositions time to prevent too frequent recalculations
+    private lastLabelCalculation: number = 0;
+    private cachedLabelPositions: { id: string, shift: number, opacity: number }[] = [];
+    
     constructor(svgGroup: d3.Selection<SVGGElement, unknown, null, undefined>, nodeStyler: NodeStyler) {
         this.svgGroup = svgGroup;
         this.nodeStyler = nodeStyler;
@@ -239,6 +243,14 @@ export class Renderer {
     private calculateLabelPositions(): { id: string, shift: number, opacity: number }[] {
         if (!this.nodes.length) return [];
         
+        // Only recalculate positions every 200ms to improve performance
+        const now = Date.now();
+        if (now - this.lastLabelCalculation < 200 && this.cachedLabelPositions.length > 0) {
+            return this.cachedLabelPositions;
+        }
+        
+        this.lastLabelCalculation = now;
+        
         // Create an array to store position info for each label
         const labelPositions: { id: string, shift: number, opacity: number }[] = this.nodes.map(node => ({
             id: node.id,
@@ -246,14 +258,40 @@ export class Renderer {
             opacity: 0.8 // Default opacity
         }));
         
+        // Only process nodes that are visible on screen for performance
+        const processedNodes = this.nodes.filter(node => {
+            // Skip nodes without positions
+            if (node.x === undefined || node.y === undefined) return false;
+            
+            // Process important nodes regardless of position
+            if (node.degree && node.degree > 3) return true;
+            
+            // Process all nodes by default - can be optimized later to filter by viewport
+            return true;
+        });
+        
+        // Optimize label calculation by only processing if we have enough nodes
+        if (processedNodes.length <= 1) {
+            this.cachedLabelPositions = labelPositions;
+            return labelPositions;
+        }
+        
+        // Pre-calculate estimated text widths for all nodes in one pass
+        const nodeWidths = new Map<string, number>();
+        processedNodes.forEach(node => {
+            const name = node.name || '';
+            // Estimate text width based on character count and average character width
+            const estWidth = name.length * 6.5;
+            nodeWidths.set(node.id, estWidth);
+        });
+        
         // Build a quadtree for spatial partitioning
         const quad = d3.quadtree<{ id: string, x: number, y: number, width: number, height: number, priority: number }>()
             .x(d => d.x)
             .y(d => d.y)
-            .addAll(this.nodes.map(node => {
-                const name = node.name || '';
-                // Estimate text width based on character count and average character width
-                const estWidth = name.length * 6.5;
+            .addAll(processedNodes.map(node => {
+                // Use pre-calculated width
+                const estWidth = nodeWidths.get(node.id) || 0;
                 // Calculate priority based on node degree (higher degree = higher priority)
                 const priority = node.degree || 0;
                 return {
@@ -266,28 +304,44 @@ export class Renderer {
                 };
             }));
         
-        // Sort nodes by priority (degree) for processing
-        const sortedNodes = [...this.nodes].sort((a, b) => (b.degree || 0) - (a.degree || 0));
+        // Sort nodes by priority (degree) for processing - limit to max 100 nodes for performance
+        const sortedNodes = [...processedNodes]
+            .sort((a, b) => (b.degree || 0) - (a.degree || 0))
+            .slice(0, 100);
         
         // Process nodes in priority order
         sortedNodes.forEach(node => {
             if (!node.x || !node.y) return;
             
+            const nodeRadius = this.nodeStyler.getNodeRadius(node);
+            const labelWidth = nodeWidths.get(node.id) || 0;
+            
             const labelInfo = {
                 id: node.id,
                 x: (node as any).x,
-                y: (node as any).y + this.nodeStyler.getNodeRadius(node) + 15,
-                width: (node.name?.length || 0) * 6.5,
+                y: (node as any).y + nodeRadius + 15,
+                width: labelWidth,
                 height: 15,
                 priority: node.degree || 0
             };
+            
+            // Optimization: Use a search radius based on the label width
+            const searchRadius = Math.max(50, labelWidth / 2 + 15);
             
             // Check for collisions
             const collisions: string[] = [];
             const padding = 5; // Padding between labels
             
-            // Search for nearby labels in the quadtree
+            // Search for nearby labels in the quadtree with optimized radius search
             quad.visit((quadNode, x1, y1, x2, y2) => {
+                // Skip entire quadrants that are too far away
+                const minDistance = Math.sqrt(
+                    Math.pow(Math.max(0, Math.min(Math.abs(labelInfo.x - x1), Math.abs(labelInfo.x - x2))), 2) +
+                    Math.pow(Math.max(0, Math.min(Math.abs(labelInfo.y - y1), Math.abs(labelInfo.y - y2))), 2)
+                );
+                
+                if (minDistance > searchRadius) return true;
+                
                 // For internal nodes without data, we need to continue searching
                 if (!('data' in quadNode)) return true;
                 
@@ -297,9 +351,14 @@ export class Renderer {
                 // Skip self
                 if (q.id === node.id) return false;
                 
-                // Calculate overlap
+                // Calculate overlap with efficient distance check
                 const dx = labelInfo.x - q.x;
                 const dy = labelInfo.y - q.y;
+                
+                // Fast distance check before detailed collision detection
+                const approximateDistance = Math.abs(dx) + Math.abs(dy);
+                if (approximateDistance > searchRadius * 1.5) return false;
+                
                 const halfWidthA = labelInfo.width / 2;
                 const halfWidthB = q.width / 2;
                 const halfHeightA = labelInfo.height / 2;
@@ -354,7 +413,7 @@ export class Renderer {
                         // Try positions below the node with increasing shifts
                         for (let shift = 1; shift <= 2; shift++) {
                             // Calculate new position with shift
-                            const newY = (node as any).y + this.nodeStyler.getNodeRadius(node) + 15 + (shift * 15);
+                            const newY = (node as any).y + nodeRadius + 15 + (shift * 15);
                             
                             // Check if the new position would avoid collisions
                             const wouldCollide = collisions.some(id => {
@@ -385,6 +444,8 @@ export class Renderer {
             }
         });
         
+        // Cache the calculated positions
+        this.cachedLabelPositions = labelPositions;
         return labelPositions;
     }
 
