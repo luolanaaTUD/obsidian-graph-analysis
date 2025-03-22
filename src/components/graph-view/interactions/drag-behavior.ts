@@ -10,7 +10,9 @@ export class DragBehavior {
     private onDragStartCallback?: (node: GraphNode) => void;
     private onDragEndCallback?: (node: GraphNode) => void;
     private lastDragUpdate: number = 0;
-    private throttleDelay: number = 20; // Minimum ms between updates during drag
+    private throttleDelay: number = 16; // Reduced to ~60fps for smoother experience
+    private rafId: number | null = null;
+    private pendingDragUpdate: boolean = false;
 
     constructor(
         simulation: d3.Simulation<GraphNode, any>, 
@@ -45,6 +47,9 @@ export class DragBehavior {
         // Store the dragged node ID
         this.draggedNode = d;
         
+        // Reset the timer to ensure first drag gets rendered immediately
+        this.lastDragUpdate = 0;
+        
         // Call the callback if provided
         if (this.onDragStartCallback) {
             this.onDragStartCallback(d);
@@ -56,13 +61,47 @@ export class DragBehavior {
         (d as any).fx = event.x;
         (d as any).fy = event.y;
         
-        // Throttle rendering updates based on time elapsed
-        const now = Date.now();
-        if (now - this.lastDragUpdate >= this.throttleDelay) {
+        // Advanced adaptive throttling strategy based on device performance
+        const now = performance.now();
+        const elapsed = now - this.lastDragUpdate;
+        
+        // If we're already below our target framerate, increase the throttle delay
+        // to prevent too many stacked frames
+        if (elapsed > 32) { // Less than 30fps
+            // We're already slow, so let's be more conservative with updates
+            if (!this.pendingDragUpdate) {
+                this.requestDragUpdate();
+            }
+        } else if (elapsed >= this.throttleDelay) {
+            // We're within our target framerate, update normally
             this.lastDragUpdate = now;
-            
-            // Update renderer
-            this.renderer.updateDuringDrag(this.draggedNode);
+            this.requestDragUpdate();
+        }
+    }
+    
+    private requestDragUpdate() {
+        // Cancel any existing animation frame
+        this.cancelPendingAnimationFrame();
+        
+        // Mark that we have a pending update
+        this.pendingDragUpdate = true;
+        
+        // Use double requestAnimationFrame for smoother rendering
+        this.rafId = requestAnimationFrame(() => {
+            this.rafId = requestAnimationFrame(() => {
+                // Update renderer
+                this.renderer.updateDuringDrag(this.draggedNode);
+                this.rafId = null;
+                this.pendingDragUpdate = false;
+                this.lastDragUpdate = performance.now();
+            });
+        });
+    }
+    
+    private cancelPendingAnimationFrame() {
+        if (this.rafId !== null) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
         }
     }
 
@@ -73,6 +112,10 @@ export class DragBehavior {
         
         // Reset dragging states
         this.isDragging = false;
+        
+        // Clean up any pending animation frames
+        this.cancelPendingAnimationFrame();
+        this.pendingDragUpdate = false;
         
         // Call the callback if provided
         if (this.onDragEndCallback) {

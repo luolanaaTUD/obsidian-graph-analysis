@@ -16,6 +16,12 @@ export class Renderer {
     private lastLabelCalculation: number = 0;
     private cachedLabelPositions: { id: string, shift: number, opacity: number }[] = [];
     
+    // Animation frame management
+    private animationFrameId: number | null = null;
+    private pendingUpdate: boolean = false;
+    private lastRenderTime: number = 0;
+    private minRenderInterval: number = 16; // ~60fps
+    
     constructor(svgGroup: d3.Selection<SVGGElement, unknown, null, undefined>, nodeStyler: NodeStyler) {
         this.svgGroup = svgGroup;
         this.nodeStyler = nodeStyler;
@@ -36,6 +42,21 @@ export class Renderer {
             return;
         }
         
+        // Cancel any existing animation frame
+        this.cancelPendingAnimationFrame();
+        
+        // Utilize double requestAnimationFrame technique for smoother rendering
+        this.animationFrameId = requestAnimationFrame(() => {
+            // First frame - browser prepares for layout calculations
+            this.animationFrameId = requestAnimationFrame(() => {
+                // Second frame - actual rendering happens here
+                this.performGraphUpdate();
+                this.animationFrameId = null;
+            });
+        });
+    }
+    
+    private performGraphUpdate() {
         // Force an initial position for nodes if not set
         this.nodes.forEach(node => {
             if (node.x === undefined || node.y === undefined) {
@@ -465,6 +486,36 @@ export class Renderer {
     public updateDuringDrag(draggedNode: GraphNode | null) {
         if (!draggedNode) return;
         
+        // Throttle updates based on time since last render
+        const now = performance.now();
+        if (now - this.lastRenderTime < this.minRenderInterval) {
+            // If an update is already scheduled, don't schedule another one
+            if (!this.pendingUpdate) {
+                this.pendingUpdate = true;
+                this.animationFrameId = requestAnimationFrame(() => {
+                    this.animationFrameId = requestAnimationFrame(() => {
+                        this.actuallyUpdateDuringDrag(draggedNode);
+                        this.pendingUpdate = false;
+                        this.animationFrameId = null;
+                        this.lastRenderTime = performance.now();
+                    });
+                });
+            }
+            return;
+        }
+        
+        // If we're not throttling, update immediately
+        this.cancelPendingAnimationFrame();
+        this.animationFrameId = requestAnimationFrame(() => {
+            this.animationFrameId = requestAnimationFrame(() => {
+                this.actuallyUpdateDuringDrag(draggedNode);
+                this.animationFrameId = null;
+                this.lastRenderTime = performance.now();
+            });
+        });
+    }
+    
+    private actuallyUpdateDuringDrag(draggedNode: GraphNode) {
         // Only update positions during drag without changing styles
         // This prevents constant style updates that can cause flickering
         
@@ -487,11 +538,22 @@ export class Renderer {
         labels.attr('x', d => (d as any).x)
               .attr('y', d => (d as any).y);
     }
+    
+    private cancelPendingAnimationFrame() {
+        if (this.animationFrameId !== null) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+            this.pendingUpdate = false;
+        }
+    }
 
     public resetGraphStyles() {
         // Use consistent colors
         const primaryNodeColor = 'var(--interactive-accent)';
         const defaultLinkColor = 'var(--graph-line)';
+        
+        // Cancel any pending frames before starting transitions
+        this.cancelPendingAnimationFrame();
         
         // Reset all nodes to default state
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
@@ -516,5 +578,10 @@ export class Renderer {
             .duration(200)
             .style('font-weight', 'normal')
             .style('opacity', 0.8);
+    }
+    
+    public onunload() {
+        // Clean up any pending animation frames when component is unloaded
+        this.cancelPendingAnimationFrame();
     }
 }
