@@ -251,9 +251,17 @@
 }
 
 .graph-label {
-    transition: font-weight 200ms ease-out, opacity 200ms ease-out, font-size 200ms ease-out;
+    /* Reduce the number of properties that transition for better performance */
+    transition: opacity 200ms ease-out;
     pointer-events: none;
-    will-change: font-weight, opacity, font-size;
+    /* Limit will-change to only opacity for better performance */
+    will-change: opacity;
+    /* Add transform translate3d to force hardware acceleration and reduce flickering */
+    transform: translate3d(0, 0, 0);
+    /* Prevent text layout shifts */
+    paint-order: stroke;
+    /* Set a fixed opacity during drag to avoid flickering */
+    backface-visibility: hidden;
 }
 
 .graph-node:hover {
@@ -267,6 +275,16 @@
 .dragging .graph-label {
     transition: none !important;
     animation: none !important;
+}
+
+/* More aggressive performance optimization during drag */
+.dragging .graph-label {
+    /* Faster hardware acceleration properties */
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
+    /* Prevent repaints */
+    contain: layout style paint;
 }
 
 /* Preserve styles during drag */
@@ -298,6 +316,54 @@
     will-change: transform;
 }
 
+/* Additional optimizations for entire document when dragging */
+.graph-view-dragging {
+    /* Force hardware acceleration */
+    -webkit-transform: translateZ(0);
+    -moz-transform: translateZ(0);
+    -ms-transform: translateZ(0);
+    -o-transform: translateZ(0);
+    transform: translateZ(0);
+    
+    /* Disable pointer events for better performance during dragging */
+    pointer-events: none;
+}
+
+/* Re-enable pointer events for the graph view when dragging */
+.graph-view-dragging .graph-analysis-canvas,
+.graph-view-dragging .graph-node {
+    pointer-events: auto !important;
+}
+
+/* Prevent element flickering during drag */
+.graph-view-dragging * {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* Optimizations for when zooming */
+.zooming {
+    /* Apply similar optimizations as during drag */
+    contain: layout style paint;
+}
+
+/* Disable transitions during zoom to prevent flickering */
+.zooming .graph-node,
+.zooming .graph-link,
+.zooming .graph-label {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Optimize text rendering during zoom */
+.zooming .graph-label {
+    /* Apply hardware acceleration */
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
+    will-change: transform;
+}
+
 /* Flash animation for when trying to open a duplicate canvas */
 .graph-analysis-canvas-flash {
     animation: flash-canvas 1s ease;
@@ -311,4 +377,86 @@
     50% {
         box-shadow: 0 0 0 15px rgba(112, 93, 207, 0.5);
     }
+}
+
+/* Graph node tooltip styles */
+.graph-node-tooltip {
+    position: absolute;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    padding: 10px 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--background-modifier-box-shadow);
+    z-index: 1100; /* Higher than other elements */
+    width: 320px;
+    min-height: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: var(--font-ui-small);
+    border: 1px solid var(--background-modifier-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto !important; /* Ensure tooltip is interactive */
+}
+
+.graph-node-tooltip::-webkit-scrollbar {
+    width: 6px;
+}
+
+.graph-node-tooltip::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.graph-node-tooltip::-webkit-scrollbar-thumb {
+    background-color: var(--background-modifier-border);
+    border-radius: 3px;
+}
+
+.metadata-container {
+    margin-top: 10px;
+}
+
+.metadata-label {
+    font-weight: var(--font-medium);
+    color: var(--text-muted);
+    display: inline-block;
+    min-width: 80px;
+}
+
+.metadata-value {
+    word-break: break-word;
+}
+
+.metadata-field {
+    margin-bottom: 6px;
+}
+
+.note-preview-section {
+    margin-top: 15px;
+    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 8px;
+}
+
+.preview-section-title {
+    font-weight: var(--font-medium);
+    font-size: var(--font-ui-small);
+    margin-bottom: 6px;
+    color: var(--text-accent);
+}
+
+.open-note-button {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-weight: var(--font-medium);
+    font-size: var(--font-ui-small);
+    transition: background-color 0.1s ease;
+    outline: none;
+}
+
+.open-note-button:hover {
+    background-color: var(--interactive-accent-hover);
 } 
