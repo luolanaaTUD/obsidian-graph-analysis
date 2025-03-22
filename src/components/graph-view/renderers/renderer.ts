@@ -109,6 +109,17 @@ export class Renderer {
         // Default zoom level of 1 if we can't get the actual zoom
         const zoomLevel = 1;
         
+        // First, create a map of node opacities to use for labels
+        const nodeOpacityMap = new Map<string, number>();
+        
+        // Store the current opacity of each node
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .each(function(d) {
+                // Get computed opacity of the node
+                const nodeOpacity = parseFloat(window.getComputedStyle(this).opacity);
+                nodeOpacityMap.set(d.id, nodeOpacity);
+            });
+        
         // Update labels positions with improved collision detection
         this.labelsSelection = this.svgGroup.selectAll<SVGTextElement, GraphNode>('text')
             .data(this.nodes, d => d.id)
@@ -130,10 +141,12 @@ export class Renderer {
             .style('opacity', d => {
                 // Find the visibility info for this node
                 const visibility = labelVisibility.find(v => v.id === d.id);
-                if (!visibility) return 0.8; // Default opacity if not found
                 
-                // Apply adaptive opacity based on importance and zoom
-                let opacity = visibility.opacity;
+                // Get node opacity from map (use 1.0 as default if not found)
+                const nodeOpacity = nodeOpacityMap.get(d.id) || 1.0;
+                
+                // Start with calculated label opacity from visibility
+                let opacity = visibility ? visibility.opacity : 0.8;
                 
                 // Enhance opacity for important nodes
                 if (d.degree && d.degree > 5) {
@@ -144,6 +157,9 @@ export class Renderer {
                 if (zoomLevel > 1.5) {
                     opacity = Math.min(1.0, opacity + 0.1);
                 }
+                
+                // Never let label opacity exceed node opacity
+                opacity = Math.min(opacity, nodeOpacity);
                 
                 return opacity;
             })
@@ -225,6 +241,9 @@ export class Renderer {
         const connectedLabels = allLabels.filter(d => d.id !== nodeId && connectedNodeIds.has(d.id));
         const nonConnectedLabels = allLabels.filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id));
         
+        // Constant for non-connected nodes opacity
+        const fadedOpacity = 0.3;
+        
         // 1. Highlight the selected node and its label - single batch update
         selectedNode
             .style('r', d => this.nodeStyler.getNodeRadius(d) * 1.2)
@@ -247,7 +266,7 @@ export class Renderer {
         // 3. Fade non-connected nodes - single batch update
         nonConnectedNodes
             .style('fill', primaryNodeColor)
-            .style('opacity', 0.3)
+            .style('opacity', fadedOpacity)
             .style('filter', null);
             
         // 4. Highlight connected links - single batch update
@@ -259,7 +278,7 @@ export class Renderer {
         // 5. Fade non-connected links - single batch update
         nonConnectedLinks
             .style('stroke', defaultLinkColor)
-            .style('stroke-opacity', 0.3)
+            .style('stroke-opacity', fadedOpacity)
             .style('stroke-width', 1);
             
         // 6. Style connected node labels - single batch update
@@ -270,7 +289,7 @@ export class Renderer {
             
         // 7. Fade non-connected node labels - single batch update
         nonConnectedLabels
-            .style('opacity', 0.3);
+            .style('opacity', fadedOpacity);
     }
 
     // Calculate label positions to minimize collisions
@@ -572,12 +591,33 @@ export class Renderer {
             .style('stroke-opacity', 0.5)
             .style('stroke-width', 2);
             
-        // Reset all labels to default state
-        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+        // Reset all labels to default state - get node-label relationship
+        // Create a new transition to synchronize with node opacity changes
+        const allLabels = this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
+        
+        // Create map for node-label tracking to ensure consistent opacity
+        const labelOpacityMap = new Map<string, number>();
+        
+        // Calculate initial label opacities based on node importance
+        this.nodes.forEach(node => {
+            // Base opacity for most nodes
+            let baseOpacity = 0.8;
+            
+            // Important nodes get slightly higher opacity
+            if (node.degree && node.degree > 5) {
+                baseOpacity = 0.9;
+            }
+            
+            labelOpacityMap.set(node.id, baseOpacity);
+        });
+        
+        // Apply the transitions with calculated opacities
+        allLabels
             .transition()
             .duration(200)
             .style('font-weight', 'normal')
-            .style('opacity', 0.8);
+            .style('opacity', d => labelOpacityMap.get(d.id) || 0.8)
+            .style('font-size', '12px');
     }
     
     public onunload() {
