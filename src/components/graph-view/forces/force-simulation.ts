@@ -13,6 +13,11 @@ export class ForceSimulation {
     private _tickUpdateScheduled: boolean = false;
     private _tickCounter: number = 0;
     private _batchSize: number = 2; // Process every Nth tick
+    
+    // Animation frame management
+    private _animationFrameId: number | null = null;
+    private _lastRenderTime: number = 0;
+    private _minRenderInterval: number = 16; // ~60fps
 
     constructor(
         width: number, 
@@ -83,17 +88,51 @@ export class ForceSimulation {
                         this._tickCounter = 0;
                     }
                     
-                    requestAnimationFrame(() => {
-                        this.updateCallback();
-                        if (isLowActivity) {
-                            this._tickUpdateScheduled = false;
-                        }
-                    });
+                    // Cancel any existing animation frame to prevent multiple updates
+                    this.cancelPendingAnimationFrame();
+                    
+                    // Current time for throttling
+                    const now = performance.now();
+                    
+                    // Only schedule new frame if we're not in rapid succession
+                    if (now - this._lastRenderTime >= this._minRenderInterval) {
+                        // Use double requestAnimationFrame for smoother rendering
+                        this._animationFrameId = requestAnimationFrame(() => {
+                            // First frame - browser prepares layout calculations
+                            this._animationFrameId = requestAnimationFrame(() => {
+                                // Second frame - actual rendering happens here
+                                this.updateCallback();
+                                this._animationFrameId = null;
+                                this._lastRenderTime = performance.now();
+                                
+                                if (isLowActivity) {
+                                    this._tickUpdateScheduled = false;
+                                }
+                            });
+                        });
+                    } else if (isLowActivity) {
+                        // For low activity, always ensure we get an update eventually
+                        this._animationFrameId = requestAnimationFrame(() => {
+                            this._animationFrameId = requestAnimationFrame(() => {
+                                this.updateCallback();
+                                this._animationFrameId = null;
+                                this._lastRenderTime = performance.now();
+                                this._tickUpdateScheduled = false;
+                            });
+                        });
+                    }
                 }
             });
             
         // Flag to prevent too many tick updates
         this._tickUpdateScheduled = false;
+    }
+    
+    private cancelPendingAnimationFrame() {
+        if (this._animationFrameId !== null) {
+            cancelAnimationFrame(this._animationFrameId);
+            this._animationFrameId = null;
+        }
     }
 
     public getSimulation(): d3.Simulation<GraphNode, GraphLink> {
@@ -504,5 +543,8 @@ export class ForceSimulation {
         if (this.simulation) {
             this.simulation.stop();
         }
+        
+        // Clean up any pending animation frames
+        this.cancelPendingAnimationFrame();
     }
 }

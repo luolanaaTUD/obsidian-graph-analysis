@@ -1,0 +1,102 @@
+/* src/styles.css */
+.graph-view-svg {
+  will-change: transform;
+  contain: strict;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.graph-container {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.graph-node {
+  will-change:
+    cx,
+    cy,
+    r,
+    fill,
+    opacity;
+  contain: strict;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  transform-origin: center;
+}
+.graph-link {
+  will-change:
+    x1,
+    y1,
+    x2,
+    y2,
+    stroke,
+    stroke-width;
+  contain: paint;
+  transform: translateZ(0);
+}
+.graph-label {
+  will-change:
+    x,
+    y,
+    opacity;
+  contain: paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.dragging {
+  cursor: grabbing !important;
+  touch-action: none;
+}
+.graph-view-dragging {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: none !important;
+  cursor: grabbing !important;
+}
+.graph-view-dragging .graph-analysis-canvas,
+.graph-view-dragging .graph-container {
+  pointer-events: auto !important;
+  contain: strict !important;
+  will-change: transform !important;
+}
+.dragging .graph-node,
+.dragging .graph-link,
+.dragging .graph-label {
+  transition: none !important;
+  animation: none !important;
+}
+.zooming {
+  cursor: grab;
+  touch-action: none;
+}
+.zooming .graph-node,
+.zooming .graph-link,
+.zooming .graph-label {
+  transition: none !important;
+  animation: none !important;
+  contain: strict;
+}
+.graph-initialized .graph-node,
+.graph-initialized .graph-link,
+.graph-initialized .graph-label {
+  transition:
+    transform 200ms ease-out,
+    opacity 200ms ease-out,
+    fill 200ms ease-out,
+    stroke 200ms ease-out,
+    stroke-width 200ms ease-out;
+}
+@media (min-resolution: 2dppx) {
+  .graph-node,
+  .graph-link,
+  .graph-label {
+    image-rendering: optimizeSpeed;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-node,
+  .graph-link,
+  .graph-label {
+    transition: none !important;
+    animation: none !important;
+  }
+}
