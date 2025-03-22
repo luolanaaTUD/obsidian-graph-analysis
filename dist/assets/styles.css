@@ -298,6 +298,31 @@
     will-change: transform;
 }
 
+/* Additional optimizations for entire document when dragging */
+.graph-view-dragging {
+    /* Force hardware acceleration */
+    -webkit-transform: translateZ(0);
+    -moz-transform: translateZ(0);
+    -ms-transform: translateZ(0);
+    -o-transform: translateZ(0);
+    transform: translateZ(0);
+    
+    /* Disable pointer events for better performance during dragging */
+    pointer-events: none;
+}
+
+/* Re-enable pointer events for the graph view when dragging */
+.graph-view-dragging .graph-analysis-canvas,
+.graph-view-dragging .graph-node {
+    pointer-events: auto !important;
+}
+
+/* Prevent element flickering during drag */
+.graph-view-dragging * {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
 /* Flash animation for when trying to open a duplicate canvas */
 .graph-analysis-canvas-flash {
     animation: flash-canvas 1s ease;

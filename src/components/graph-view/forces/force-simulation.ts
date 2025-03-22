@@ -44,7 +44,13 @@ export class ForceSimulation {
             .velocityDecay(0.35) // Increased decay for more stable positions
             .alpha(1.0)
             .alphaDecay(0.01) // Slower decay for better settling
-            .on('tick', () => this.updateCallback());
+            .on('tick', () => {
+                // Request animation frame to sync with browser refresh rate
+                // This helps reduce flickering in the UI
+                requestAnimationFrame(() => {
+                    this.updateCallback();
+                });
+            });
     }
 
     public getSimulation(): d3.Simulation<GraphNode, GraphLink> {

@@ -196,6 +196,12 @@ export class GraphView {
         // Add dragging class to parent SVG to disable transitions
         this.svg.classed('dragging', true);
         
+        // Apply contain: paint to improve rendering performance
+        this.svgGroup.attr('style', 'contain: strict; will-change: transform;');
+        
+        // Apply hardware acceleration to reduce flickering
+        document.body.classList.add('graph-view-dragging');
+        
         // Highlight connections when dragging starts - without transitions
         this.renderer.highlightConnections(node.id, true, false);
     }
@@ -207,6 +213,10 @@ export class GraphView {
         
         // Remove dragging class to re-enable transitions
         this.svg.classed('dragging', false);
+        
+        // Remove performance optimizations
+        this.svgGroup.attr('style', null);
+        document.body.classList.remove('graph-view-dragging');
         
         // Remove highlighting when dragging ends - with transitions
         this.renderer.highlightConnections(node.id, false, true);

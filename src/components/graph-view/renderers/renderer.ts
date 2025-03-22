@@ -389,9 +389,27 @@ export class Renderer {
     }
 
     public updateDuringDrag(draggedNode: GraphNode | null) {
-        if (draggedNode) {
-            this.highlightConnections(draggedNode.id, true, false);
-        }
+        if (!draggedNode) return;
+        
+        // Only update positions during drag without changing styles
+        // This prevents constant style updates that can cause flickering
+        
+        // Update links positions
+        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+            .attr('x1', d => (d.source as unknown as GraphNode).x || 0)
+            .attr('y1', d => (d.source as unknown as GraphNode).y || 0)
+            .attr('x2', d => (d.target as unknown as GraphNode).x || 0)
+            .attr('y2', d => (d.target as unknown as GraphNode).y || 0);
+            
+        // Update node positions only
+        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .attr('cx', d => (d as any).x)
+            .attr('cy', d => (d as any).y);
+            
+        // Update label positions only
+        this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            .attr('x', d => (d as any).x)
+            .attr('y', d => (d as any).y);
     }
 
     public resetGraphStyles() {
