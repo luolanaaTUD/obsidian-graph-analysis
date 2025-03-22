@@ -108,16 +108,43 @@ export class GraphView {
                 this.renderer.resetGraphStyles();
             });
             
+        // Track zoom state to prevent redundant operations
+        let isZooming = false;
+        let zoomEndTimeout: number | null = null;
+        
         // Add zoom behavior
         this.zoom = d3.zoom<SVGSVGElement, unknown>()
             .scaleExtent([0.1, 4])
             .on('zoom', (event) => {
+                // Update the transform - this is always needed
                 this.svgGroup.attr('transform', event.transform);
+                
                 // Close tooltip on zoom
                 this.nodeInteractions.removeNodeTooltip();
                 
-                // Reset all nodes to default state on zoom
-                this.renderer.resetGraphStyles();
+                // Set zooming state
+                if (!isZooming) {
+                    isZooming = true;
+                    
+                    // Add zooming class to optimize rendering during zoom
+                    this.svg.classed('zooming', true);
+                }
+                
+                // Clear any existing timeout
+                if (zoomEndTimeout !== null) {
+                    window.clearTimeout(zoomEndTimeout);
+                }
+                
+                // Set a timeout to detect when zooming has ended
+                zoomEndTimeout = window.setTimeout(() => {
+                    // Reset all nodes to default state when zoom is complete
+                    this.renderer.resetGraphStyles();
+                    
+                    // Remove zooming class
+                    this.svg.classed('zooming', false);
+                    isZooming = false;
+                    zoomEndTimeout = null;
+                }, 250);
             });
             
         // Add a group for the graph that will be transformed

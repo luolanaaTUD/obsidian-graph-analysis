@@ -11,6 +11,8 @@ export class ForceSimulation {
     private height: number;
     private updateCallback: () => void;
     private _tickUpdateScheduled: boolean = false;
+    private _tickCounter: number = 0;
+    private _batchSize: number = 2; // Process every Nth tick
 
     constructor(
         width: number, 
@@ -46,20 +48,46 @@ export class ForceSimulation {
             .alpha(1.0)
             .alphaDecay(0.01) // Slower decay for better settling
             .on('tick', () => {
-                // Use a debounced update during low-alpha periods
-                if (this.simulation.alpha() < 0.1) {
-                    // For settled simulation, we can throttle updates
+                // Count ticks to batch updates
+                this._tickCounter++;
+                
+                // Determine when to update based on simulation state
+                const alpha = this.simulation.alpha();
+                const isHighActivity = alpha > 0.2;
+                const isMediumActivity = alpha > 0.05 && alpha <= 0.2;
+                const isLowActivity = alpha <= 0.05;
+                
+                let shouldUpdate = false;
+                
+                // Update strategies based on simulation activity level
+                if (isHighActivity) {
+                    // During high activity, update every few ticks
+                    shouldUpdate = this._tickCounter % this._batchSize === 0;
+                } else if (isMediumActivity) {
+                    // During medium activity, throttle more aggressively
+                    shouldUpdate = this._tickCounter % (this._batchSize * 2) === 0;
+                } else if (isLowActivity) {
+                    // During low activity, only update when explicitly needed
                     if (!this._tickUpdateScheduled) {
                         this._tickUpdateScheduled = true;
-                        requestAnimationFrame(() => {
-                            this.updateCallback();
-                            this._tickUpdateScheduled = false;
-                        });
+                        shouldUpdate = true;
+                    } else {
+                        shouldUpdate = false;
                     }
-                } else {
-                    // For active simulation, request animation frame for smoother updates
+                }
+                
+                // When we should update, use requestAnimationFrame for smooth rendering
+                if (shouldUpdate) {
+                    if (isLowActivity) {
+                        // Reset tick counters after batched update
+                        this._tickCounter = 0;
+                    }
+                    
                     requestAnimationFrame(() => {
                         this.updateCallback();
+                        if (isLowActivity) {
+                            this._tickUpdateScheduled = false;
+                        }
                     });
                 }
             });
