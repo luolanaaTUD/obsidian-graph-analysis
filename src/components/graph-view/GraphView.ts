@@ -155,6 +155,12 @@ export class GraphView {
             
         // Add a group for the graph that will be transformed
         this.svgGroup = this.svg.append('g');
+        
+        // Create separate groups for links, labels, and nodes with explicit rendering order
+        // The later a group is added to the DOM, the higher it will be in the stacking order
+        this.svgGroup.append('g').attr('class', 'links-group');
+        this.svgGroup.append('g').attr('class', 'labels-group');
+        this.svgGroup.append('g').attr('class', 'nodes-group');
 
         // Enable zoom and pan
         this.svg.call(this.zoom);

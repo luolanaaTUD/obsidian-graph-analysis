@@ -4,6 +4,9 @@ import { NodeStyler } from './node-styles';
 
 export class Renderer {
     private svgGroup: d3.Selection<SVGGElement, unknown, null, undefined>;
+    private linksGroup: d3.Selection<SVGGElement, unknown, null, undefined>;
+    private labelsGroup: d3.Selection<SVGGElement, unknown, null, undefined>;
+    private nodesGroup: d3.Selection<SVGGElement, unknown, null, undefined>;
     private nodes: GraphNode[] = [];
     private links: GraphLink[] = [];
     private nodesSelection: d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown>;
@@ -25,6 +28,16 @@ export class Renderer {
     constructor(svgGroup: d3.Selection<SVGGElement, unknown, null, undefined>, nodeStyler: NodeStyler) {
         this.svgGroup = svgGroup;
         this.nodeStyler = nodeStyler;
+        
+        // Get references to the specific groups
+        this.linksGroup = svgGroup.select('.links-group');
+        this.labelsGroup = svgGroup.select('.labels-group');
+        this.nodesGroup = svgGroup.select('.nodes-group');
+        
+        // If groups don't exist, fall back to using the main svg group
+        if (this.linksGroup.empty()) this.linksGroup = svgGroup;
+        if (this.labelsGroup.empty()) this.labelsGroup = svgGroup;
+        if (this.nodesGroup.empty()) this.nodesGroup = svgGroup;
     }
 
     public setData(nodes: GraphNode[], links: GraphLink[]) {
@@ -80,7 +93,7 @@ export class Renderer {
         const primaryNodeHighlightColor = 'var(--graph-node-highlight)';
         
         // Update links positions
-        this.linksSelection = this.svgGroup.selectAll<SVGLineElement, GraphLink>('line')
+        this.linksSelection = this.linksGroup.selectAll<SVGLineElement, GraphLink>('line')
             .data(this.links)
             .join(
                 enter => enter.append('line')
@@ -96,21 +109,6 @@ export class Renderer {
             .attr('x2', d => (d.target as unknown as GraphNode).x || 0)
             .attr('y2', d => (d.target as unknown as GraphNode).y || 0);
 
-        // Update nodes positions
-        this.nodesSelection = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('circle')
-            .data(this.nodes, d => d.id)
-            .join(
-                enter => enter.append('circle')
-                    .attr('r', d => this.nodeStyler.getNodeRadius(d))
-                    .attr('fill', primaryNodeColor)
-                    .attr('opacity', 1.0)
-                    .attr('class', 'graph-node'),
-                update => update,
-                exit => exit.remove()
-            )
-            .attr('cx', d => (d as any).x)
-            .attr('cy', d => (d as any).y);
-
         // Calculate label positions to minimize overlap
         const labelVisibility = this.calculateLabelPositions();
         
@@ -118,19 +116,8 @@ export class Renderer {
         // Default zoom level of 1 if we can't get the actual zoom
         const zoomLevel = 1;
         
-        // First, create a map of node opacities to use for labels
-        const nodeOpacityMap = new Map<string, number>();
-        
-        // Store the current opacity of each node
-        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-            .each(function(d) {
-                // Get computed opacity of the node
-                const nodeOpacity = parseFloat(window.getComputedStyle(this).opacity);
-                nodeOpacityMap.set(d.id, nodeOpacity);
-            });
-        
         // Update labels positions with improved collision detection
-        this.labelsSelection = this.svgGroup.selectAll<SVGTextElement, GraphNode>('text')
+        this.labelsSelection = this.labelsGroup.selectAll<SVGTextElement, GraphNode>('text')
             .data(this.nodes, d => d.id)
             .join(
                 enter => enter.append('text')
@@ -151,9 +138,6 @@ export class Renderer {
                 // Find the visibility info for this node
                 const visibility = labelVisibility.find(v => v.id === d.id);
                 
-                // Get node opacity from map (use 1.0 as default if not found)
-                const nodeOpacity = nodeOpacityMap.get(d.id) || 1.0;
-                
                 // Start with calculated label opacity from visibility
                 let opacity = visibility ? visibility.opacity : 0.8;
                 
@@ -167,9 +151,6 @@ export class Renderer {
                     opacity = Math.min(1.0, opacity + 0.1);
                 }
                 
-                // Never let label opacity exceed node opacity
-                opacity = Math.min(opacity, nodeOpacity);
-                
                 return opacity;
             })
             .attr('dy', d => {
@@ -177,6 +158,21 @@ export class Renderer {
                 const visibility = labelVisibility.find(v => v.id === d.id);
                 return this.nodeStyler.getNodeRadius(d) + ((visibility?.shift || 0) * 15) + 15;
             });
+
+        // Update nodes positions - render nodes in a separate group to ensure they're on top
+        this.nodesSelection = this.nodesGroup.selectAll<SVGCircleElement, GraphNode>('circle')
+            .data(this.nodes, d => d.id)
+            .join(
+                enter => enter.append('circle')
+                    .attr('r', d => this.nodeStyler.getNodeRadius(d))
+                    .attr('fill', primaryNodeColor)
+                    .attr('opacity', 1.0)
+                    .attr('class', 'graph-node'),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr('cx', d => (d as any).x)
+            .attr('cy', d => (d as any).y);
     }
 
     public highlightConnections(nodeId: string, highlight: boolean, useTransition: boolean = true) {
@@ -199,9 +195,9 @@ export class Renderer {
         const primaryNodeHighlightColor = 'var(--graph-node-highlight)';
         
         // Get all selections upfront to minimize DOM operations
-        const allNodes = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node');
-        const allLinks = this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link');
-        const allLabels = this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
+        const allNodes = this.nodesGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node');
+        const allLinks = this.linksGroup.selectAll<SVGLineElement, GraphLink>('.graph-link');
+        const allLabels = this.labelsGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
         
         // Reset all nodes to default state first if we're canceling a highlight
         if (!highlight) {
@@ -248,7 +244,7 @@ export class Renderer {
         });
         
         // Pre-compute label groups
-        const selectedNodeLabel = allLabels.filter(d => d.id === nodeId);
+        const selectedLabel = allLabels.filter(d => d.id === nodeId);
         const connectedLabels = allLabels.filter(d => d.id !== nodeId && connectedNodeIds.has(d.id));
         const nonConnectedLabels = allLabels.filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id));
         
@@ -260,7 +256,7 @@ export class Renderer {
             .style('filter', null);
             
         // Highlight the active node's label - single batch update
-        selectedNodeLabel
+        selectedLabel
             .style('font-weight', 'bold')
             .style('opacity', 1.0)
             .style('font-size', '13px');
@@ -511,62 +507,105 @@ export class Renderer {
     }
 
     public updateDuringDrag(draggedNode: GraphNode | null) {
+        // Skip updates if no node is being dragged
         if (!draggedNode) return;
         
-        // Throttle updates based on time since last render
-        const now = performance.now();
-        if (now - this.lastRenderTime < this.minRenderInterval) {
-            // If an update is already scheduled, don't schedule another one
-            if (!this.pendingUpdate) {
+        // Calculate elapsed time since last render
+        const now = Date.now();
+        const elapsed = now - this.lastRenderTime;
+        
+        // Skip updating if it's too soon (frame rate limiting)
+        if (elapsed < this.minRenderInterval) {
+            // Schedule the next update if one isn't already pending
+            if (!this.pendingUpdate && this.animationFrameId === null) {
                 this.pendingUpdate = true;
                 this.animationFrameId = requestAnimationFrame(() => {
-                    this.animationFrameId = requestAnimationFrame(() => {
-                        this.actuallyUpdateDuringDrag(draggedNode);
-                        this.pendingUpdate = false;
-                        this.animationFrameId = null;
-                        this.lastRenderTime = performance.now();
-                    });
+                    this.actuallyUpdateDuringDrag(draggedNode);
+                    this.pendingUpdate = false;
+                    this.animationFrameId = null;
+                    this.lastRenderTime = Date.now();
                 });
             }
             return;
         }
         
-        // If we're not throttling, update immediately
-        this.cancelPendingAnimationFrame();
-        this.animationFrameId = requestAnimationFrame(() => {
-            this.animationFrameId = requestAnimationFrame(() => {
-                this.actuallyUpdateDuringDrag(draggedNode);
-                this.animationFrameId = null;
-                this.lastRenderTime = performance.now();
-            });
-        });
+        // Directly update if enough time has passed
+        this.actuallyUpdateDuringDrag(draggedNode);
+        this.lastRenderTime = now;
     }
     
     private actuallyUpdateDuringDrag(draggedNode: GraphNode) {
-        // Only update positions during drag without changing styles
-        // This prevents constant style updates that can cause flickering
+        // Get related elements for dragged node
+        const sourceLinks = this.links.filter(l => 
+            (typeof l.source === 'string' ? l.source : (l.source as any).id) === draggedNode.id
+        );
+        const targetLinks = this.links.filter(l => 
+            (typeof l.target === 'string' ? l.target : (l.target as any).id) === draggedNode.id
+        );
         
-        // Use more efficient selectors during drag - select all at once and minimize DOM operations
-        const nodes = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node');
-        const links = this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link');
-        const labels = this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
+        // Get safe coordinates with default values if undefined
+        const nodeX = draggedNode.x ?? 0;
+        const nodeY = draggedNode.y ?? 0;
         
-        // Use CSS variables for consistent theming during drag
-        const defaultLinkColor = 'var(--graph-link-default)';
+        // Select DOM elements
+        const node = this.nodesGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .filter(d => d.id === draggedNode.id);
+            
+        const label = this.labelsGroup.selectAll<SVGTextElement, GraphNode>('.graph-label')
+            .filter(d => d.id === draggedNode.id);
+            
+        const links = this.linksGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+            .filter(d => {
+                const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
+                const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
+                return sourceId === draggedNode.id || targetId === draggedNode.id;
+            });
         
-        // Batch update link positions
-        links.attr('x1', d => (d.source as unknown as GraphNode).x || 0)
-             .attr('y1', d => (d.source as unknown as GraphNode).y || 0)
-             .attr('x2', d => (d.target as unknown as GraphNode).x || 0)
-             .attr('y2', d => (d.target as unknown as GraphNode).y || 0);
+        // Update node position with the dragged coordinates
+        node.attr('cx', nodeX)
+            .attr('cy', nodeY);
+            
+        // Update the label position to match
+        label.attr('x', nodeX)
+             .attr('y', nodeY);
         
-        // Batch update node positions
-        nodes.attr('cx', d => (d as any).x)
-             .attr('cy', d => (d as any).y);
-        
-        // Batch update label positions without changing any visibility properties
-        labels.attr('x', d => (d as any).x)
-              .attr('y', d => (d as any).y);
+        // Update affected links
+        links.attr('x1', d => {
+                const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
+                if (sourceId === draggedNode.id) {
+                    return nodeX;
+                } else {
+                    const source = d.source as unknown as GraphNode;
+                    return source.x ?? 0;
+                }
+            })
+            .attr('y1', d => {
+                const sourceId = typeof d.source === 'string' ? d.source : (d.source as any).id;
+                if (sourceId === draggedNode.id) {
+                    return nodeY;
+                } else {
+                    const source = d.source as unknown as GraphNode;
+                    return source.y ?? 0;
+                }
+            })
+            .attr('x2', d => {
+                const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
+                if (targetId === draggedNode.id) {
+                    return nodeX;
+                } else {
+                    const target = d.target as unknown as GraphNode;
+                    return target.x ?? 0;
+                }
+            })
+            .attr('y2', d => {
+                const targetId = typeof d.target === 'string' ? d.target : (d.target as any).id;
+                if (targetId === draggedNode.id) {
+                    return nodeY;
+                } else {
+                    const target = d.target as unknown as GraphNode;
+                    return target.y ?? 0;
+                }
+            });
     }
     
     private cancelPendingAnimationFrame() {
@@ -585,16 +624,16 @@ export class Renderer {
         this.cancelPendingAnimationFrame();
         
         // Reset all nodes to default state
-        this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+        this.nodesGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .transition()
             .duration(200)
-            .attr('fill', 'var(--graph-node-default)')
-            .attr('opacity', 1.0)
-            .attr('r', d => this.nodeStyler.getNodeRadius(d))
+            .style('fill', 'var(--graph-node-default)')
+            .style('opacity', 1.0)
+            .style('r', d => this.nodeStyler.getNodeRadius(d))
             .style('filter', null);
-            
+       
         // Reset all links to default state
-        this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
+        this.linksGroup.selectAll<SVGLineElement, GraphLink>('.graph-link')
             .transition()
             .duration(200)
             .style('stroke', defaultLinkColor)
@@ -603,7 +642,7 @@ export class Renderer {
             
         // Reset all labels to default state - get node-label relationship
         // Create a new transition to synchronize with node opacity changes
-        const allLabels = this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
+        const allLabels = this.labelsGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
         
         // Create map for node-label tracking to ensure consistent opacity
         const labelOpacityMap = new Map<string, number>();
@@ -669,11 +708,10 @@ export class Renderer {
         const hoverNodeColor = 'var(--graph-node-hover)';
         
         // Select the node
-        const node = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+        const node = this.nodesGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .filter(d => d.id === nodeId);
         
         if (isHovering) {
-            // Apply hover styling
             node.style('fill', hoverNodeColor)
                 .style('cursor', 'pointer');
         } else {
