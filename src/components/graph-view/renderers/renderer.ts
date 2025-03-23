@@ -60,10 +60,14 @@ export class Renderer {
         // Force an initial position for nodes if not set
         this.nodes.forEach(node => {
             if (node.x === undefined || node.y === undefined) {
-                const width = 800; // Default width
-                const height = 600; // Default height
-                node.x = width / 2 + (Math.random() - 0.5) * 100;
-                node.y = height / 2 + (Math.random() - 0.5) * 100;
+                // Get the parent SVG dimensions if available
+                const svgElement = this.svgGroup.node()?.parentElement;
+                const width = svgElement ? svgElement.clientWidth : 800;
+                const height = svgElement ? svgElement.clientHeight : 600;
+                
+                // Place nodes in the center with a small random offset to avoid perfect overlap
+                node.x = width / 2 + (Math.random() - 0.5) * 50;
+                node.y = height / 2 + (Math.random() - 0.5) * 50;
             }
         });
         

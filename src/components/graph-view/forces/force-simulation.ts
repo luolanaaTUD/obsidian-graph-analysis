@@ -154,7 +154,7 @@ export class ForceSimulation {
     private createBoundaryForce() {
         const width = this.width;
         const height = this.height;
-        const boundaryRadius = Math.min(width, height) * 0.4; // Boundary for all nodes 
+        const boundaryRadius = Math.min(width, height) * 0.35; // Reduced from 0.4
         const centerX = width / 2;
         const centerY = height / 2;
         
@@ -169,12 +169,12 @@ export class ForceSimulation {
                 
                 if (isOrphan) {
                     // Orphans stay in inner circle
-                    const orphanStrength = 0.15 * alpha;
+                    const orphanStrength = 0.2 * alpha; // Increased from 0.15
                     d.vx -= dx * orphanStrength;
                     d.vy -= dy * orphanStrength;
                     
                     // Keep orphans within their boundary
-                    const orphanBoundary = boundaryRadius * 0.5; // Tighter boundary for orphans
+                    const orphanBoundary = boundaryRadius * 0.4; // Reduced from 0.5
                     if (distance > orphanBoundary) {
                         d.x = centerX + (dx / distance) * orphanBoundary;
                         d.y = centerY + (dy / distance) * orphanBoundary;
@@ -182,7 +182,7 @@ export class ForceSimulation {
                 } else {
                     // Add a gentle pulling force toward center for all nodes
                     // This helps maintain circular shape
-                    const centeringStrength = 0.03 * alpha;
+                    const centeringStrength = 0.05 * alpha; // Increased from 0.03
                     d.vx -= dx * centeringStrength;
                     d.vy -= dy * centeringStrength;
                     
@@ -191,11 +191,11 @@ export class ForceSimulation {
                         // Calculate new position within boundary
                         d.x = centerX + (dx / distance) * boundaryRadius;
                         d.y = centerY + (dy / distance) * boundaryRadius;
-                    } else if (distance > boundaryRadius * 0.85) {
+                    } else if (distance > boundaryRadius * 0.8) { // Reduced from 0.85
                         // Apply a gentle force as nodes approach the boundary
                         const nudge = (boundaryRadius - distance) / boundaryRadius;
-                        d.vx -= dx * nudge * 0.06 * alpha; // Slightly stronger
-                        d.vy -= dy * nudge * 0.06 * alpha;
+                        d.vx -= dx * nudge * 0.08 * alpha; // Increased from 0.06
+                        d.vy -= dy * nudge * 0.08 * alpha;
                     }
                 }
             };
@@ -427,10 +427,9 @@ export class ForceSimulation {
             return degreeB - degreeA;
         });
         
-        // Calculate radius steps based on node count
-        const numNodes = sortedNodes.length;
-        const minRadius = Math.min(width, height) * 0.15;
-        const maxRadius = Math.min(width, height) * 0.35;
+        // Calculate radius steps based on container size
+        const minRadius = Math.min(width, height) * 0.1;  // Reduced from 0.15
+        const maxRadius = Math.min(width, height) * 0.3;  // Reduced from 0.35
         
         // Position nodes along concentric circles
         sortedNodes.forEach((node, i) => {
@@ -444,12 +443,12 @@ export class ForceSimulation {
             
             if (connectivity === 0) {
                 // Orphan nodes stay in inner circle
-                radiusRatio = 0.2 + Math.random() * 0.1; // 20-30% radius
+                radiusRatio = 0.15 + Math.random() * 0.1; // 15-25% radius
             } else {
-                // Connected nodes get placed between 30% and 90% of max radius
+                // Connected nodes get placed between 25% and 85% of max radius
                 // Higher connectivity = larger radius
                 const logBase = Math.log(connectivity + 1) / Math.log(10); // log10 of connectivity
-                radiusRatio = 0.3 + Math.min(logBase * 0.3, 0.6) + Math.random() * 0.1;
+                radiusRatio = 0.25 + Math.min(logBase * 0.3, 0.6) + Math.random() * 0.1;
             }
             
             const radius = minRadius + (maxRadius - minRadius) * radiusRatio;
@@ -506,43 +505,108 @@ export class ForceSimulation {
         const nodes = this.simulation.nodes();
         if (!nodes.length) return;
         
-        // Find the bounds of all nodes
-        let minX = Infinity, minY = Infinity;
-        let maxX = -Infinity, maxY = -Infinity;
-        
-        nodes.forEach(node => {
-            const x = (node as any).x || 0;
-            const y = (node as any).y || 0;
-            const r = this.nodeStyler.getNodeRadius(node);
+        try {
+            // Find the bounds of all nodes
+            let minX = Infinity, minY = Infinity;
+            let maxX = -Infinity, maxY = -Infinity;
             
-            minX = Math.min(minX, x - r);
-            minY = Math.min(minY, y - r);
-            maxX = Math.max(maxX, x + r);
-            maxY = Math.max(maxY, y + r);
-        });
-        
-        // Calculate current graph dimensions
-        const graphWidth = maxX - minX;
-        const graphHeight = maxY - minY;
-        
-        // Calculate center points
-        const graphCenterX = minX + graphWidth / 2;
-        const graphCenterY = minY + graphHeight / 2;
-        const canvasCenterX = this.width / 2;
-        const canvasCenterY = this.height / 2;
-        
-        // Calculate scale to fit everything
-        const scaleX = this.width * 0.9 / graphWidth; // Leave 5% margin on each side
-        const scaleY = this.height * 0.9 / graphHeight;
-        const scale = Math.min(scaleX, scaleY);
-        
-        // Set initial zoom transform to fit all nodes
-        const initialTransform = d3.zoomIdentity
-            .translate(canvasCenterX, canvasCenterY)
-            .scale(scale > 1 ? 1 : scale) // Don't zoom in, only zoom out if needed
-            .translate(-graphCenterX, -graphCenterY);
+            // Track if we have any valid nodes with positions
+            let hasValidNodes = false;
             
-        svg.call(zoom.transform, initialTransform);
+            nodes.forEach(node => {
+                // Skip nodes without valid positions
+                if (node.x === undefined || node.y === undefined) return;
+                
+                hasValidNodes = true;
+                const x = node.x;
+                const y = node.y;
+                const r = this.nodeStyler.getNodeRadius(node);
+                
+                minX = Math.min(minX, x - r);
+                minY = Math.min(minY, y - r);
+                maxX = Math.max(maxX, x + r);
+                maxY = Math.max(maxY, y + r);
+            });
+            
+            // If we don't have any valid nodes, use the default transform
+            if (!hasValidNodes) {
+                const defaultTransform = d3.zoomIdentity
+                    .translate(this.width / 2, this.height / 2)
+                    .scale(0.8);
+                
+                svg.transition()
+                    .duration(300)
+                    .call(zoom.transform, defaultTransform);
+                return;
+            }
+            
+            // Calculate current graph dimensions
+            const graphWidth = maxX - minX;
+            const graphHeight = maxY - minY;
+            
+            // Handle case where graph dimensions are very small or zero
+            if (graphWidth < 1 || graphHeight < 1) {
+                // Apply a default transform that centers at the origin with normal scale
+                const defaultTransform = d3.zoomIdentity
+                    .translate(this.width / 2, this.height / 2)
+                    .scale(0.8);
+                
+                svg.transition()
+                    .duration(300)
+                    .call(zoom.transform, defaultTransform);
+                return;
+            }
+            
+            // Calculate center points
+            const graphCenterX = minX + graphWidth / 2;
+            const graphCenterY = minY + graphHeight / 2;
+            const canvasCenterX = this.width / 2;
+            const canvasCenterY = this.height / 2;
+            
+            // Calculate scale to fit everything with a comfortable margin
+            const margin = 0.15; // 15% margin on each side
+            const scaleX = this.width * (1 - 2 * margin) / graphWidth;
+            const scaleY = this.height * (1 - 2 * margin) / graphHeight;
+            
+            // Use the smallest scale to ensure everything fits
+            let scale = Math.min(scaleX, scaleY);
+            
+            // Ensure scale is reasonable (not too small or large)
+            scale = Math.max(0.3, Math.min(scale, 1.2));
+            
+            // Create transform to center all nodes
+            const transform = d3.zoomIdentity
+                .translate(canvasCenterX, canvasCenterY)
+                .scale(scale)
+                .translate(-graphCenterX, -graphCenterY);
+            
+            // Check if there's already a transform
+            const currentTransform = d3.zoomTransform(svg.node() as Element);
+            const isInitialTransform = !currentTransform || currentTransform.k === 1;
+            
+            // Apply the transform with a smooth transition for initial positioning
+            // but instantly for subsequent adjustments to avoid jerkiness
+            if (isInitialTransform) {
+                svg.transition()
+                    .duration(500) // Smooth animation for initial positioning
+                    .call(zoom.transform, transform);
+            } else {
+                svg.call(zoom.transform, transform);
+            }
+        } catch (error) {
+            console.error('Error ensuring nodes are visible:', error);
+            
+            // Fallback to basic centering if there's an error
+            try {
+                const basicTransform = d3.zoomIdentity
+                    .translate(this.width / 2, this.height / 2)
+                    .scale(0.8);
+                
+                svg.call(zoom.transform, basicTransform);
+            } catch (e) {
+                console.error('Fallback transform failed:', e);
+            }
+        }
     }
     
     /**

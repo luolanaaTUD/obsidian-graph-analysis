@@ -32,6 +32,7 @@ export class GraphView {
     private renderer: Renderer;
     private loadingIndicator: HTMLElement | null = null;
     private resizeObserver: ResizeObserver | null = null;
+    private _resizeTimeout: number | null = null;
 
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
@@ -161,11 +162,82 @@ export class GraphView {
         // Update dimensions based on container size
         this.updateDimensions();
         
+        // Apply an initial transform to center the graph
+        // This will be updated later when nodes are loaded
+        const centerX = this.width / 2;
+        const centerY = this.height / 2;
+        const initialTransform = d3.zoomIdentity
+            .translate(centerX, centerY)
+            .scale(0.8);
+        
+        this.svg.call(this.zoom.transform, initialTransform);
+        
         // Handle resize with ResizeObserver
-        if (typeof ResizeObserver !== 'undefined') {
-            this.resizeObserver = new ResizeObserver(() => {
-                this.updateDimensions();
-            });
+        this.setupResizeObserver();
+    }
+    
+    private setupResizeObserver() {
+        // Clean up any existing observer
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+        }
+        
+        // Create a new ResizeObserver to watch for container size changes
+        this.resizeObserver = new ResizeObserver((entries) => {
+            // Use a debounce mechanism to avoid too many updates
+            if (this._resizeTimeout) {
+                window.clearTimeout(this._resizeTimeout);
+            }
+            
+            this._resizeTimeout = window.setTimeout(() => {
+                // Get the entry for our container
+                const containerEntry = entries.find(entry => entry.target === this.container);
+                if (!containerEntry) return;
+                
+                // Get the new dimensions
+                const newWidth = containerEntry.contentRect.width;
+                const newHeight = containerEntry.contentRect.height;
+                
+                // Only proceed if dimensions have changed significantly (at least 5px difference)
+                if (Math.abs(newWidth - this.width) <= 5 && Math.abs(newHeight - this.height) <= 5) {
+                    this._resizeTimeout = null;
+                    return;
+                }
+                
+                // Update internal dimensions
+                this.width = Math.max(newWidth, 300); // Minimum width of 300px
+                this.height = Math.max(newHeight, 200); // Minimum height of 200px
+                
+                // Update SVG dimensions
+                if (this.svg) {
+                    this.svg
+                        .attr('width', this.width)
+                        .attr('height', this.height)
+                        .style('width', `${this.width}px`)
+                        .style('height', `${this.height}px`);
+                }
+                
+                // Update force simulation with new dimensions
+                if (this.forceSimulation) {
+                    this.forceSimulation.setDimensions(this.width, this.height);
+                }
+                
+                // Call updateGraphTransform directly which will handle the proper positioning
+                this.updateGraphTransform();
+                
+                // Give the transform time to apply, then softly restart the simulation
+                setTimeout(() => {
+                    if (this.forceSimulation) {
+                        this.forceSimulation.restartGently();
+                    }
+                }, 50);
+                
+                this._resizeTimeout = null;
+            }, 100); // 100ms debounce for smoother resizing
+        });
+        
+        // Start observing the container
+        if (this.container) {
             this.resizeObserver.observe(this.container);
         }
     }
@@ -176,48 +248,148 @@ export class GraphView {
             return; // Exit early if container is no longer in DOM
         }
         
-        // Get the current container dimensions
-        const rect = this.container.getBoundingClientRect();
-        this.width = rect.width;
-        this.height = rect.height;
-        
-        // Check if SVG exists before updating it
-        if (this.svg) {
-            // Update SVG dimensions
-            this.svg
-                .attr('width', this.width)
-                .attr('height', this.height);
-        }
+        try {
+            // Get the current container dimensions
+            const rect = this.container.getBoundingClientRect();
             
-        // Update force simulation with new dimensions
-        if (this.forceSimulation) {
-            this.forceSimulation.setDimensions(this.width, this.height);
-        }
+            // Store previous dimensions for comparison
+            const prevWidth = this.width;
+            const prevHeight = this.height;
             
-        // Update the transform
-        this.updateGraphTransform();
+            // Update width and height properties with a minimum size
+            this.width = Math.max(rect.width || 800, 300); // Minimum width of 300px
+            this.height = Math.max(rect.height || 600, 200); // Minimum height of 200px
+            
+            // Only proceed if dimensions have changed significantly (at least 5px difference)
+            const hasChanged = Math.abs(this.width - prevWidth) > 5 || Math.abs(this.height - prevHeight) > 5;
+            if (!hasChanged) {
+                return;
+            }
+            
+            // Check if SVG exists before updating it
+            if (this.svg) {
+                // Update SVG dimensions with precise values
+                this.svg
+                    .attr('width', this.width)
+                    .attr('height', this.height)
+                    .style('width', `${this.width}px`)
+                    .style('height', `${this.height}px`);
+            }
+                
+            // Update force simulation with new dimensions
+            if (this.forceSimulation) {
+                this.forceSimulation.setDimensions(this.width, this.height);
+            }
+                
+            // Update the graph transform to maintain centering
+            this.updateGraphTransform();
+            
+            // Let the simulation adjust to the new dimensions
+            if (this.forceSimulation) {
+                setTimeout(() => {
+                    this.forceSimulation.restartGently();
+                }, 50);
+            }
+        } catch (error) {
+            console.error('Error updating dimensions:', error);
+        }
     }
 
     private updateGraphTransform() {
-        if (!this.svgGroup || !this.container || !this.container.isConnected) return;
+        if (!this.svgGroup || !this.container || !this.container.isConnected || !this.svg || !this.zoom) return;
         
-        const availableWidth = this.width;
-        const availableHeight = this.height;
-        
-        // Center the graph in the available space
-        const centerX = availableWidth / 2;
-        const centerY = availableHeight / 2;
-        
-        // Calculate the scale based on initial dimensions
-        const scaleX = availableWidth / 800; // Use a standard initial width
-        const scaleY = availableHeight / 600; // Use a standard initial height
-        
-        // Use the minimum scale to maintain aspect ratio
-        const scale = Math.min(scaleX, scaleY);
-        
-        // Apply the transform to center the graph
-        this.svgGroup.attr('transform', 
-            `translate(${centerX}, ${centerY}) scale(${scale}) translate(${-400}, ${-300})`);
+        try {
+            // Get current zoom transform (if any)
+            const currentTransform = d3.zoomTransform(this.svg.node() as Element);
+            
+            // Get current container dimensions
+            const availableWidth = this.width;
+            const availableHeight = this.height;
+            
+            // If we have nodes positioned, we want to center based on their actual positions
+            if (this.nodes.length > 0 && this.nodes.some(n => n.x !== undefined && n.y !== undefined)) {
+                // Find the bounds of all nodes
+                let minX = Infinity, minY = Infinity;
+                let maxX = -Infinity, maxY = -Infinity;
+                
+                this.nodes.forEach(node => {
+                    if (node.x === undefined || node.y === undefined) return;
+                    const x = node.x;
+                    const y = node.y;
+                    // Use consistent node radius
+                    const r = this.nodeStyler.getNodeRadius(node);
+                    
+                    minX = Math.min(minX, x - r);
+                    minY = Math.min(minY, y - r);
+                    maxX = Math.max(maxX, x + r);
+                    maxY = Math.max(maxY, y + r);
+                });
+                
+                // Calculate current graph dimensions
+                const graphWidth = maxX - minX;
+                const graphHeight = maxY - minY;
+                
+                // Detect if we have valid graph dimensions
+                if (graphWidth > 1 && graphHeight > 1) {
+                    // Calculate center points
+                    const graphCenterX = minX + graphWidth / 2;
+                    const graphCenterY = minY + graphHeight / 2;
+                    const canvasCenterX = availableWidth / 2;
+                    const canvasCenterY = availableHeight / 2;
+                    
+                    // Calculate scale to fit everything with a comfortable margin
+                    const margin = 0.15; // 15% margin on each side
+                    const scaleX = availableWidth * (1 - 2 * margin) / graphWidth;
+                    const scaleY = availableHeight * (1 - 2 * margin) / graphHeight;
+                    
+                    // Use the smallest scale to ensure everything fits
+                    let scale = Math.min(scaleX, scaleY);
+                    
+                    // Ensure scale is reasonable (not too small or large)
+                    scale = Math.max(0.3, Math.min(scale, 1.2));
+                    
+                    // Create transform to center all nodes
+                    const transform = d3.zoomIdentity
+                        .translate(canvasCenterX, canvasCenterY)
+                        .scale(scale)
+                        .translate(-graphCenterX, -graphCenterY);
+                    
+                    // Apply the transform (with transition if it's initial positioning)
+                    if (currentTransform && currentTransform.k !== 1) {
+                        // If we already had a transform, just apply the new one instantly
+                        this.svg.call(this.zoom.transform, transform);
+                    } else {
+                        // For initial positioning, use a smooth transition
+                        this.svg.transition()
+                            .duration(500)
+                            .call(this.zoom.transform, transform);
+                    }
+                    return;
+                }
+            }
+            
+            // Fallback to basic centering if we don't have positioned nodes
+            // or if the graph dimensions calculation failed
+            const centerX = availableWidth / 2;
+            const centerY = availableHeight / 2;
+            const scale = 0.8;
+            
+            const initialTransform = d3.zoomIdentity
+                .translate(centerX, centerY)
+                .scale(scale);
+            
+            // Apply the transform with a brief transition for smoother appearance
+            this.svg.transition()
+                .duration(300)
+                .call(this.zoom.transform, initialTransform);
+        } catch (error) {
+            console.error('Error updating graph transform:', error);
+            
+            // Ultimate fallback - just try to center things roughly
+            const centerX = this.width / 2;
+            const centerY = this.height / 2;
+            this.svgGroup.attr('transform', `translate(${centerX}, ${centerY}) scale(0.8)`);
+        }
     }
 
     private updateGraph() {
@@ -370,8 +542,22 @@ export class GraphView {
             // Give the nodeInteractions access to the SVG zoom transform
             this.nodeInteractions.setSvgNode(this.svg.node());
             
-            // Ensure all nodes are visible by adjusting the initial zoom
-            setTimeout(() => this.forceSimulation.ensureNodesAreVisible(this.svg, this.zoom), 100);
+            // Mark the graph as initialized for CSS transitions
+            if (this.svg) {
+                this.svg.classed('graph-initialized', true);
+            }
+            
+            // Use the ensureNodesAreVisible method to calculate optimal positioning based on actual node positions
+            if (this.svg && this.zoom && this.forceSimulation) {
+                this.forceSimulation.ensureNodesAreVisible(this.svg, this.zoom);
+            }
+            
+            // Add a short delay to give components time to update
+            setTimeout(() => {
+                if (this.forceSimulation) {
+                    this.forceSimulation.restartGently();
+                }
+            }, 250);
         } catch (error) {
             console.error('Error loading vault data:', error);
             throw error;
@@ -456,9 +642,6 @@ export class GraphView {
             
             // Update graph visuals
             this.updateGraph();
-            
-            // Log the update
-            console.log(`Updated graph: ${this.nodes.length} nodes, ${this.links.length} links`);
         } catch (error) {
             console.error('Error updating graph data:', error);
             new Notice(`Error updating graph: ${(error as Error).message}`);

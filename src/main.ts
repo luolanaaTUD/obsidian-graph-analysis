@@ -289,7 +289,8 @@ export default class GraphAnalysisPlugin extends Plugin {
                 await this.saveData(dataToSave);
                 
                 this.wasmInitialized = true;
-                console.log('Graph Analysis WASM module initialized successfully');
+                // Keep a simpler log message for WASM initialization
+                console.log('Graph Analysis: WASM initialized');
                 
                 // Hide the loading notice
                 if (this.wasmLoadingNotice) {
@@ -359,7 +360,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.fileCreatedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
-                console.log(`File created: ${file.path}`);
                 this.scheduleGraphDataRefresh('File created');
             }
         };
@@ -368,7 +368,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.fileDeletedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md') {
-                console.log(`File deleted: ${file.path}`);
                 this.scheduleGraphDataRefresh('File deleted');
             }
         };
@@ -377,7 +376,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.fileModifiedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
-                console.log(`File modified: ${file.path}`);
                 this.scheduleGraphDataRefresh('File modified');
             }
         };
@@ -386,7 +384,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.metadataChangedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
-                console.log(`Metadata changed: ${file.path}`);
                 this.scheduleGraphDataRefresh('Metadata changed');
             }
         };
@@ -429,8 +426,6 @@ export default class GraphAnalysisPlugin extends Plugin {
             return;
         }
         
-        console.log(`Refreshing graph data. Reason: ${reason}`);
-        
         // Only refresh if the graph view is loaded
         if (this.graphView) {
             try {
@@ -446,8 +441,6 @@ export default class GraphAnalysisPlugin extends Plugin {
                 // Mark as refreshed
                 this.graphDataNeedsRefresh = false;
                 this.lastRefreshTime = Date.now();
-                
-                console.log('Graph data refreshed successfully');
             } catch (error) {
                 console.error('Failed to refresh graph data:', error);
             }

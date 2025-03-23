@@ -15,7 +15,6 @@ export class NodeStyler {
     public updateData(nodes: GraphNode[]): void {
         // Nothing specific needed here since we calculate styles dynamically
         // But this method is needed for the interface
-        console.log(`NodeStyler updated with ${nodes.length} nodes`);
     }
 
     public getNodeRadius(node: GraphNode): number {
