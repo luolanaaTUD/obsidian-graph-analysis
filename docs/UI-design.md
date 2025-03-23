@@ -79,3 +79,27 @@ GOAL
 - Click
 	- single click: display note metadata and basic info at the right top of node.
 	- double click: open note directly and close graph canvas.
+
+
+
+## Optimization
+
+1. Optimized Animation Frame Handling
+Added double requestAnimationFrame technique for smoother rendering
+Implemented proper animation frame cancellation to prevent memory leaks
+Added throttling for drag updates to reduce CPU usage
+2. Reduced Label Calculations During Interaction
+Simplified label processing during high-motion interactions
+Increased throttling time for expensive label calculations when dragging
+3. Browser Rendering Optimizations
+Added CSS performance optimizations with hardware acceleration hints
+Used will-change property to help the browser optimize rendering
+Disabled pointer events and transitions during drag operations
+4. Optimized Force Simulation
+Added adaptive force simulation parameters that change during interaction
+Reduced simulation iterations during interactions with alphaDecay changes
+Added batch processing for smoother frame rates
+5. Improved DOM Updates
+Changed to more selective DOM updates during dragging
+Only update elements that need to change (dragged node and connected links)
+Separated rendering logic into a dedicated method for better performance

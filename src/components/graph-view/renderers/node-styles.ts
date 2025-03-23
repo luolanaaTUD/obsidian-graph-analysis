@@ -8,6 +8,16 @@ export class NodeStyler {
         this.centralityCalculator = centralityCalculator;
     }
 
+    /**
+     * Update node styles when the underlying data changes
+     * @param nodes The updated nodes
+     */
+    public updateData(nodes: GraphNode[]): void {
+        // Nothing specific needed here since we calculate styles dynamically
+        // But this method is needed for the interface
+        console.log(`NodeStyler updated with ${nodes.length} nodes`);
+    }
+
     public getNodeRadius(node: GraphNode): number {
         // Default size if no centrality score is available
         if (node.centralityScore === undefined) {

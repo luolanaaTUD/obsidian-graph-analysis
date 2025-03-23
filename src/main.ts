@@ -1,5 +1,8 @@
 import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal, MarkdownRenderer } from 'obsidian';
-import { GraphView } from './components/GraphView';
+import { GraphView } from './components/graph-view/GraphView';
+
+// Import our styles 
+import './styles.css';
 
 // The WASM module code will be injected at the top of this file during build
 // We need to declare the functions that will be available
@@ -95,30 +98,31 @@ export default class GraphAnalysisPlugin extends Plugin {
     settings: GraphAnalysisSettings;
     wasmInitialized: boolean = false;
     graphView: GraphView | null = null;
+    
+    // Event handlers reference storage
+    private fileCreatedHandler: ((file: TFile) => void) | null = null;
+    private fileDeletedHandler: ((file: TFile) => void) | null = null;
+    private fileModifiedHandler: ((file: TFile) => void) | null = null;
+    private metadataChangedHandler: ((file: TFile) => void) | null = null;
+    
+    // Track if graph data needs to be refreshed due to vault changes
+    private graphDataNeedsRefresh: boolean = false;
+    private refreshDebounceTimeout: NodeJS.Timeout | null = null;
+    private lastRefreshTime: number = 0;
+    private readonly MIN_REFRESH_INTERVAL = 5000; // Minimum ms between refreshes
+    
+    // WASM loading status tracking
+    private wasmLoadingPromise: Promise<void> | null = null;
+    private wasmLoadingNotice: Notice | null = null;
 
     async onload() {
         await this.loadSettings();
 
-        // Initialize WASM module
-        try {
-            const wasmBinaryPath = this.manifest.dir ? 
-                `${this.manifest.dir}/graph_analysis_wasm_bg.wasm` : 
-                'graph_analysis_wasm_bg.wasm';
-            
-            const adapter = this.app.vault.adapter;
-            const wasmAbsPath = adapter.getResourcePath(wasmBinaryPath);
-            
-            // Initialize the WASM module
-            const response = await fetch(wasmAbsPath);
-            const wasmBinary = await response.arrayBuffer();
-            await __wbg_init({ module_or_path: wasmBinary });
-            
-            this.wasmInitialized = true;
-            console.log('Graph Analysis WASM module initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize WASM module:', error);
-            new Notice('Failed to initialize Graph Analysis WASM module: ' + (error as Error).message);
-        }
+        // Initialize WASM module with improved async handling
+        this.initializeWasmModule();
+        
+        // Register event handlers for vault changes
+        this.registerVaultEventListeners();
 
         // Add commands for different centrality algorithms
         this.addCommand({
@@ -156,6 +160,9 @@ export default class GraphAnalysisPlugin extends Plugin {
                     canvas.removeClass('graph-analysis-canvas-flash');
                 }, 1000);
             } else {
+                // Ensure WASM is loaded before creating graph view
+                await this.ensureWasmLoaded();
+                
                 // Create and show new graph view
                 this.graphView = new GraphView(
                     this.app, 
@@ -165,13 +172,262 @@ export default class GraphAnalysisPlugin extends Plugin {
             }
         });
     }
+    
+    /**
+     * Initialize the WASM module with better async handling and error recovery
+     */
+    private initializeWasmModule() {
+        // Only start loading once
+        if (this.wasmLoadingPromise) return;
+        
+        // Create a loading promise to track WASM initialization
+        this.wasmLoadingPromise = (async () => {
+            try {
+                // Show an unobtrusive loading notice
+                this.wasmLoadingNotice = new Notice('Initializing Graph Analysis...', 0);
+                
+                // Get the path to the WASM binary
+                const wasmBinaryPath = this.manifest.dir ? 
+                    `${this.manifest.dir}/graph_analysis_wasm_bg.wasm` : 
+                    'graph_analysis_wasm_bg.wasm';
+                
+                const adapter = this.app.vault.adapter;
+                const wasmAbsPath = adapter.getResourcePath(wasmBinaryPath);
+                
+                // Retrieve last known working WASM binary hash from settings
+                const wasmCache = await this.loadData();
+                const wasmHash = wasmCache?.wasmHash;
+                
+                // Initialize the WASM module with timeout
+                const timeoutPromise = new Promise<ArrayBuffer>((_, reject) => {
+                    setTimeout(() => reject(new Error('WASM loading timed out')), 10000);
+                });
+                
+                // Fetch the WASM binary
+                const fetchPromise = fetch(wasmAbsPath).then(r => r.arrayBuffer());
+                const wasmBinary = await Promise.race([fetchPromise, timeoutPromise]);
+                
+                // Calculate hash of the binary for caching purposes
+                const wasmBinaryHash = await this.calculateBinaryHash(wasmBinary);
+                
+                // Initialize the WASM module
+                await __wbg_init({ module_or_path: wasmBinary });
+                
+                // Store the successful hash for future reference
+                const dataToSave = await this.loadData() || {};
+                dataToSave.wasmHash = wasmBinaryHash;
+                await this.saveData(dataToSave);
+                
+                this.wasmInitialized = true;
+                console.log('Graph Analysis WASM module initialized successfully');
+                
+                // Hide the loading notice
+                if (this.wasmLoadingNotice) {
+                    this.wasmLoadingNotice.hide();
+                    this.wasmLoadingNotice = null;
+                }
+            } catch (error) {
+                console.error('Failed to initialize WASM module:', error);
+                
+                // Hide the loading notice and show an error
+                if (this.wasmLoadingNotice) {
+                    this.wasmLoadingNotice.hide();
+                    this.wasmLoadingNotice = null;
+                }
+                
+                new Notice('Failed to initialize Graph Analysis WASM module: ' + (error as Error).message);
+                this.wasmLoadingPromise = null; // Allow retry
+            }
+        })();
+    }
+    
+    /**
+     * Calculate a simple hash of a binary array buffer
+     * Used for WASM binary caching
+     */
+    private async calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {
+        // Create a simple hash using first/last 1024 bytes
+        // This is just to detect changes, not for security
+        const array = new Uint8Array(buffer);
+        const startBytes = array.slice(0, Math.min(1024, array.length));
+        const endBytes = array.slice(Math.max(0, array.length - 1024));
+        
+        let hash = 0;
+        for (let i = 0; i < startBytes.length; i++) {
+            hash = ((hash << 5) - hash) + startBytes[i];
+            hash |= 0; // Convert to 32bit integer
+        }
+        for (let i = 0; i < endBytes.length; i++) {
+            hash = ((hash << 5) - hash) + endBytes[i];
+            hash |= 0; // Convert to 32bit integer
+        }
+        
+        return hash.toString(16);
+    }
+    
+    /**
+     * Ensure the WASM module is loaded before performing operations that require it
+     * Returns a promise that resolves when WASM is ready
+     */
+    private async ensureWasmLoaded(): Promise<void> {
+        if (this.wasmInitialized) {
+            return Promise.resolve();
+        }
+        
+        // If loading is in progress, wait for it
+        if (this.wasmLoadingPromise) {
+            return this.wasmLoadingPromise;
+        }
+        
+        // If not loading, start loading now
+        this.initializeWasmModule();
+        return this.wasmLoadingPromise!;
+    }
+
+    private registerVaultEventListeners() {
+        // Handler for file creation
+        this.fileCreatedHandler = (file: TFile) => {
+            // Only consider markdown files
+            if (file.extension === 'md' && !this.isFileExcluded(file)) {
+                console.log(`File created: ${file.path}`);
+                this.scheduleGraphDataRefresh('File created');
+            }
+        };
+        
+        // Handler for file deletion
+        this.fileDeletedHandler = (file: TFile) => {
+            // Only consider markdown files
+            if (file.extension === 'md') {
+                console.log(`File deleted: ${file.path}`);
+                this.scheduleGraphDataRefresh('File deleted');
+            }
+        };
+        
+        // Handler for file modification
+        this.fileModifiedHandler = (file: TFile) => {
+            // Only consider markdown files
+            if (file.extension === 'md' && !this.isFileExcluded(file)) {
+                console.log(`File modified: ${file.path}`);
+                this.scheduleGraphDataRefresh('File modified');
+            }
+        };
+        
+        // Handler for metadata changes (this captures link changes)
+        this.metadataChangedHandler = (file: TFile) => {
+            // Only consider markdown files
+            if (file.extension === 'md' && !this.isFileExcluded(file)) {
+                console.log(`Metadata changed: ${file.path}`);
+                this.scheduleGraphDataRefresh('Metadata changed');
+            }
+        };
+        
+        // Register the event listeners
+        this.registerEvent(this.app.vault.on('create', this.fileCreatedHandler));
+        this.registerEvent(this.app.vault.on('delete', this.fileDeletedHandler));
+        this.registerEvent(this.app.vault.on('modify', this.fileModifiedHandler));
+        this.registerEvent(this.app.metadataCache.on('changed', this.metadataChangedHandler));
+    }
+    
+    /**
+     * Schedule a refresh of graph data with debouncing to prevent
+     * excessive refreshes during bulk changes
+     */
+    private scheduleGraphDataRefresh(reason: string) {
+        this.graphDataNeedsRefresh = true;
+        
+        // Clear any existing timeout
+        if (this.refreshDebounceTimeout) {
+            clearTimeout(this.refreshDebounceTimeout);
+        }
+        
+        // Calculate how long to wait before refreshing
+        const now = Date.now();
+        const timeSinceLastRefresh = now - this.lastRefreshTime;
+        const timeToWait = Math.max(0, this.MIN_REFRESH_INTERVAL - timeSinceLastRefresh);
+        
+        // Schedule the refresh
+        this.refreshDebounceTimeout = setTimeout(() => {
+            this.refreshGraphDataIfNeeded(reason);
+        }, timeToWait + 1000); // Add 1 second debounce time
+    }
+    
+    /**
+     * Refresh graph data if it's needed and the graph view is visible
+     */
+    private async refreshGraphDataIfNeeded(reason: string) {
+        if (!this.graphDataNeedsRefresh || !this.graphView) {
+            return;
+        }
+        
+        console.log(`Refreshing graph data. Reason: ${reason}`);
+        
+        // Only refresh if the graph view is loaded
+        if (this.graphView) {
+            try {
+                // Ensure WASM is loaded before proceeding
+                await this.ensureWasmLoaded();
+                
+                // Rebuild the graph data
+                const graphData = await this.buildGraphData();
+                
+                // Update the graph view with new data
+                await this.graphView.updateData(graphData);
+                
+                // Mark as refreshed
+                this.graphDataNeedsRefresh = false;
+                this.lastRefreshTime = Date.now();
+                
+                console.log('Graph data refreshed successfully');
+            } catch (error) {
+                console.error('Failed to refresh graph data:', error);
+            }
+        }
+    }
 
     onunload() {
+        console.log('Unloading Graph Analysis plugin');
+        
+        // Clear any pending refresh
+        if (this.refreshDebounceTimeout) {
+            clearTimeout(this.refreshDebounceTimeout);
+            this.refreshDebounceTimeout = null;
+        }
+        
+        // Hide any loading notices
+        if (this.wasmLoadingNotice) {
+            this.wasmLoadingNotice.hide();
+            this.wasmLoadingNotice = null;
+        }
+        
+        // Release event handlers explicitly (although registerEvent handles this)
+        this.fileCreatedHandler = null;
+        this.fileDeletedHandler = null;
+        this.fileModifiedHandler = null;
+        this.metadataChangedHandler = null;
+        
+        // Nullify WASM loading promise to allow garbage collection
+        this.wasmLoadingPromise = null;
+        
+        // Ensure any open modals are closed
+        const activeLeaves = this.app.workspace.getLeavesOfType('graph-analysis-view');
+        activeLeaves.forEach(leaf => {
+            this.app.workspace.revealLeaf(leaf);
+            leaf.detach();
+        });
+        
+        // Remove any remaining DOM elements
+        const canvasElements = document.querySelectorAll('.graph-analysis-canvas');
+        canvasElements.forEach(element => element.remove());
+        
+        // Remove any added CSS classes from the body
+        document.body.classList.remove('graph-view-dragging');
+        document.body.classList.remove('graph-analysis-active');
+        
+        // Unload graph view if it exists - with proper cleanup
         if (this.graphView) {
             this.graphView.onunload();
             this.graphView = null;
         }
-        console.log('Unloading Graph Analysis plugin');
     }
 
     async loadSettings() {
@@ -183,7 +439,10 @@ export default class GraphAnalysisPlugin extends Plugin {
     }
 
     async analyzeCentrality(algorithm: 'degree' | 'eigenvector' | 'betweenness') {
-        if (!this.wasmInitialized) {
+        // Ensure WASM is loaded first
+        try {
+            await this.ensureWasmLoaded();
+        } catch (error) {
             new Notice('WASM module not initialized. Please try again later.');
             return;
         }

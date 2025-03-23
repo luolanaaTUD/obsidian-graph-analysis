@@ -484,7 +484,16 @@ export class ForceSimulation {
      */
     public setLinks(links: GraphLink[]) {
         const linkForce = this.simulation.force('link') as d3.ForceLink<GraphNode, GraphLink>;
-        linkForce.links(links);
+        if (linkForce) {
+            linkForce.links(links);
+        } else {
+            // Create a new link force if one doesn't exist
+            this.simulation.force('link', d3.forceLink<GraphNode, GraphLink>()
+                .id(d => d.id)
+                .distance(d => this.linkStyler.getLinkDistance(d))
+                .strength(0.5)
+                .links(links));
+        }
     }
 
     /**
@@ -540,11 +549,48 @@ export class ForceSimulation {
      * Cleans up resources used by the simulation
      */
     public onunload() {
+        console.log('Unloading force simulation');
+        
+        // Stop the simulation
         if (this.simulation) {
-            this.simulation.stop();
+            // Set alpha to 0 to stop the simulation
+            this.simulation.alpha(0).stop();
+            
+            // Remove all forces to help garbage collection
+            this.simulation
+                .force('charge', null)
+                .force('center', null)
+                .force('collision', null)
+                .force('link', null)
+                .force('boundary', null)
+                .force('radial', null)
+                .force('circular', null)
+                .force('label', null);
+            
+            // Remove tick event handler
+            this.simulation.on('tick', null);
         }
         
-        // Clean up any pending animation frames
+        // Cancel any pending animation frames
         this.cancelPendingAnimationFrame();
+        
+        // Clean up references to help garbage collection
+        this.nodeStyler = null as any;
+        this.linkStyler = null as any;
+        this.updateCallback = null as any;
+        this.simulation = null as any;
+    }
+
+    /**
+     * Restart the simulation with a gentle approach for smooth transitions
+     * Useful when updating the graph with minor changes
+     */
+    public restartGently() {
+        // Use a lower alpha to make the transition smoother
+        this.simulation.alpha(0.2)
+            .alphaDecay(0.02) // Faster decay for quicker settling
+            .restart();
+        
+        console.log('Force simulation restarted gently');
     }
 }

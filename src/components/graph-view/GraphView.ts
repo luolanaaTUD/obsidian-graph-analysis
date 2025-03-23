@@ -51,15 +51,41 @@ export class GraphView {
         this.canvas = this.canvasManager.createCanvas();
         
         // Initialize D3 visualization
+        this.initializeComponents();
+        
+        // Load real vault data
+        this.loadingIndicator = this.canvasManager.showLoadingIndicator();
+        try {
+            await this.loadVaultData();
+        } catch (error) {
+            console.error('Error loading vault data:', error);
+            new Notice(`Error loading graph data: ${(error as Error).message}`);
+        } finally {
+            this.canvasManager.hideLoadingIndicator(this.loadingIndicator);
+            this.loadingIndicator = null;
+        }
+    }
+
+    private initializeComponents() {
+        // Create components
+        this.canvasManager = new CanvasManager(this.app, this.container);
+        this.nodeInteractions = new NodeInteractions(this.app, this.canvas);
+        
+        // Set up the SVG container
         this.initializeD3();
         
         // Create additional modules now that we have SVG elements
         this.nodeStyler = new NodeStyler(this.centralityCalculator);
         this.linkStyler = new LinkStyler(this.nodeStyler, this.nodes);
+        
+        // Create the renderer
         this.renderer = new Renderer(this.svgGroup, this.nodeStyler);
         
-        // Add node interactions with SVG transform access
-        this.nodeInteractions = new NodeInteractions(this.app, this.canvas);
+        // Connect renderer to node interactions for hover effects
+        this.nodeInteractions.setRenderer(this.renderer);
+        
+        // Set SVG element reference for tooltip positioning
+        this.nodeInteractions.setSvgNode(this.svg.node() || null);
         
         // Initialize force simulation
         this.forceSimulation = new ForceSimulation(
@@ -79,16 +105,7 @@ export class GraphView {
         );
         
         // Load real vault data
-        this.loadingIndicator = this.canvasManager.showLoadingIndicator();
-        try {
-            await this.loadVaultData();
-        } catch (error) {
-            console.error('Error loading vault data:', error);
-            new Notice(`Error loading graph data: ${(error as Error).message}`);
-        } finally {
-            this.canvasManager.hideLoadingIndicator(this.loadingIndicator);
-            this.loadingIndicator = null;
-        }
+        this.loadVaultData();
     }
 
     private initializeD3() {
@@ -100,6 +117,7 @@ export class GraphView {
             .style('position', 'absolute')
             .style('top', 0)
             .style('left', 0)
+            .attr('class', 'graph-view-svg')
             .on('click', () => {
                 // Close tooltip when clicking anywhere on the canvas
                 this.nodeInteractions.removeNodeTooltip();
@@ -317,19 +335,159 @@ export class GraphView {
         }
     }
 
+    /**
+     * Public method to update the graph with new data
+     * This is called when the vault data changes
+     */
+    public async updateData(graphData: any) {
+        // Show loading indicator during update
+        const loadingIndicator = this.canvasManager.showLoadingIndicator();
+        
+        try {
+            // Calculate degree centrality using WASM
+            const centralityResults = this.centralityCalculator.calculate(graphData);
+            
+            // Store original positions of nodes for smooth transitions
+            const oldPositions = new Map<string, {x: number, y: number}>();
+            this.nodes.forEach(node => {
+                oldPositions.set(node.id, {
+                    x: (node as any).x || 0,
+                    y: (node as any).y || 0
+                });
+            });
+            
+            // Clear existing nodes and links
+            this.nodes = [];
+            this.links = [];
+            
+            // Create nodes with centrality scores from WASM
+            graphData.nodes.forEach((nodePath: string, index: number) => {
+                const fileName = nodePath.split('/').pop() || nodePath;
+                const displayName = fileName.replace('.md', '');
+                
+                // Find corresponding centrality result
+                const centralityResult = centralityResults.find(r => r.node_id === index);
+                const centralityScore = centralityResult ? centralityResult.score : 0;
+                
+                // Create the node
+                const node: GraphNode = {
+                    id: index.toString(),
+                    name: displayName,
+                    path: nodePath,
+                    centralityScore: centralityScore,
+                    degree: centralityScore // Ensure we're using the Rust-calculated degree score
+                };
+                
+                // If this node existed before, preserve its position for smooth transition
+                const oldPosition = oldPositions.get(node.id);
+                if (oldPosition) {
+                    (node as any).x = oldPosition.x;
+                    (node as any).y = oldPosition.y;
+                }
+                
+                this.nodes.push(node);
+            });
+            
+            // Create links
+            graphData.edges.forEach(([sourceIdx, targetIdx]: [number, number]) => {
+                this.links.push({
+                    source: sourceIdx.toString(),
+                    target: targetIdx.toString()
+                });
+            });
+            
+            // Apply changes to centrality-based node styling
+            this.nodeStyler.updateData(this.nodes);
+            
+            // Update simulation with nodes and links
+            this.forceSimulation.setNodes(this.nodes);
+            this.forceSimulation.setLinks(this.links);
+            
+            // Only re-initialize positions if there are many new nodes
+            if (oldPositions.size < this.nodes.length * 0.8) {
+                this.forceSimulation.initializePositions();
+            } else {
+                // Just restart the simulation with less energy for smoother transition
+                this.forceSimulation.restartGently();
+            }
+            
+            // Update graph visuals
+            this.updateGraph();
+            
+            // Log the update
+            console.log(`Updated graph: ${this.nodes.length} nodes, ${this.links.length} links`);
+        } catch (error) {
+            console.error('Error updating graph data:', error);
+            new Notice(`Error updating graph: ${(error as Error).message}`);
+        } finally {
+            // Hide loading indicator
+            this.canvasManager.hideLoadingIndicator(loadingIndicator);
+        }
+    }
+
     public getCanvas(): HTMLElement {
         return this.canvas;
     }
 
     public onunload() {
-        // Clean up event listeners
-        if (this.nodeInteractions) {
-            this.nodeInteractions.onunload();
-        }
+        console.log('Unloading Graph View');
         
-        // Stop the simulation
+        // Stop the force simulation first
         if (this.forceSimulation) {
             this.forceSimulation.onunload();
         }
+        
+        // Remove event listeners from nodes
+        if (this.svgGroup) {
+            this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+                .on('dblclick', null)
+                .on('mouseover', null)
+                .on('mouseout', null)
+                .on('click', null);
+        }
+        
+        // Remove tooltip if it exists
+        if (this.nodeInteractions) {
+            this.nodeInteractions.removeNodeTooltip();
+            this.nodeInteractions.dispose();
+        }
+        
+        // Clean up zoom behavior - fix condition check
+        if (this.svg) {
+            this.svg.on('.zoom', null);
+        }
+        
+        // Clean up all D3 selections to prevent memory leaks
+        if (this.svg) {
+            this.svg.selectAll('*').remove();
+            this.svg.remove();
+        }
+        
+        // Clear all cached references to DOM elements
+        if (this.canvas && this.canvas.parentNode) {
+            this.canvas.innerHTML = '';
+            this.canvas.remove();
+        }
+        
+        // Clear loadingIndicator if it exists
+        if (this.loadingIndicator && this.loadingIndicator.parentNode) {
+            this.loadingIndicator.remove();
+            this.loadingIndicator = null;
+        }
+        
+        // Reset data
+        this.nodes = [];
+        this.links = [];
+        
+        // Null out references to help garbage collection
+        this.svg = null as any;
+        this.svgGroup = null as any;
+        this.zoom = null as any;
+        this.canvas = null as any;
+        this.forceSimulation = null as any;
+        this.renderer = null as any;
+        this.dragBehavior = null as any;
+        this.nodeInteractions = null as any;
+        this.canvasManager = null as any;
     }
 }

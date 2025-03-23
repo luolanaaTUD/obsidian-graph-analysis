@@ -78,11 +78,43 @@ ${source}`;
   },
 };
 
+// Plugin to clean up duplicate CSS files
+const cleanupCssFiles = {
+  name: 'cleanup-css-files',
+  setup(build) {
+    build.onEnd(() => {
+      // Remove the duplicate styles.css file if it exists and main.css also exists
+      const stylesPath = path.join(process.cwd(), 'dist', 'styles.css');
+      const mainCssPath = path.join(process.cwd(), 'dist', 'main.css');
+      
+      if (fs.existsSync(stylesPath) && fs.existsSync(mainCssPath)) {
+        try {
+          // Create a symlink instead of having duplicate files
+          fs.unlinkSync(stylesPath);
+          console.log(`Removed duplicate CSS file: ${stylesPath}`);
+          
+          // Create assets directory if it doesn't exist
+          const assetsDir = path.join(process.cwd(), 'dist', 'assets');
+          if (!fs.existsSync(assetsDir)) {
+            fs.mkdirSync(assetsDir, { recursive: true });
+          }
+          
+          // Copy main.css to assets directory for plugin compatibility
+          fs.copyFileSync(mainCssPath, path.join(assetsDir, 'styles.css'));
+          console.log(`Copied ${mainCssPath} to assets/styles.css for plugin compatibility`);
+        } catch (error) {
+          console.error(`Error cleaning up CSS files: ${error.message}`);
+        }
+      }
+    });
+  },
+};
+
 const context = await esbuild.context({
   banner: {
     js: banner,
   },
-  entryPoints: ["src/main.ts"],
+  entryPoints: ["src/main.ts", "src/styles.css"],
   bundle: true,
   external: [
     "obsidian",
@@ -104,8 +136,8 @@ const context = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: "dist/main.js",
-  plugins: [injectWasmCode, copyWasmFiles],
+  outdir: "dist",
+  plugins: [injectWasmCode, copyWasmFiles, cleanupCssFiles],
 });
 
 if (prod) {

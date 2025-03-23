@@ -1,462 +1,257 @@
-/* Graph Analysis Plugin Styles */
-
-/* Results table styling */
-.graph-analysis-results-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 20px 0;
+/* src/styles/theme.css */
+.theme-light,
+.theme-dark {
+  --graph-node-default: var(--interactive-accent);
+  --graph-node-highlight: var(--interactive-accent-hover);
+  --graph-node-faded: var(--text-muted);
+  --graph-node-hover: var(--interactive-accent-hover);
+  --graph-link-default: var(--background-modifier-border);
+  --graph-link-highlight: var(--interactive-accent);
+  --graph-link-faded: var(--background-modifier-border-hover);
+  --graph-label-color: var(--text-normal);
+  --graph-label-highlight: var(--text-accent);
+  --graph-label-faded: var(--text-muted);
+  --graph-background: var(--background-primary);
+  --graph-canvas-border: var(--background-modifier-border);
+  --graph-tooltip-background: var(--background-primary);
+  --graph-tooltip-border: var(--background-modifier-border);
+  --graph-tooltip-shadow: rgba(0, 0, 0, 0.1);
+  --graph-tooltip-text: var(--text-normal);
+  --graph-tooltip-title: var(--text-accent);
+  --graph-handle-background: var(--background-secondary);
+  --graph-handle-text: var(--text-normal);
+  --graph-help-icon-background: var(--background-modifier-border);
+  --graph-help-icon-text: var(--text-muted);
+  --graph-loading-text: var(--text-muted);
+  --graph-loading-background: var(--background-secondary-alt);
 }
-
-.graph-analysis-results-table th,
-.graph-analysis-results-table td {
-    padding: 8px 12px;
-    text-align: left;
-    border-bottom: 1px solid var(--background-modifier-border);
+.theme-dark {
+  --graph-tooltip-shadow: rgba(0, 0, 0, 0.3);
 }
-
-.graph-analysis-results-table th {
-    font-weight: bold;
-    background-color: var(--background-secondary);
-}
-
-.graph-analysis-results-table tr:hover {
-    background-color: var(--background-secondary-alt);
-}
-
-.graph-analysis-results-table a {
-    color: var(--text-accent);
-    text-decoration: none;
-}
-
-.graph-analysis-results-table a:hover {
-    text-decoration: underline;
-}
-
-/* Button container */
-.graph-analysis-button-container {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 20px;
-}
-
-.graph-analysis-button-container button {
-    padding: 8px 16px;
-    background-color: var(--interactive-accent);
-    color: var(--text-on-accent);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.graph-analysis-button-container button:hover {
-    background-color: var(--interactive-accent-hover);
-}
-
-/* Graph Analysis Canvas */
 .graph-analysis-canvas {
-    position: absolute;
-    background: rgba(var(--background-primary-rgb), 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    z-index: 100;
+  background-color: var(--graph-background);
+  border: 1px solid var(--graph-canvas-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 10px var(--graph-tooltip-shadow);
+  overflow: hidden;
+  position: absolute;
+  z-index: 1000;
 }
-
 .graph-analysis-drag-handle {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 32px;
-    background-color: var(--background-secondary);
-    border-bottom: 1px solid var(--background-modifier-border);
-    border-radius: 10px 10px 0 0;
-    cursor: move;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    user-select: none;
-    z-index: 1002;
+  background-color: var(--graph-handle-background);
+  color: var(--graph-handle-text);
+  padding: 6px 12px;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--graph-canvas-border);
+  user-select: none;
 }
-
-.graph-analysis-drag-handle span {
-    color: var(--text-muted);
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.graph-analysis-resize-handle {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 20px;
-    height: 20px;
-    cursor: se-resize;
-    z-index: 1002;
-}
-
-.graph-analysis-resize-handle::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 0;
-    height: 0;
-    border-style: solid;
-    border-width: 0 0 20px 20px;
-    border-color: transparent transparent var(--background-modifier-border) transparent;
-}
-
-/* Add padding to the SVG container to account for the title bar */
-.graph-analysis-canvas svg {
-    padding-top: 32px;
-    background-color: rgba(var(--background-primary-rgb), 0.7);
-}
-
-.graph-analysis-canvas::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: 10px;
-    pointer-events: none;
-    background: linear-gradient(
-        45deg,
-        rgba(255, 255, 255, 0.03) 0%,
-        rgba(255, 255, 255, 0.05) 100%
-    );
-}
-
-/* Add minimal scrollbars if content overflows */
-.graph-analysis-canvas::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-.graph-analysis-canvas::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.graph-analysis-canvas::-webkit-scrollbar-thumb {
-    background: var(--background-modifier-border);
-    border-radius: 3px;
-}
-
-.graph-analysis-canvas::-webkit-scrollbar-thumb:hover {
-    background: var(--background-modifier-border-hover);
-}
-
 .graph-analysis-close-button {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 24px;
-    height: 24px;
-    cursor: pointer;
-    border-radius: 12px;
-    background-color: var(--background-modifier-border);
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
-    z-index: 1003;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+  color: var(--graph-handle-text);
 }
-
 .graph-analysis-close-button:hover {
-    opacity: 1;
-    background-color: var(--background-modifier-border-hover);
+  opacity: 1;
 }
-
-.graph-analysis-close-button::before,
-.graph-analysis-close-button::after {
-    content: '';
-    position: absolute;
-    width: 14px;
-    height: 2px;
-    background-color: var(--text-normal);
-    transform-origin: center;
-}
-
 .graph-analysis-close-button::before {
-    transform: rotate(45deg);
+  content: "\d7";
+  font-size: 20px;
+  line-height: 1;
 }
-
-.graph-analysis-close-button::after {
-    transform: rotate(-45deg);
+.graph-analysis-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 10;
 }
-
-/* Loading indicator */
+.graph-analysis-resize-handle::before {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--graph-canvas-border);
+  border-bottom: 2px solid var(--graph-canvas-border);
+}
+.graph-analysis-help-icon-container {
+  background-color: var(--graph-help-icon-background);
+  color: var(--graph-help-icon-text);
+}
+.graph-node-tooltip {
+  background-color: var(--graph-tooltip-background);
+  border: 1px solid var(--graph-tooltip-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px var(--graph-tooltip-shadow);
+  padding: 12px;
+  position: absolute;
+  z-index: 9999;
+  max-width: 320px;
+  min-width: 200px;
+  pointer-events: auto;
+}
 .graph-analysis-loading {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: var(--background-secondary);
-    padding: 10px 20px;
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    z-index: 1004;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: var(--graph-loading-background);
+  color: var(--graph-loading-text);
+  padding: 8px 16px;
+  border-radius: 4px;
+  z-index: 1000;
+  box-shadow: 0 2px 8px var(--graph-tooltip-shadow);
+  font-size: var(--font-ui-small);
+}
+.open-note-button {
+  background-color: var(--interactive-accent) !important;
+  color: var(--text-on-accent) !important;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-small);
+  transition: background-color 0.1s ease;
+  outline: none;
+}
+.open-note-button:hover {
+  background-color: var(--interactive-accent-hover) !important;
+}
+.graph-analysis-canvas .metadata-label {
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+.graph-analysis-canvas .metadata-section-title {
+  color: var(--text-accent);
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-small);
+}
+.graph-analysis-canvas .metadata-tag {
+  background-color: var(--tag-background);
+  color: var(--tag-color);
+}
+.graph-analysis-canvas .preview-section-title {
+  color: var(--text-accent);
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-small);
+}
+.graph-analysis-canvas .preview-content {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
 }
 
-.graph-analysis-loading::before {
-    content: '';
-    width: 18px;
-    height: 18px;
-    margin-right: 10px;
-    border: 2px solid var(--background-modifier-border);
-    border-top-color: var(--text-accent);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
+/* src/styles.css */
+.graph-view-svg,
+.graph-container {
+  will-change: transform;
+  contain: strict;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-/* Graph visualization styles */
 .graph-node {
-    /* Use transform instead of r for better performance */
-    transform-origin: center;
-    transition: transform 200ms ease-out, opacity 200ms ease-out, fill 200ms ease-out;
-    cursor: pointer;
-    will-change: transform, opacity, fill;
+  will-change:
+    cx,
+    cy,
+    r,
+    fill,
+    opacity;
+  contain: strict;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  transform-origin: center;
 }
-
 .graph-link {
-    transition: stroke 200ms ease-out, stroke-opacity 200ms ease-out, stroke-width 200ms ease-out;
-    /* Base link color - will be overridden by theme-specific styles */
-    stroke: var(--background-modifier-border);
-    will-change: stroke, stroke-opacity, stroke-width;
+  will-change:
+    x1,
+    y1,
+    x2,
+    y2,
+    stroke,
+    stroke-width;
+  contain: paint;
+  transform: translateZ(0);
 }
-
-/* Theme-specific link styles */
-.theme-light .graph-link {
-    stroke: var(--background-modifier-border);
-    stroke-opacity: 0.6;
-}
-
-.theme-dark .graph-link {
-    stroke: var(--text-faint);
-    stroke-opacity: 0.8;
-}
-
 .graph-label {
-    /* Reduce the number of properties that transition for better performance */
-    transition: opacity 200ms ease-out;
-    pointer-events: none;
-    /* Limit will-change to only opacity for better performance */
-    will-change: opacity;
-    /* Add transform translate3d to force hardware acceleration and reduce flickering */
-    transform: translate3d(0, 0, 0);
-    /* Prevent text layout shifts */
-    paint-order: stroke;
-    /* Set a fixed opacity during drag to avoid flickering */
-    backface-visibility: hidden;
+  will-change:
+    x,
+    y,
+    opacity;
+  contain: paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
-
-.graph-node:hover {
-    stroke: var(--text-accent-hover);
-    stroke-width: 2px;
+.dragging {
+  cursor: grabbing !important;
+  touch-action: none;
 }
-
-/* Disable all transitions during drag operations */
+.graph-view-dragging {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: none !important;
+  cursor: grabbing !important;
+}
+.graph-view-dragging .graph-analysis-canvas,
+.graph-view-dragging .graph-container {
+  pointer-events: auto !important;
+  contain: strict !important;
+  will-change: transform !important;
+}
 .dragging .graph-node,
 .dragging .graph-link,
 .dragging .graph-label {
-    transition: none !important;
-    animation: none !important;
+  transition: none !important;
+  animation: none !important;
 }
-
-/* More aggressive performance optimization during drag */
-.dragging .graph-label {
-    /* Faster hardware acceleration properties */
-    transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    -webkit-font-smoothing: subpixel-antialiased;
-    /* Prevent repaints */
-    contain: layout style paint;
-}
-
-/* Preserve styles during drag */
-.dragging .graph-node[fill="var(--text-accent)"],
-.dragging .graph-link[stroke="var(--text-accent)"] {
-    fill: var(--text-accent);
-    stroke: var(--text-accent);
-}
-
-.dragging .graph-node[opacity="0.3"],
-.dragging .graph-link[stroke-opacity="0.3"] {
-    opacity: 0.3;
-    stroke-opacity: 0.3;
-}
-
-/* Preserve label styles during drag */
-.dragging .graph-label[font-weight="bold"] {
-    font-weight: bold;
-    font-size: 13px;
-}
-
-.dragging .graph-label[opacity="0.3"] {
-    opacity: 0.3;
-}
-
-/* Optimize performance during drag */
-.dragging {
-    contain: strict;
-    will-change: transform;
-}
-
-/* Additional optimizations for entire document when dragging */
-.graph-view-dragging {
-    /* Force hardware acceleration */
-    -webkit-transform: translateZ(0);
-    -moz-transform: translateZ(0);
-    -ms-transform: translateZ(0);
-    -o-transform: translateZ(0);
-    transform: translateZ(0);
-    
-    /* Disable pointer events for better performance during dragging */
-    pointer-events: none;
-}
-
-/* Re-enable pointer events for the graph view when dragging */
-.graph-view-dragging .graph-analysis-canvas,
-.graph-view-dragging .graph-node {
-    pointer-events: auto !important;
-}
-
-/* Prevent element flickering during drag */
-.graph-view-dragging * {
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-}
-
-/* Optimizations for when zooming */
 .zooming {
-    /* Apply similar optimizations as during drag */
-    contain: layout style paint;
+  cursor: grab;
+  touch-action: none;
 }
-
-/* Disable transitions during zoom to prevent flickering */
 .zooming .graph-node,
 .zooming .graph-link,
 .zooming .graph-label {
+  transition: none !important;
+  animation: none !important;
+  contain: strict;
+}
+.graph-initialized .graph-node,
+.graph-initialized .graph-link,
+.graph-initialized .graph-label {
+  transition:
+    transform 200ms ease-out,
+    opacity 200ms ease-out,
+    fill 200ms ease-out,
+    stroke 200ms ease-out,
+    stroke-width 200ms ease-out;
+}
+@media (min-resolution: 2dppx) {
+  .graph-node,
+  .graph-link,
+  .graph-label {
+    image-rendering: optimizeSpeed;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-node,
+  .graph-link,
+  .graph-label {
     transition: none !important;
     animation: none !important;
+  }
 }
-
-/* Optimize text rendering during zoom */
-.zooming .graph-label {
-    /* Apply hardware acceleration */
-    transform: translate3d(0, 0, 0);
-    backface-visibility: hidden;
-    -webkit-font-smoothing: subpixel-antialiased;
-    will-change: transform;
-}
-
-/* Flash animation for when trying to open a duplicate canvas */
-.graph-analysis-canvas-flash {
-    animation: flash-canvas 1s ease;
-    z-index: 1000 !important;
-}
-
-@keyframes flash-canvas {
-    0%, 100% {
-        box-shadow: 0 0 0 0 rgba(112, 93, 207, 0);
-    }
-    50% {
-        box-shadow: 0 0 0 15px rgba(112, 93, 207, 0.5);
-    }
-}
-
-/* Graph node tooltip styles */
-.graph-node-tooltip {
-    position: absolute;
-    background-color: var(--background-primary);
-    color: var(--text-normal);
-    padding: 10px 12px;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px var(--background-modifier-box-shadow);
-    z-index: 1100; /* Higher than other elements */
-    width: 320px;
-    min-height: 200px;
-    max-height: 400px;
-    overflow-y: auto;
-    font-size: var(--font-ui-small);
-    border: 1px solid var(--background-modifier-border);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    pointer-events: auto !important; /* Ensure tooltip is interactive */
-}
-
-.graph-node-tooltip::-webkit-scrollbar {
-    width: 6px;
-}
-
-.graph-node-tooltip::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.graph-node-tooltip::-webkit-scrollbar-thumb {
-    background-color: var(--background-modifier-border);
-    border-radius: 3px;
-}
-
-.metadata-container {
-    margin-top: 10px;
-}
-
-.metadata-label {
-    font-weight: var(--font-medium);
-    color: var(--text-muted);
-    display: inline-block;
-    min-width: 80px;
-}
-
-.metadata-value {
-    word-break: break-word;
-}
-
-.metadata-field {
-    margin-bottom: 6px;
-}
-
-.note-preview-section {
-    margin-top: 15px;
-    border-top: 1px solid var(--background-modifier-border);
-    padding-top: 8px;
-}
-
-.preview-section-title {
-    font-weight: var(--font-medium);
-    font-size: var(--font-ui-small);
-    margin-bottom: 6px;
-    color: var(--text-accent);
-}
-
-.open-note-button {
-    background-color: var(--interactive-accent);
-    color: var(--text-on-accent);
-    border: none;
-    border-radius: 4px;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-weight: var(--font-medium);
-    font-size: var(--font-ui-small);
-    transition: background-color 0.1s ease;
-    outline: none;
-}
-
-.open-note-button:hover {
-    background-color: var(--interactive-accent-hover);
-} 

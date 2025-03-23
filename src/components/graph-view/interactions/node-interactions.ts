@@ -1,6 +1,7 @@
 import { App, TFile, Notice } from 'obsidian';
 import { GraphNode } from '../types';
 import * as d3 from 'd3';
+import { Renderer } from '../renderers/renderer';
 
 export class NodeInteractions {
     private app: App;
@@ -17,10 +18,15 @@ export class NodeInteractions {
     private openNoteButtonClickHandler: ((e: MouseEvent) => void) | null = null;
     private isDragging: boolean = false;
     private svgElement: SVGSVGElement | null = null;
+    private renderer: Renderer | null = null;
 
     constructor(app: App, canvas: HTMLElement) {
         this.app = app;
         this.canvas = canvas;
+    }
+
+    public setRenderer(renderer: Renderer) {
+        this.renderer = renderer;
     }
 
     /**
@@ -48,6 +54,11 @@ export class NodeInteractions {
 
         this.hoverNode = node;
 
+        // Apply immediate hover styling
+        if (this.renderer) {
+            this.renderer.highlightHoverNode(node.id, true);
+        }
+
         // Clear any existing timeout
         if (this.hoverTimeout !== null) {
             window.clearTimeout(this.hoverTimeout);
@@ -66,6 +77,11 @@ export class NodeInteractions {
         // Clear the hover node
         this.hoverNode = null;
         
+        // Remove hover styling
+        if (this.renderer) {
+            this.renderer.highlightHoverNode(node.id, false);
+        }
+        
         // Clear the hover timeout if it exists
         if (this.hoverTimeout !== null) {
             window.clearTimeout(this.hoverTimeout);
@@ -78,7 +94,7 @@ export class NodeInteractions {
             if (!this.hoverNode) {
                 this.removeNodeTooltip();
             }
-        }, 100);
+        }, 300); // 0.3 second delay
     }
 
     public removeNodeTooltip() {
@@ -240,12 +256,9 @@ export class NodeInteractions {
         }, 0);
         
         // Add title
-        const title = this.nodeTooltip.createEl('h4', { text: node.name });
+        const title = this.nodeTooltip.createEl('h4', { text: node.name, cls: 'node-tooltip-title' });
         title.style.margin = '0 0 8px 0';
-        title.style.borderBottom = '1px solid var(--background-modifier-border)';
         title.style.paddingBottom = '6px';
-        title.style.fontSize = 'var(--font-ui-medium)';
-        title.style.fontWeight = 'var(--font-medium)';
         
         // Add metadata content
         const metadataContainer = this.nodeTooltip.createDiv({ cls: 'metadata-container' });
@@ -272,29 +285,13 @@ export class NodeInteractions {
                 });
                 this.openNoteButton = openNoteBtn;
                 
-                // Style the button to match Obsidian's theme
-                openNoteBtn.style.backgroundColor = 'var(--interactive-accent)';
-                openNoteBtn.style.color = 'var(--text-on-accent)';
-                openNoteBtn.style.border = 'none';
-                openNoteBtn.style.borderRadius = '4px';
-                openNoteBtn.style.padding = '6px 12px';
-                openNoteBtn.style.cursor = 'pointer';
-                openNoteBtn.style.fontWeight = 'var(--font-medium)';
-                openNoteBtn.style.fontSize = 'var(--font-ui-small)';
-                openNoteBtn.style.transition = 'background-color 0.1s ease';
-                openNoteBtn.style.outline = 'none';
-                
                 // Add hover effect
                 this.openNoteButtonMouseEnterHandler = () => {
-                    if (this.openNoteButton) {
-                        this.openNoteButton.style.backgroundColor = 'var(--interactive-accent-hover)';
-                    }
+                    // Button hover state is handled via CSS
                 };
                 
                 this.openNoteButtonMouseLeaveHandler = () => {
-                    if (this.openNoteButton) {
-                        this.openNoteButton.style.backgroundColor = 'var(--interactive-accent)';
-                    }
+                    // Button hover state is handled via CSS
                 };
                 
                 // Add click handler to open the note
@@ -345,12 +342,6 @@ export class NodeInteractions {
                             text: tag.tag,
                             cls: 'metadata-tag' 
                         });
-                        tagEl.style.backgroundColor = 'var(--tag-background)';
-                        tagEl.style.color = 'var(--tag-color)';
-                        tagEl.style.borderRadius = '4px';
-                        tagEl.style.padding = '2px 6px';
-                        tagEl.style.fontSize = 'var(--font-ui-smaller)';
-                        tagEl.style.display = 'inline-block';
                     });
                 }
                 
@@ -363,16 +354,10 @@ export class NodeInteractions {
                         text: 'Frontmatter', 
                         cls: 'metadata-section-title' 
                     });
-                    frontmatterTitle.style.fontWeight = 'var(--font-medium)';
-                    frontmatterTitle.style.fontSize = 'var(--font-ui-small)';
-                    frontmatterTitle.style.marginBottom = '4px';
-                    frontmatterTitle.style.color = 'var(--text-accent)';
                     
                     const frontmatterContent = frontmatterField.createDiv({ cls: 'frontmatter-content' });
                     frontmatterContent.style.marginTop = '4px';
-                    frontmatterContent.style.fontSize = 'var(--font-ui-smaller)';
                     frontmatterContent.style.paddingLeft = '8px';
-                    frontmatterContent.style.borderLeft = '2px solid var(--background-modifier-border)';
                     
                     // Filter out sensitive or system properties
                     const excludedProps = ['position', 'cssclass', 'tag', 'tags'];
@@ -553,10 +538,16 @@ export class NodeInteractions {
         this.openNoteButtonMouseLeaveHandler = null;
         this.openNoteButtonClickHandler = null;
         
-        // Remove any tooltips
-        this.removeNodeTooltip();
+        // Remove renderer reference
+        this.renderer = null;
         
-        // Clear SVG reference
-        this.svgElement = null;
+        this.removeNodeTooltip();
+    }
+
+    /**
+     * Clean up any resources used by this class
+     */
+    public dispose(): void {
+        this.onunload();
     }
 }

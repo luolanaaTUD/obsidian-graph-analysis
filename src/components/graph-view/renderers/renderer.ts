@@ -45,15 +45,15 @@ export class Renderer {
         // Cancel any existing animation frame
         this.cancelPendingAnimationFrame();
         
-        // Utilize double requestAnimationFrame technique for smoother rendering
-        this.animationFrameId = requestAnimationFrame(() => {
-            // First frame - browser prepares for layout calculations
+        // Schedule the actual update for next animation frame
+        if (!this.pendingUpdate) {
+            this.pendingUpdate = true;
             this.animationFrameId = requestAnimationFrame(() => {
-                // Second frame - actual rendering happens here
                 this.performGraphUpdate();
+                this.pendingUpdate = false;
                 this.animationFrameId = null;
             });
-        });
+        }
     }
     
     private performGraphUpdate() {
@@ -70,12 +70,17 @@ export class Renderer {
         // Skip style updates during drag operations to prevent flashing
         const shouldUpdateStyles = !this.isDragging;
         
+        // Use CSS variables for consistent theming
+        const defaultLinkColor = 'var(--graph-link-default)';
+        const primaryNodeColor = 'var(--graph-node-default)';
+        const primaryNodeHighlightColor = 'var(--graph-node-highlight)';
+        
         // Update links positions
         this.linksSelection = this.svgGroup.selectAll<SVGLineElement, GraphLink>('line')
             .data(this.links)
             .join(
                 enter => enter.append('line')
-                    .attr('stroke', 'var(--graph-line)')
+                    .attr('stroke', defaultLinkColor)
                     .attr('stroke-opacity', 0.5)
                     .attr('stroke-width', 2)
                     .attr('class', 'graph-link'),
@@ -93,7 +98,7 @@ export class Renderer {
             .join(
                 enter => enter.append('circle')
                     .attr('r', d => this.nodeStyler.getNodeRadius(d))
-                    .attr('fill', 'var(--interactive-accent)')
+                    .attr('fill', primaryNodeColor)
                     .attr('opacity', 1.0)
                     .attr('class', 'graph-node'),
                 update => update,
@@ -183,9 +188,11 @@ export class Renderer {
             }
         });
 
-        const primaryNodeColor = 'var(--interactive-accent)';
-        const primaryNodeHighlightColor = 'var(--text-accent)';
-        const defaultLinkColor = 'var(--graph-line)';
+        // Use CSS variables for consistent light/dark mode support
+        const fadedOpacity = 0.2;
+        const defaultLinkColor = 'var(--graph-link-default)';
+        const primaryNodeColor = 'var(--graph-node-default)';
+        const primaryNodeHighlightColor = 'var(--graph-node-highlight)';
         
         // Get all selections upfront to minimize DOM operations
         const allNodes = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node');
@@ -240,9 +247,6 @@ export class Renderer {
         const selectedNodeLabel = allLabels.filter(d => d.id === nodeId);
         const connectedLabels = allLabels.filter(d => d.id !== nodeId && connectedNodeIds.has(d.id));
         const nonConnectedLabels = allLabels.filter(d => d.id !== nodeId && !connectedNodeIds.has(d.id));
-        
-        // Constant for non-connected nodes opacity
-        const fadedOpacity = 0.3;
         
         // 1. Highlight the selected node and its label - single batch update
         selectedNode
@@ -543,6 +547,9 @@ export class Renderer {
         const links = this.svgGroup.selectAll<SVGLineElement, GraphLink>('.graph-link');
         const labels = this.svgGroup.selectAll<SVGTextElement, GraphNode>('.graph-label');
         
+        // Use CSS variables for consistent theming during drag
+        const defaultLinkColor = 'var(--graph-link-default)';
+        
         // Batch update link positions
         links.attr('x1', d => (d.source as unknown as GraphNode).x || 0)
              .attr('y1', d => (d.source as unknown as GraphNode).y || 0)
@@ -567,9 +574,8 @@ export class Renderer {
     }
 
     public resetGraphStyles() {
-        // Use consistent colors
-        const primaryNodeColor = 'var(--interactive-accent)';
-        const defaultLinkColor = 'var(--graph-line)';
+        // Use CSS variables for consistent light/dark mode support
+        const defaultLinkColor = 'var(--graph-link-default)';
         
         // Cancel any pending frames before starting transitions
         this.cancelPendingAnimationFrame();
@@ -578,7 +584,7 @@ export class Renderer {
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .transition()
             .duration(200)
-            .attr('fill', primaryNodeColor)
+            .attr('fill', 'var(--graph-node-default)')
             .attr('opacity', 1.0)
             .attr('r', d => this.nodeStyler.getNodeRadius(d))
             .style('filter', null);
@@ -621,7 +627,55 @@ export class Renderer {
     }
     
     public onunload() {
-        // Clean up any pending animation frames when component is unloaded
+        console.log('Unloading renderer');
+        
+        // Clean up any pending animation frames
         this.cancelPendingAnimationFrame();
+        
+        // Clear any transitions in progress
+        if (this.svgGroup) {
+            this.svgGroup.selectAll('*').interrupt();
+        }
+        
+        // Remove references to external objects
+        this.nodeStyler = null as any;
+        this.svgGroup = null as any;
+        
+        // Clear data references
+        this.nodes = [];
+        this.links = [];
+        
+        // Clear cached label positions
+        this.cachedLabelPositions = [];
+        
+        // Clear selection references 
+        this.nodesSelection = null as any;
+        this.linksSelection = null as any;
+        this.labelsSelection = null as any;
+    }
+
+    /**
+     * Highlights a node when hovered
+     * @param nodeId The ID of the node to highlight
+     * @param isHovering Whether the node is being hovered or not
+     */
+    public highlightHoverNode(nodeId: string, isHovering: boolean): void {
+        // Get the hover color from CSS variables
+        const defaultNodeColor = 'var(--graph-node-default)';
+        const hoverNodeColor = 'var(--graph-node-hover)';
+        
+        // Select the node
+        const node = this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+            .filter(d => d.id === nodeId);
+        
+        if (isHovering) {
+            // Apply hover styling
+            node.style('fill', hoverNodeColor)
+                .style('cursor', 'pointer');
+        } else {
+            // Remove hover styling
+            node.style('fill', defaultNodeColor)
+                .style('cursor', null);
+        }
     }
 }
