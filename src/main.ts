@@ -135,7 +135,14 @@ export class GraphAnalysisView extends ItemView {
     // Handle view reactivation to ensure graph is centered
     async onResize(): Promise<void> {
         // When view is resized, ensure the graph is properly centered
-        await this.centerGraphSafely();
+        // with a slight delay to allow DOM elements to settle
+        if (this.graphView) {
+            // Use larger timeout for resize since the container needs time
+            // to be fully resized by Obsidian before we calculate dimensions
+            setTimeout(() => {
+                this.centerGraphSafely();
+            }, 50);
+        }
         return;
     }
     

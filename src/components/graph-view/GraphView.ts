@@ -278,7 +278,8 @@ export class GraphView {
             const prevWidth = this.width;
             const prevHeight = this.height;
             
-            // Update width and height properties with a minimum size
+            // In the page leaf implementation, use the container's full dimensions
+            // with appropriate minimum values to ensure the graph always has space
             this.width = Math.max(rect.width || 800, 300); // Minimum width of 300px
             this.height = Math.max(rect.height || 600, 200); // Minimum height of 200px
             
@@ -290,12 +291,14 @@ export class GraphView {
             
             // Check if SVG exists before updating it
             if (this.svg) {
-                // Update SVG dimensions with precise values
+                // Update SVG dimensions with precise values - make sure to completely fill the container
                 this.svg
                     .attr('width', this.width)
                     .attr('height', this.height)
                     .style('width', `${this.width}px`)
                     .style('height', `${this.height}px`);
+                
+                console.log(`Dimensions updated: ${this.width}x${this.height}`);
             }
                 
             // Update force simulation with new dimensions
@@ -304,14 +307,9 @@ export class GraphView {
             }
                 
             // Update the graph transform to maintain centering
-            this.updateGraphTransform();
+            // this.updateGraphTransform() - This will be called by the calling function
             
-            // Let the simulation adjust to the new dimensions
-            if (this.forceSimulation) {
-                setTimeout(() => {
-                    this.forceSimulation.restartGently();
-                }, 50);
-            }
+            // We no longer restart the simulation here as this is handled by the calling functions
         } catch (error) {
             console.error('Error updating dimensions:', error);
         }
@@ -360,7 +358,8 @@ export class GraphView {
                     const canvasCenterY = availableHeight / 2;
                     
                     // Calculate scale to fit everything with a comfortable margin
-                    const margin = 0.15; // 15% margin on each side
+                    // Adjust margin based on container size - smaller margin for built-in leaf view
+                    const margin = Math.min(0.15, Math.max(0.05, availableWidth < 800 ? 0.05 : 0.1));
                     const scaleX = availableWidth * (1 - 2 * margin) / graphWidth;
                     const scaleY = availableHeight * (1 - 2 * margin) / graphHeight;
                     
@@ -381,10 +380,10 @@ export class GraphView {
                         // When returning to the view, apply transform immediately without transition
                         // to prevent the "go to corner then center" effect
                         this.svg.call(this.zoom.transform, transform);
-                    } else if (currentTransform && currentTransform.k !== 1) {
+                    } else if (currentTransform && Math.abs(currentTransform.k - 1) > 0.01) {
                         // For resize operations with existing transform, use a short transition
                         this.svg.transition()
-                            .duration(300)
+                            .duration(200) // Shorter duration for smoother feel
                             .ease(d3.easeQuadOut)
                             .call(this.zoom.transform, transform);
                     } else {
@@ -402,7 +401,7 @@ export class GraphView {
             // or if the graph dimensions calculation failed
             const centerX = availableWidth / 2;
             const centerY = availableHeight / 2;
-            const scale = 0.8;
+            const scale = Math.min(0.8, Math.max(0.5, Math.min(availableWidth, availableHeight) / 1000));
             
             const initialTransform = d3.zoomIdentity
                 .translate(centerX, centerY)
@@ -801,15 +800,33 @@ export class GraphView {
     
     // Public method to force a dimension update and transform 
     public refreshGraphView(): void {
+        // Cancel any pending resize timeouts to avoid duplicate updates
+        if (this._resizeTimeout) {
+            window.clearTimeout(this._resizeTimeout);
+            this._resizeTimeout = null;
+        }
+        
         // First update dimensions
         this.updateDimensions();
         
-        // Then update graph transform, treating as if the view was invisible
-        this.wasInvisible = true;
-        this.updateGraphTransform();
-        
-        // Reset flag
-        this.wasInvisible = false;
+        // Use requestAnimationFrame to ensure dimensions are updated in the DOM
+        // before applying the transform
+        requestAnimationFrame(() => {
+            // Then update graph transform, treating as if the view was invisible
+            // for immediate transform application
+            this.wasInvisible = true;
+            this.updateGraphTransform();
+            
+            // Reset flag
+            this.wasInvisible = false;
+            
+            // Restart the simulation with a slight delay after transform is applied
+            setTimeout(() => {
+                if (this.forceSimulation) {
+                    this.forceSimulation.restartGently();
+                }
+            }, 50);
+        });
     }
     
     // Public method to set the wasInvisible flag
@@ -844,23 +861,32 @@ export class GraphView {
                 // Container has become visible after being invisible
                 console.log("Graph view has become visible again, recentering...");
                 
-                // Mark as visible before updating transform to ensure direct transform application
+                // Mark as visible before updating dimensions to avoid unwanted
+                // transitions and double refreshes
                 this.wasInvisible = false;
                 
-                // When returning to visibility, ensure we get current dimensions
-                // before applying any transforms
-                this.updateDimensions();
+                // Cancel any existing timeouts to avoid conflicts
+                if (this._resizeTimeout) {
+                    window.clearTimeout(this._resizeTimeout);
+                    this._resizeTimeout = null;
+                }
                 
-                // Apply instant transform to avoid the "jump" effect
+                // Use a more coordinated refresh pattern
                 requestAnimationFrame(() => {
-                    this.updateGraphTransform();
+                    // Update dimensions first
+                    this.updateDimensions();
                     
-                    // After the transform is applied, restart simulation gently
-                    setTimeout(() => {
-                        if (this.forceSimulation) {
-                            this.forceSimulation.restartGently();
-                        }
-                    }, 100);
+                    // Apply transform immediately in the next frame
+                    requestAnimationFrame(() => {
+                        this.updateGraphTransform();
+                        
+                        // After the transform is applied, restart simulation gently with a slight delay
+                        setTimeout(() => {
+                            if (this.forceSimulation) {
+                                this.forceSimulation.restartGently();
+                            }
+                        }, 100);
+                    });
                 });
             } else if (!isVisible) {
                 // Container has become invisible
