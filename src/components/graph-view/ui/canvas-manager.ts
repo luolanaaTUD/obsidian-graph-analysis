@@ -28,6 +28,10 @@ export class CanvasManager {
         this.boundMouseUp = this.onMouseUp.bind(this);
         this.boundMouseDown = this.onMouseDown.bind(this);
         this.boundResizeStart = this.onResizeStart.bind(this);
+        
+        // Add global event listeners
+        document.addEventListener('mousemove', this.boundMouseMove);
+        document.addEventListener('mouseup', this.boundMouseUp);
     }
 
     public createCanvas(): HTMLElement {
@@ -51,24 +55,51 @@ export class CanvasManager {
 
         // Add drag handle (title bar)
         const dragHandle = this.canvas.createDiv({ cls: 'graph-analysis-drag-handle' });
-        dragHandle.createSpan({ text: 'Graph Analysis' });
+
+        // Create a span for the title text
+        const titleText = dragHandle.createSpan({ text: 'Graph Analysis' });
+        titleText.style.pointerEvents = 'none'; // Make sure dragging works when clicking on text
 
         // Add close button
         const closeButton = this.canvas.createDiv({ cls: 'graph-analysis-close-button' });
         closeButton.setAttribute('aria-label', 'Close graph view');
         closeButton.setAttribute('role', 'button');
-        closeButton.addEventListener('click', () => {
-            // Clean up
-            this.onunload();
-            this.canvas.remove();
+        
+        // Use direct click handler instead of addEventListener
+        const self = this; // Preserve this context
+        closeButton.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
             
-            // Notify plugin that we've been closed
-            // Find the plugin instance
-            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            if (plugin) {
-                plugin.graphView = null;
+            try {
+                // Find the plugin instance
+                const plugin = (self.app as any).plugins.plugins['obsidian-graph-analysis'];
+                
+                // Clean up properly
+                if (plugin && plugin.graphView) {
+                    // First call onunload to clean up event listeners and references
+                    // This will prevent potential errors with SVG transforms
+                    plugin.graphView.onunload();
+                    plugin.graphView = null;
+                }
+                
+                // Make sure to remove the canvas from the DOM
+                if (self.canvas && self.canvas.parentNode) {
+                    self.canvas.remove();
+                }
+                
+                // Clean up event handlers and references
+                self.onunload();
+            } catch (err) {
+                console.error('Error during canvas close:', err);
+                
+                // Fallback: still try to clean up
+                if (self.canvas && self.canvas.parentNode) {
+                    self.canvas.remove();
+                }
+                self.onunload();
             }
-        });
+        };
 
         // Add resize handle
         const resizeHandle = this.canvas.createDiv({ cls: 'graph-analysis-resize-handle' });
@@ -78,10 +109,6 @@ export class CanvasManager {
 
         // Setup event listeners for resizing
         resizeHandle.addEventListener('mousedown', this.boundResizeStart);
-
-        // Setup global event listeners
-        document.addEventListener('mousemove', this.boundMouseMove);
-        document.addEventListener('mouseup', this.boundMouseUp);
 
         // Add help icon with direct text
         this.addHelpIcon();
@@ -154,13 +181,32 @@ export class CanvasManager {
     }
 
     private onMouseDown(e: MouseEvent) {
-        if (e.target instanceof HTMLElement && e.target.closest('.graph-analysis-drag-handle')) {
+        // Check if we're clicking on the drag handle (title bar) using broader detection
+        const target = e.target as HTMLElement;
+        const isDragHandle = target.classList.contains('graph-analysis-drag-handle') || 
+                             !!target.closest('.graph-analysis-drag-handle');
+        
+        if (isDragHandle) {
             this.isMoving = true;
-            this.startX = e.clientX - parseInt(this.canvas.style.left);
-            this.startY = e.clientY - parseInt(this.canvas.style.top);
             
+            // Handle the case where left/top might not be set yet or formatted differently
+            let currentLeft = this.canvas.style.left || '0px';
+            let currentTop = this.canvas.style.top || '0px';
+            
+            // Strip 'px' and convert to number
+            currentLeft = currentLeft.replace('px', '');
+            currentTop = currentTop.replace('px', '');
+            
+            // Set starting position for the drag
+            this.startX = e.clientX - parseInt(currentLeft);
+            this.startY = e.clientY - parseInt(currentTop);
+            
+            // Prevent default browser behavior and event propagation
             e.preventDefault();
             e.stopPropagation();
+            
+            // Add a dragging class to the canvas for visual feedback
+            this.canvas.classList.add('graph-analysis-dragging');
         }
     }
 
@@ -188,6 +234,8 @@ export class CanvasManager {
             
             this.canvas.style.left = `${Math.max(0, Math.min(maxX, newX))}px`;
             this.canvas.style.top = `${Math.max(0, Math.min(maxY, newY))}px`;
+            
+            // Prevent default to avoid text selection during drag
             e.preventDefault();
             e.stopPropagation();
         } else if (this.isResizing) {
@@ -215,13 +263,16 @@ export class CanvasManager {
     }
 
     private onMouseUp(e: MouseEvent) {
-        this.isMoving = false;
+        if (this.isMoving) {
+            // Remove the dragging class when done
+            this.canvas.classList.remove('graph-analysis-dragging');
+            this.isMoving = false;
+        }
         
         if (this.isResizing) {
             this.onResizeEnd();
+            this.isResizing = false;
         }
-        
-        this.isResizing = false;
     }
 
     private onResizeEnd() {
@@ -242,7 +293,7 @@ export class CanvasManager {
     public onunload() {
         console.log('Unloading canvas manager');
         
-        // Clean up event listeners
+        // Clean up event listeners - these are now added once in the constructor
         document.removeEventListener('mousemove', this.boundMouseMove);
         document.removeEventListener('mouseup', this.boundMouseUp);
         
@@ -292,14 +343,19 @@ export class CanvasManager {
         this.boundResizeStart = null as any;
     }
 
-    public showLoadingIndicator(): HTMLElement {
+    public showLoadingIndicator(): HTMLElement | null {
+        if (!this.canvas) {
+            console.warn('Cannot show loading indicator: canvas is undefined');
+            return null;
+        }
+        
         const loadingIndicator = this.canvas.createDiv({ cls: 'graph-analysis-loading' });
         loadingIndicator.createSpan({ text: 'Loading graph data...' });
         return loadingIndicator;
     }
 
-    public hideLoadingIndicator(loadingIndicator: HTMLElement) {
-        if (loadingIndicator) {
+    public hideLoadingIndicator(loadingIndicator: HTMLElement | null) {
+        if (loadingIndicator && loadingIndicator.parentNode) {
             loadingIndicator.remove();
         }
     }

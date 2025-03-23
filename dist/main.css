@@ -36,17 +36,29 @@
   overflow: hidden;
   position: absolute;
   z-index: 1000;
+  transition: box-shadow 0.2s ease;
 }
 .graph-analysis-drag-handle {
+  cursor: grab;
   background-color: var(--graph-handle-background);
   color: var(--graph-handle-text);
   padding: 6px 12px;
-  cursor: grab;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  font-weight: var(--font-medium);
   border-bottom: 1px solid var(--graph-canvas-border);
   user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  box-sizing: border-box;
+}
+.graph-analysis-dragging .graph-analysis-drag-handle {
+  cursor: grabbing;
+}
+.graph-analysis-dragging {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  transition: none;
+  cursor: grabbing;
 }
 .graph-analysis-close-button {
   position: absolute;
@@ -102,9 +114,12 @@
   padding: 12px;
   position: absolute;
   z-index: 9999;
-  max-width: 320px;
-  min-width: 200px;
+  width: 300px;
+  max-height: 450px !important;
+  overflow-y: auto;
   pointer-events: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 .graph-analysis-loading {
   position: absolute;
@@ -240,6 +255,35 @@
     stroke 200ms ease-out,
     stroke-width 200ms ease-out;
 }
+.graph-node-tooltip {
+  position: absolute;
+  z-index: 1000;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-m);
+  padding: 12px;
+  pointer-events: auto;
+  user-select: text;
+  width: 300px;
+  max-height: 450px !important;
+  overflow-y: auto;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+.graph-node-tooltip ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.graph-node-tooltip ::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg);
+  border-radius: 4px;
+}
+.graph-node-tooltip ::-webkit-scrollbar-track {
+  background-color: var(--scrollbar-bg);
+}
 @media (min-resolution: 2dppx) {
   .graph-node,
   .graph-link,
@@ -254,4 +298,15 @@
     transition: none !important;
     animation: none !important;
   }
+}
+.graph-analysis-view-container {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+.graph-view-svg {
+  width: 100%;
+  height: 100%;
+  background-color: var(--graph-background);
 }
