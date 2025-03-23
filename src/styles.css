@@ -61,7 +61,6 @@
   cursor: grabbing !important;
 }
 
-.graph-view-dragging .graph-analysis-canvas,
 .graph-view-dragging .graph-container {
   pointer-events: auto !important;
   contain: strict !important;
