@@ -1,4 +1,4 @@
-import { App, Notice } from 'obsidian';
+import { App, Notice, TFile } from 'obsidian';
 import * as d3 from 'd3';
 import { GraphNode, GraphLink, CentralityCalculator } from './types';
 import { CentralityCalculator as CentralityCalculatorImpl } from './data/centrality';
@@ -8,13 +8,11 @@ import { LinkStyler } from './renderers/link-styles';
 import { ForceSimulation } from './forces/force-simulation';
 import { NodeInteractions } from './interactions/node-interactions';
 import { DragBehavior } from './interactions/drag-behavior';
-import { CanvasManager } from './ui/canvas-manager';
 import { Renderer } from './renderers/renderer';
 
 export class GraphView {
     private app: App;
     private container: HTMLElement;
-    private canvas: HTMLElement;
     private svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
     private svgGroup: d3.Selection<SVGGElement, unknown, null, undefined>;
     private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
@@ -24,7 +22,6 @@ export class GraphView {
     private height: number = 600;
     
     // Core modules
-    private canvasManager: CanvasManager;
     private graphDataBuilder: GraphDataBuilder;
     private centralityCalculator: CentralityCalculatorImpl;
     private nodeStyler: NodeStyler;
@@ -34,6 +31,7 @@ export class GraphView {
     private dragBehavior: DragBehavior;
     private renderer: Renderer;
     private loadingIndicator: HTMLElement | null = null;
+    private resizeObserver: ResizeObserver | null = null;
 
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
@@ -46,30 +44,24 @@ export class GraphView {
     public async onload(container: HTMLElement) {
         this.container = container;
         
-        // Initialize UI manager
-        this.canvasManager = new CanvasManager(this.app, container, this.onResize.bind(this));
-        this.canvas = this.canvasManager.createCanvas();
-        
-        // Initialize D3 visualization
+        // Initialize D3 visualization and components
         this.initializeComponents();
         
         // Load real vault data
-        this.loadingIndicator = this.canvasManager.showLoadingIndicator();
+        this.showLoadingIndicator();
         try {
             await this.loadVaultData();
         } catch (error) {
             console.error('Error loading vault data:', error);
             new Notice(`Error loading graph data: ${(error as Error).message}`);
         } finally {
-            this.canvasManager.hideLoadingIndicator(this.loadingIndicator);
-            this.loadingIndicator = null;
+            this.hideLoadingIndicator();
         }
     }
 
     private initializeComponents() {
         // Create components
-        this.canvasManager = new CanvasManager(this.app, this.container);
-        this.nodeInteractions = new NodeInteractions(this.app, this.canvas);
+        this.nodeInteractions = new NodeInteractions(this.app, this.container);
         
         // Set up the SVG container
         this.initializeD3();
@@ -103,20 +95,15 @@ export class GraphView {
             this.onDragStart.bind(this),
             this.onDragEnd.bind(this)
         );
-        
-        // Load real vault data
-        this.loadVaultData();
     }
 
     private initializeD3() {
-        // Create SVG container
-        this.svg = d3.select(this.canvas)
+        // Create SVG container that fills the entire view
+        this.svg = d3.select(this.container)
             .append('svg')
             .attr('width', '100%')
             .attr('height', '100%')
-            .style('position', 'absolute')
-            .style('top', 0)
-            .style('left', 0)
+            .style('display', 'block')
             .attr('class', 'graph-view-svg')
             .on('click', () => {
                 // Close tooltip when clicking anywhere on the canvas
@@ -171,28 +158,49 @@ export class GraphView {
         // Enable zoom and pan
         this.svg.call(this.zoom);
         
-        // Get the available height (accounting for title bar)
-        this.width = this.canvas.clientWidth;
-        this.height = this.canvas.clientHeight - 32; // Account for title bar
-    }
-
-    private onResize(width: number, height: number) {
-        this.width = width;
-        this.height = height - 32; // Account for title bar
+        // Update dimensions based on container size
+        this.updateDimensions();
         
-        // Update SVG dimensions
-        this.svg
-            .attr('width', this.width)
-            .attr('height', this.height);
+        // Handle resize with ResizeObserver
+        if (typeof ResizeObserver !== 'undefined') {
+            this.resizeObserver = new ResizeObserver(() => {
+                this.updateDimensions();
+            });
+            this.resizeObserver.observe(this.container);
+        }
+    }
+    
+    private updateDimensions() {
+        // Check if container still exists in DOM
+        if (!this.container || !this.container.isConnected) {
+            return; // Exit early if container is no longer in DOM
+        }
+        
+        // Get the current container dimensions
+        const rect = this.container.getBoundingClientRect();
+        this.width = rect.width;
+        this.height = rect.height;
+        
+        // Check if SVG exists before updating it
+        if (this.svg) {
+            // Update SVG dimensions
+            this.svg
+                .attr('width', this.width)
+                .attr('height', this.height);
+        }
             
         // Update force simulation with new dimensions
-        this.forceSimulation.setDimensions(this.width, this.height);
+        if (this.forceSimulation) {
+            this.forceSimulation.setDimensions(this.width, this.height);
+        }
             
         // Update the transform
         this.updateGraphTransform();
     }
 
     private updateGraphTransform() {
+        if (!this.svgGroup || !this.container || !this.container.isConnected) return;
+        
         const availableWidth = this.width;
         const availableHeight = this.height;
         
@@ -229,7 +237,28 @@ export class GraphView {
         // Apply event handlers in a more efficient way
         this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
             .call(dragBehavior)
-            .on('dblclick', (event, d) => this.nodeInteractions.openNoteAndCloseGraph(d))
+            .on('dblclick', (event, d) => {
+                try {
+                    // Prevent event propagation to avoid any additional SVG handling
+                    event.preventDefault();
+                    event.stopPropagation();
+                    
+                    // Remove any transform-related elements early to prevent SVG errors
+                    this.svg.on('.zoom', null);
+                    
+                    // Use the nodeInteractions to open the note and close the graph
+                    this.nodeInteractions.openNoteAndCloseGraph(d);
+                } catch (e) {
+                    console.error('Error handling node double-click:', e);
+                    // Fallback plan - just try to open the note without closing the graph
+                    if (d.path) {
+                        const file = this.app.vault.getAbstractFileByPath(d.path);
+                        if (file instanceof TFile) {
+                            this.app.workspace.getLeaf().openFile(file);
+                        }
+                    }
+                }
+            })
             .on('mouseover', (event, d) => this.nodeInteractions.onNodeMouseOver(event, d))
             .on('mouseout', (event, d) => this.nodeInteractions.onNodeMouseOut(d));
     }
@@ -269,6 +298,20 @@ export class GraphView {
         
         // Remove highlighting when dragging ends - with transitions
         this.renderer.highlightConnections(node.id, false, true);
+    }
+
+    private showLoadingIndicator() {
+        // Create a loading indicator in the container
+        this.loadingIndicator = this.container.createDiv({ cls: 'graph-analysis-loading' });
+        this.loadingIndicator.createSpan({ text: 'Loading graph data...' });
+        return this.loadingIndicator;
+    }
+    
+    private hideLoadingIndicator() {
+        if (this.loadingIndicator && this.loadingIndicator.parentNode) {
+            this.loadingIndicator.remove();
+            this.loadingIndicator = null;
+        }
     }
 
     private async loadVaultData() {
@@ -341,7 +384,7 @@ export class GraphView {
      */
     public async updateData(graphData: any) {
         // Show loading indicator during update
-        const loadingIndicator = this.canvasManager.showLoadingIndicator();
+        this.showLoadingIndicator();
         
         try {
             // Calculate degree centrality using WASM
@@ -421,12 +464,8 @@ export class GraphView {
             new Notice(`Error updating graph: ${(error as Error).message}`);
         } finally {
             // Hide loading indicator
-            this.canvasManager.hideLoadingIndicator(loadingIndicator);
+            this.hideLoadingIndicator();
         }
-    }
-
-    public getCanvas(): HTMLElement {
-        return this.canvas;
     }
 
     public onunload() {
@@ -434,44 +473,72 @@ export class GraphView {
         
         // Stop the force simulation first
         if (this.forceSimulation) {
-            this.forceSimulation.onunload();
+            try {
+                this.forceSimulation.onunload();
+            } catch (e) {
+                console.warn('Error unloading force simulation:', e);
+            }
+        }
+        
+        // Disconnect ResizeObserver if it exists
+        if (this.resizeObserver) {
+            try {
+                this.resizeObserver.disconnect();
+                this.resizeObserver = null;
+            } catch (e) {
+                console.warn('Error disconnecting ResizeObserver:', e);
+            }
         }
         
         // Remove event listeners from nodes
         if (this.svgGroup) {
-            this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
-                .on('dblclick', null)
-                .on('mouseover', null)
-                .on('mouseout', null)
-                .on('click', null);
+            try {
+                this.svgGroup.selectAll<SVGCircleElement, GraphNode>('.graph-node')
+                    .on('dblclick', null)
+                    .on('mouseover', null)
+                    .on('mouseout', null)
+                    .on('click', null);
+            } catch (e) {
+                console.warn('Error removing event listeners from nodes:', e);
+            }
         }
         
         // Remove tooltip if it exists
         if (this.nodeInteractions) {
-            this.nodeInteractions.removeNodeTooltip();
-            this.nodeInteractions.dispose();
+            try {
+                this.nodeInteractions.removeNodeTooltip();
+                this.nodeInteractions.dispose();
+            } catch (e) {
+                console.warn('Error disposing node interactions:', e);
+            }
         }
         
         // Clean up zoom behavior - fix condition check
         if (this.svg) {
-            this.svg.on('.zoom', null);
+            try {
+                this.svg.on('.zoom', null);
+            } catch (e) {
+                console.warn('Error removing zoom behavior:', e);
+            }
         }
         
         // Clean up all D3 selections to prevent memory leaks
         if (this.svg) {
-            this.svg.selectAll('*').remove();
-            this.svg.remove();
-        }
-        
-        // Clear all cached references to DOM elements
-        if (this.canvas && this.canvas.parentNode) {
-            this.canvas.innerHTML = '';
-            this.canvas.remove();
+            try {
+                this.svg.selectAll('*').remove();
+                this.svg.remove();
+            } catch (e) {
+                console.warn('Error removing SVG elements:', e);
+            }
         }
         
         // Clear loadingIndicator if it exists
         if (this.loadingIndicator && this.loadingIndicator.parentNode) {
-            this.loadingIndicator.remove();
+            try {
+                this.loadingIndicator.remove();
+            } catch (e) {
+                console.warn('Error removing loading indicator:', e);
+            }
             this.loadingIndicator = null;
         }
         
@@ -483,11 +550,10 @@ export class GraphView {
         this.svg = null as any;
         this.svgGroup = null as any;
         this.zoom = null as any;
-        this.canvas = null as any;
+        this.container = null as any;
         this.forceSimulation = null as any;
         this.renderer = null as any;
         this.dragBehavior = null as any;
         this.nodeInteractions = null as any;
-        this.canvasManager = null as any;
     }
 }

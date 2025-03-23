@@ -2,6 +2,7 @@ import { App, TFile, Notice } from 'obsidian';
 import { GraphNode } from '../types';
 import * as d3 from 'd3';
 import { Renderer } from '../renderers/renderer';
+import { GRAPH_ANALYSIS_VIEW_TYPE } from '../../../main';
 
 export class NodeInteractions {
     private app: App;
@@ -137,22 +138,25 @@ export class NodeInteractions {
             // Try to get the file
             const file = this.app.vault.getAbstractFileByPath(node.path);
             if (file instanceof TFile) {
-                // Open the file
-                this.app.workspace.getLeaf().openFile(file);
-                
-                // Close the graph view
-                // Notify plugin that we've been closed
-                const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-                if (plugin) {
-                    plugin.graphView = null;
+                // Find the graph analysis view leaf
+                const leaves = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
+                if (leaves.length > 0) {
+                    const graphLeaf = leaves[0];
+                    
+                    // Open the file in a new leaf if needed or reuse the graph leaf
+                    const leaf = this.app.workspace.getLeaf();
+                    leaf.openFile(file).then(() => {
+                        // Close the graph view after opening the file
+                        setTimeout(() => {
+                            if (graphLeaf && graphLeaf.view) {
+                                graphLeaf.detach();
+                            }
+                        }, 100); // Small delay to ensure the file is opened first
+                    });
+                } else {
+                    // Just open the file if graph view can't be found
+                    this.app.workspace.getLeaf().openFile(file);
                 }
-                
-                // Clean up and remove canvas
-                // Find the cleanup method
-                if (plugin && typeof plugin.onunload === 'function') {
-                    plugin.onunload();
-                }
-                this.canvas.remove();
             } else {
                 new Notice(`Could not find file at path: ${node.path}`);
             }

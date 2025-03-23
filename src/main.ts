@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal, MarkdownRenderer } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal, MarkdownRenderer, WorkspaceLeaf, ItemView } from 'obsidian';
 import { GraphView } from './components/graph-view/GraphView';
 
 // Import our styles 
@@ -94,6 +94,60 @@ class ResultsModal extends Modal {
     }
 }
 
+// Define a new view type for our graph analysis
+export const GRAPH_ANALYSIS_VIEW_TYPE = 'graph-analysis-view';
+
+// Create a new ItemView for our graph
+export class GraphAnalysisView extends ItemView {
+    private graphView: GraphView;
+    
+    constructor(leaf: WorkspaceLeaf, private plugin: GraphAnalysisPlugin) {
+        super(leaf);
+        this.graphView = new GraphView(
+            this.app,
+            this.plugin.calculateDegreeCentrality.bind(this.plugin)
+        );
+    }
+
+    getViewType(): string {
+        return GRAPH_ANALYSIS_VIEW_TYPE;
+    }
+
+    getDisplayText(): string {
+        return 'Graph Analysis';
+    }
+
+    getIcon(): string {
+        return 'waypoints';
+    }
+
+    async onOpen(): Promise<void> {
+        const container = this.containerEl.children[1] as HTMLElement;
+        container.empty();
+        container.classList.add('graph-analysis-view-container');
+        
+        // Initialize the graph view
+        await this.graphView.onload(container);
+        
+        return;
+    }
+
+    async onClose(): Promise<void> {
+        // Clean up the graph view
+        if (this.graphView) {
+            try {
+                this.graphView.onunload();
+            } catch (e) {
+                console.warn('Error unloading graph view:', e);
+            }
+        }
+        
+        // Clear references
+        this.contentEl.empty();
+        return;
+    }
+}
+
 export default class GraphAnalysisPlugin extends Plugin {
     settings: GraphAnalysisSettings;
     wasmInitialized: boolean = false;
@@ -123,6 +177,12 @@ export default class GraphAnalysisPlugin extends Plugin {
         
         // Register event handlers for vault changes
         this.registerVaultEventListeners();
+        
+        // Register the graph analysis view
+        this.registerView(
+            GRAPH_ANALYSIS_VIEW_TYPE,
+            (leaf) => new GraphAnalysisView(leaf, this)
+        );
 
         // Add commands for different centrality algorithms
         this.addCommand({
@@ -149,27 +209,37 @@ export default class GraphAnalysisPlugin extends Plugin {
 
         // Add a ribbon icon to show the graph view
         this.addRibbonIcon('waypoints', 'Graph Analysis View', async () => {
-            if (this.graphView) {
-                // If view exists, show a notice instead of opening a new one
-                new Notice('Graph view is already open');
-                
-                // Flash the existing canvas to help user locate it
-                const canvas = this.graphView.getCanvas();
-                canvas.addClass('graph-analysis-canvas-flash');
-                setTimeout(() => {
-                    canvas.removeClass('graph-analysis-canvas-flash');
-                }, 1000);
-            } else {
-                // Ensure WASM is loaded before creating graph view
-                await this.ensureWasmLoaded();
-                
-                // Create and show new graph view
-                this.graphView = new GraphView(
-                    this.app, 
-                    this.calculateDegreeCentrality.bind(this)
-                );
-                await this.graphView.onload(this.app.workspace.containerEl);
+            // First, check if view is already open
+            const existing = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
+            if (existing.length > 0) {
+                // If already open, just reveal the leaf
+                this.app.workspace.revealLeaf(existing[0]);
+                return;
             }
+            
+            // Ensure WASM is loaded before creating view
+            await this.ensureWasmLoaded();
+            
+            // Get the most appropriate leaf - use current leaf if empty, otherwise create a new one
+            let leaf: WorkspaceLeaf;
+            const activeLeaf = this.app.workspace.activeLeaf;
+            
+            if (activeLeaf && !activeLeaf.getViewState().pinned && !activeLeaf.getViewState().active) {
+                // If active leaf exists and isn't pinned/active with content, use it
+                leaf = activeLeaf;
+            } else {
+                // Otherwise create a new leaf without splitting
+                leaf = this.app.workspace.getLeaf(false);
+            }
+            
+            // Set the view in the selected leaf
+            await leaf.setViewState({
+                type: GRAPH_ANALYSIS_VIEW_TYPE,
+                active: true
+            });
+            
+            // Focus the leaf
+            this.app.workspace.revealLeaf(leaf);
         });
     }
     
@@ -408,26 +478,15 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Nullify WASM loading promise to allow garbage collection
         this.wasmLoadingPromise = null;
         
-        // Ensure any open modals are closed
-        const activeLeaves = this.app.workspace.getLeavesOfType('graph-analysis-view');
-        activeLeaves.forEach(leaf => {
-            this.app.workspace.revealLeaf(leaf);
+        // Close any open graph views
+        const leaves = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
+        for (const leaf of leaves) {
             leaf.detach();
-        });
-        
-        // Remove any remaining DOM elements
-        const canvasElements = document.querySelectorAll('.graph-analysis-canvas');
-        canvasElements.forEach(element => element.remove());
+        }
         
         // Remove any added CSS classes from the body
         document.body.classList.remove('graph-view-dragging');
         document.body.classList.remove('graph-analysis-active');
-        
-        // Unload graph view if it exists - with proper cleanup
-        if (this.graphView) {
-            this.graphView.onunload();
-            this.graphView = null;
-        }
     }
 
     async loadSettings() {
