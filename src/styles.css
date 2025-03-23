@@ -102,6 +102,45 @@
 }
 
 /*----------------------------------------
+ * NODE TOOLTIP STYLES
+ *----------------------------------------*/
+
+/* Node tooltip */
+.graph-node-tooltip {
+  position: absolute;
+  z-index: 1000;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-m);
+  padding: 12px;
+  pointer-events: auto;
+  user-select: text;
+  width: 300px;
+  max-height: 450px !important; /* Exactly 1.5x the width (300px) with !important to prevent overrides */
+  overflow-y: auto;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  scroll-behavior: smooth;
+  overscroll-behavior: contain; /* Prevent scroll chaining */
+}
+
+/* Enhance scrollbars for tooltips */
+.graph-node-tooltip ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.graph-node-tooltip ::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg);
+  border-radius: 4px;
+}
+
+.graph-node-tooltip ::-webkit-scrollbar-track {
+  background-color: var(--scrollbar-bg);
+}
+
+/*----------------------------------------
  * MEDIA QUERIES
  *----------------------------------------*/
 

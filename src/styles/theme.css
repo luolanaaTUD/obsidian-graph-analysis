@@ -156,9 +156,12 @@
   padding: 12px;
   position: absolute;
   z-index: 9999;
-  max-width: 320px;
-  min-width: 200px;
+  width: 300px;
+  max-height: 450px !important; /* Exactly 1.5x the width (300px) with !important to prevent overrides */
+  overflow-y: auto;
   pointer-events: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 
 /* Loading indicator */

@@ -198,6 +198,15 @@ export class NodeInteractions {
         this.nodeTooltip.addEventListener('mouseenter', this.tooltipMouseEnterHandler);
         this.nodeTooltip.addEventListener('mouseleave', this.tooltipMouseLeaveHandler);
         
+        // Make the entire tooltip scrollable
+        this.nodeTooltip.style.overflowY = 'auto';
+        
+        // Set critical dimensions with !important
+        const tooltipStyle = this.nodeTooltip.style;
+        tooltipStyle.setProperty('width', '300px', 'important');
+        tooltipStyle.setProperty('max-height', '450px', 'important'); // Exactly 1.5x width
+        tooltipStyle.setProperty('overflow-y', 'auto', 'important');
+        
         // Calculate position (to the right and slightly above the node)
         const nodeX = (node as any).x;
         const nodeY = (node as any).y;
