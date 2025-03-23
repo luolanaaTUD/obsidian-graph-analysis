@@ -91,6 +91,8 @@ export class CanvasManager {
 
     private addHelpIcon() {
         const helpIconContainer = this.canvas.createDiv({ cls: 'graph-analysis-help-icon-container' });
+        
+        // Position absolutely in the corner
         helpIconContainer.style.position = 'absolute';
         helpIconContainer.style.bottom = '10px';
         helpIconContainer.style.right = '10px';
@@ -98,7 +100,6 @@ export class CanvasManager {
         helpIconContainer.style.width = '24px';
         helpIconContainer.style.height = '24px';
         helpIconContainer.style.borderRadius = '50%';
-        helpIconContainer.style.backgroundColor = 'var(--background-modifier-border)';
         helpIconContainer.style.display = 'flex';
         helpIconContainer.style.alignItems = 'center';
         helpIconContainer.style.justifyContent = 'center';
@@ -106,23 +107,19 @@ export class CanvasManager {
         helpIconContainer.style.opacity = '0.7';
         helpIconContainer.style.transition = 'opacity 0.2s ease';
         
-        // Use a simple text question mark instead of SVG
+        // Use a simple text question mark
         helpIconContainer.setText('?');
         helpIconContainer.style.fontWeight = 'normal';
         helpIconContainer.style.fontSize = '14px';
-        helpIconContainer.style.color = 'var(--text-muted)';
 
         // Create tooltip content
-        const tooltipContainer = this.canvas.createDiv();
+        const tooltipContainer = this.canvas.createDiv({ cls: 'graph-analysis-tooltip' });
         tooltipContainer.style.position = 'absolute';
         tooltipContainer.style.bottom = '40px';
         tooltipContainer.style.right = '10px';
         tooltipContainer.style.width = '250px';
-        tooltipContainer.style.backgroundColor = 'var(--background-primary)';
-        tooltipContainer.style.border = '1px solid var(--background-modifier-border)';
         tooltipContainer.style.borderRadius = '6px';
         tooltipContainer.style.padding = '10px';
-        tooltipContainer.style.boxShadow = '0 4px 14px rgba(0, 0, 0, 0.15)';
         tooltipContainer.style.zIndex = '9999';
         tooltipContainer.style.opacity = '0';
         tooltipContainer.style.pointerEvents = 'none';
@@ -142,20 +139,18 @@ export class CanvasManager {
         });
 
         // Add tooltip content
-        const tooltipTitle = tooltipContainer.createEl('h3', { text: 'Graph Visualization Guide' });
+        const tooltipTitle = tooltipContainer.createEl('h3', { text: 'Graph Visualization Guide', cls: 'graph-tooltip-title' });
         tooltipTitle.style.margin = '0 0 10px 0';
         tooltipTitle.style.fontSize = '1.1em';
-        tooltipTitle.style.borderBottom = '1px solid var(--background-modifier-border)';
         tooltipTitle.style.paddingBottom = '5px';
 
-        const nodeSection = tooltipContainer.createDiv();
+        const nodeSection = tooltipContainer.createDiv({ cls: 'graph-tooltip-section' });
         nodeSection.style.marginBottom = '10px';
-        const nodeTitle = nodeSection.createEl('h4', { text: 'Node Size' });
+        const nodeTitle = nodeSection.createEl('h4', { text: 'Node Size', cls: 'graph-tooltip-subtitle' });
         nodeTitle.style.margin = '0 0 5px 0';
         nodeTitle.style.fontSize = '1em';
-        const nodeText = nodeSection.createEl('p', { text: 'Node size represents the degree centrality of each note - larger nodes have more connections in your vault.' });
+        const nodeText = nodeSection.createEl('p', { text: 'Node size represents the degree centrality of each note - larger nodes have more connections in your vault.', cls: 'graph-tooltip-text' });
         nodeText.style.margin = '0';
-        nodeText.style.color = 'var(--text-muted)';
     }
 
     private onMouseDown(e: MouseEvent) {
@@ -245,9 +240,56 @@ export class CanvasManager {
     }
 
     public onunload() {
+        console.log('Unloading canvas manager');
+        
         // Clean up event listeners
         document.removeEventListener('mousemove', this.boundMouseMove);
         document.removeEventListener('mouseup', this.boundMouseUp);
+        
+        // Remove event listeners from drag handle if it exists
+        const dragHandle = this.canvas?.querySelector('.graph-analysis-drag-handle');
+        if (dragHandle) {
+            dragHandle.removeEventListener('mousedown', this.boundMouseDown);
+        }
+        
+        // Remove event listeners from resize handle if it exists
+        const resizeHandle = this.canvas?.querySelector('.graph-analysis-resize-handle');
+        if (resizeHandle) {
+            resizeHandle.removeEventListener('mousedown', this.boundResizeStart);
+        }
+        
+        // Remove all other event listeners
+        if (this.canvas) {
+            // Find and clean up any help icon listeners
+            const helpIcon = this.canvas.querySelector('.graph-analysis-help-icon-container');
+            if (helpIcon) {
+                const clone = helpIcon.cloneNode(true);
+                if (helpIcon.parentNode) {
+                    helpIcon.parentNode.replaceChild(clone, helpIcon);
+                }
+            }
+            
+            // Find and clean up any close button listeners
+            const closeButton = this.canvas.querySelector('.graph-analysis-close-button');
+            if (closeButton) {
+                const clone = closeButton.cloneNode(true);
+                if (closeButton.parentNode) {
+                    closeButton.parentNode.replaceChild(clone, closeButton);
+                }
+            }
+        }
+        
+        // Remove references to external objects
+        this.app = null as any;
+        this.container = null as any;
+        this.canvas = null as any;
+        this.onResizeCallback = undefined;
+        
+        // Clear bound event handlers
+        this.boundMouseMove = null as any;
+        this.boundMouseUp = null as any;
+        this.boundMouseDown = null as any;
+        this.boundResizeStart = null as any;
     }
 
     public showLoadingIndicator(): HTMLElement {
