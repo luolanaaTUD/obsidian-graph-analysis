@@ -7,6 +7,61 @@
  *----------------------------------------*/
 
 /*----------------------------------------
+ * THEME VARIABLES FOR GRAPH ANALYSIS
+ * Centralized styles for consistent theming
+ *----------------------------------------*/
+
+:root {
+    /* Graph background */
+    --graph-background: var(--background-primary);
+
+    /* Node colors */
+    --graph-node-fill: var(--interactive-accent);
+    --graph-node-stroke: var(--interactive-accent-hover);
+    --graph-node-selected: var(--text-accent);
+    --graph-node-highlighted: var(--text-accent-hover);
+    --graph-node-dimmed: rgba(var(--interactive-accent-rgb), 0.3);
+    --graph-node-muted: var(--text-muted);
+
+    /* Link colors */
+    --graph-link-color: var(--text-muted);
+    --graph-link-highlighted: var(--text-accent);
+    --graph-link-dimmed: rgba(var(--text-muted-rgb), 0.3);
+
+    /* Label colors */
+    --graph-label-color: var(--text-normal);
+    --graph-label-background: var(--background-primary);
+    --graph-label-highlighted: var(--text-accent);
+    --graph-label-dimmed: var(--text-muted);
+
+    /* Tooltip */
+    --graph-tooltip-background: var(--background-primary);
+    --graph-tooltip-border: var(--background-modifier-border);
+    --graph-tooltip-shadow: var(--background-modifier-box-shadow);
+
+    /* Loading indicator */
+    --graph-loading-background: var(--background-primary);
+    --graph-loading-text: var(--text-normal);
+    
+    /* Controls */
+    --graph-help-icon-background: var(--background-modifier-hover);
+    --graph-help-icon-text: var(--text-normal);
+}
+
+/* Dark theme adjustments */
+.theme-dark {
+    --graph-link-color: rgba(255, 255, 255, 0.4);
+    --graph-link-dimmed: rgba(255, 255, 255, 0.1);
+    --graph-tooltip-shadow: rgba(0, 0, 0, 0.3);
+}
+
+/* Light theme adjustments */
+.theme-light {
+    --graph-link-color: rgba(0, 0, 0, 0.3);
+    --graph-link-dimmed: rgba(0, 0, 0, 0.1);
+}
+
+/*----------------------------------------
  * THEME VARIABLES
  *----------------------------------------*/
 
@@ -23,140 +78,26 @@
   --graph-link-faded: var(--background-modifier-border-hover);
   
   /* Label colors */
-  --graph-label-color: var(--text-normal);
   --graph-label-highlight: var(--text-accent);
   --graph-label-faded: var(--text-muted);
   
   /* Background and borders */
-  --graph-background: var(--background-primary);
   --graph-canvas-border: var(--background-modifier-border);
   
   /* Tooltip styling */
-  --graph-tooltip-background: var(--background-primary);
-  --graph-tooltip-border: var(--background-modifier-border);
-  --graph-tooltip-shadow: rgba(0, 0, 0, 0.1);
-  --graph-tooltip-text: var(--text-normal);
   --graph-tooltip-title: var(--text-accent);
   
   /* UI elements */
   --graph-handle-background: var(--background-secondary);
   --graph-handle-text: var(--text-normal);
   
-  /* Help icon */
-  --graph-help-icon-background: var(--background-modifier-border);
-  --graph-help-icon-text: var(--text-muted);
-  
   /* Loading indicators */
-  --graph-loading-text: var(--text-muted);
   --graph-loading-background: var(--background-secondary-alt);
 }
 
 /* Theme-specific overrides for dark mode */
 .theme-dark {
   --graph-tooltip-shadow: rgba(0, 0, 0, 0.3);
-}
-
-/*----------------------------------------
- * CANVAS CONTAINER
- *----------------------------------------*/
-
-/* Main canvas container */
-.graph-analysis-canvas {
-  background-color: var(--graph-background);
-  border: 1px solid var(--graph-canvas-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 10px var(--graph-tooltip-shadow);
-  overflow: hidden;
-  position: absolute;
-  z-index: 1000;
-  transition: box-shadow 0.2s ease;
-}
-
-/* Title/drag bar */
-.graph-analysis-drag-handle {
-  cursor: grab;
-  background-color: var(--graph-handle-background);
-  color: var(--graph-handle-text);
-  padding: 6px 12px;
-  font-weight: var(--font-medium);
-  border-bottom: 1px solid var(--graph-canvas-border);
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 32px;
-  box-sizing: border-box;
-}
-
-/* When actively dragging */
-.graph-analysis-dragging .graph-analysis-drag-handle {
-  cursor: grabbing;
-}
-
-/* Additional styles for better dragging experience */
-.graph-analysis-dragging {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  transition: none;
-  cursor: grabbing;
-}
-
-/*----------------------------------------
- * CONTROLS AND UI ELEMENTS
- *----------------------------------------*/
-
-/* Close button */
-.graph-analysis-close-button {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s ease;
-  z-index: 10;
-  color: var(--graph-handle-text);
-}
-
-.graph-analysis-close-button:hover {
-  opacity: 1;
-}
-
-.graph-analysis-close-button::before {
-  content: "×";
-  font-size: 20px;
-  line-height: 1;
-}
-
-/* Resize handle */
-.graph-analysis-resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 16px;
-  height: 16px;
-  cursor: nwse-resize;
-  z-index: 10;
-}
-
-.graph-analysis-resize-handle::before {
-  content: "";
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--graph-canvas-border);
-  border-bottom: 2px solid var(--graph-canvas-border);
-}
-
-/* Help icon */
-.graph-analysis-help-icon-container {
-  background-color: var(--graph-help-icon-background);
-  color: var(--graph-help-icon-text);
 }
 
 /*----------------------------------------
@@ -209,8 +150,8 @@
   cursor: pointer;
   font-weight: var(--font-medium);
   font-size: var(--font-ui-small);
-  transition: background-color 0.1s ease;
-  outline: none;
+  transition: background-color 0.2s ease;
+  display: inline-block;
 }
 
 .open-note-button:hover {
@@ -221,31 +162,51 @@
  * METADATA AND CONTENT STYLING
  *----------------------------------------*/
 
-/* Metadata elements */
-.graph-analysis-canvas .metadata-label {
+/* Metadata label styling */
+.metadata-label {
+  font-weight: var(--font-medium);
   color: var(--text-muted);
-  font-weight: var(--font-medium);
+  margin-bottom: 4px;
+  display: block;
+  font-size: var(--font-ui-smaller);
 }
 
-.graph-analysis-canvas .metadata-section-title {
-  color: var(--text-accent);
-  font-weight: var(--font-medium);
+/* Metadata section title */
+.metadata-section-title {
+  font-weight: var(--font-bold);
+  margin: 12px 0 8px 0;
   font-size: var(--font-ui-small);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 4px;
 }
 
-.graph-analysis-canvas .metadata-tag {
-  background-color: var(--tag-background);
-  color: var(--tag-color);
+/* Metadata tag styling */
+.metadata-tag {
+  display: inline-block;
+  background-color: var(--background-modifier-hover);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-right: 4px;
+  margin-bottom: 4px;
+  font-size: var(--font-ui-smaller);
 }
 
-/* Preview elements */
-.graph-analysis-canvas .preview-section-title {
-  color: var(--text-accent);
-  font-weight: var(--font-medium);
+/* Preview section title */
+.preview-section-title {
+  font-weight: var(--font-bold);
+  margin: 12px 0 8px 0;
   font-size: var(--font-ui-small);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 4px;
 }
 
-.graph-analysis-canvas .preview-content {
+/* Preview content styling */
+.preview-content {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 4px;
   background-color: var(--background-secondary);
-  color: var(--text-normal);
+  margin-bottom: 12px;
+  font-size: var(--font-ui-smaller);
 } 

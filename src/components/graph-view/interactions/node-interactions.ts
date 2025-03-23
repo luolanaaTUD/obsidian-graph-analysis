@@ -6,7 +6,7 @@ import { GRAPH_ANALYSIS_VIEW_TYPE } from '../../../main';
 
 export class NodeInteractions {
     private app: App;
-    private canvas: HTMLElement;
+    private container: HTMLElement;
     private hoverNode: GraphNode | null = null;
     private hoverTimeout: number | null = null;
     private tooltipVisible: boolean = false;
@@ -21,9 +21,9 @@ export class NodeInteractions {
     private svgElement: SVGSVGElement | null = null;
     private renderer: Renderer | null = null;
 
-    constructor(app: App, canvas: HTMLElement) {
+    constructor(app: App, container: HTMLElement) {
         this.app = app;
-        this.canvas = canvas;
+        this.container = container;
     }
 
     public setRenderer(renderer: Renderer) {
@@ -185,7 +185,7 @@ export class NodeInteractions {
         this.removeNodeTooltip();
         
         // Create tooltip element
-        this.nodeTooltip = this.canvas.createDiv({ cls: 'graph-node-tooltip' });
+        this.nodeTooltip = this.container.createDiv({ cls: 'graph-node-tooltip' });
         
         // Add mouse events to keep tooltip open when hovering over it
         this.tooltipMouseEnterHandler = () => {
