@@ -33,6 +33,11 @@ export class GraphView {
     private loadingIndicator: HTMLElement | null = null;
     private resizeObserver: ResizeObserver | null = null;
     private _resizeTimeout: number | null = null;
+    
+    // Visibility observer to ensure graph is centered when switching back to the view
+    private visibilityObserver: IntersectionObserver | null = null;
+    private lastVisibilityChange: number = 0;
+    private wasInvisible: boolean = false;
 
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
@@ -47,6 +52,9 @@ export class GraphView {
         
         // Initialize D3 visualization and components
         this.initializeComponents();
+        
+        // Setup visibility detection
+        this.setupVisibilityObserver();
         
         // Load real vault data
         this.showLoadingIndicator();
@@ -210,11 +218,15 @@ export class GraphView {
                     return;
                 }
                 
+                // Save the previous dimensions for calculating relative change
+                const prevWidth = this.width;
+                const prevHeight = this.height;
+                
                 // Update internal dimensions
                 this.width = Math.max(newWidth, 300); // Minimum width of 300px
                 this.height = Math.max(newHeight, 200); // Minimum height of 200px
                 
-                // Update SVG dimensions
+                // Update SVG dimensions first
                 if (this.svg) {
                     this.svg
                         .attr('width', this.width)
@@ -228,18 +240,22 @@ export class GraphView {
                     this.forceSimulation.setDimensions(this.width, this.height);
                 }
                 
-                // Call updateGraphTransform directly which will handle the proper positioning
-                this.updateGraphTransform();
-                
-                // Give the transform time to apply, then softly restart the simulation
-                setTimeout(() => {
-                    if (this.forceSimulation) {
-                        this.forceSimulation.restartGently();
-                    }
-                }, 50);
+                // Use requestAnimationFrame for smoother visual updates
+                // This ensures the dimension changes are applied before transform
+                requestAnimationFrame(() => {
+                    // Always recenter graph properly when dimensions change
+                    this.updateGraphTransform();
+                    
+                    // Give the transform time to apply, then softly restart the simulation
+                    setTimeout(() => {
+                        if (this.forceSimulation) {
+                            this.forceSimulation.restartGently();
+                        }
+                    }, 50);
+                });
                 
                 this._resizeTimeout = null;
-            }, 100); // 100ms debounce for smoother resizing
+            }, 50); // Shorter debounce time for more responsive resizing
         });
         
         // Start observing the container
@@ -360,14 +376,22 @@ export class GraphView {
                         .scale(scale)
                         .translate(-graphCenterX, -graphCenterY);
                     
-                    // Apply the transform (with transition if it's initial positioning)
-                    if (currentTransform && currentTransform.k !== 1) {
-                        // If we already had a transform, just apply the new one instantly
+                    // Apply the transform based on context
+                    if (this.wasInvisible) {
+                        // When returning to the view, apply transform immediately without transition
+                        // to prevent the "go to corner then center" effect
                         this.svg.call(this.zoom.transform, transform);
+                    } else if (currentTransform && currentTransform.k !== 1) {
+                        // For resize operations with existing transform, use a short transition
+                        this.svg.transition()
+                            .duration(300)
+                            .ease(d3.easeQuadOut)
+                            .call(this.zoom.transform, transform);
                     } else {
                         // For initial positioning, use a smooth transition
                         this.svg.transition()
                             .duration(500)
+                            .ease(d3.easeQuadOut)
                             .call(this.zoom.transform, transform);
                     }
                     return;
@@ -384,10 +408,17 @@ export class GraphView {
                 .translate(centerX, centerY)
                 .scale(scale);
             
-            // Apply the transform with a brief transition for smoother appearance
-            this.svg.transition()
-                .duration(300)
-                .call(this.zoom.transform, initialTransform);
+            // Apply the transform based on context
+            if (this.wasInvisible) {
+                // When returning to the view, apply transform immediately
+                this.svg.call(this.zoom.transform, initialTransform);
+            } else {
+                // Otherwise use a transition
+                this.svg.transition()
+                    .duration(300)
+                    .ease(d3.easeQuadOut)
+                    .call(this.zoom.transform, initialTransform);
+            }
         } catch (error) {
             console.error('Error updating graph transform:', error);
             
@@ -679,6 +710,16 @@ export class GraphView {
             }
         }
         
+        // Disconnect VisibilityObserver if it exists
+        if (this.visibilityObserver) {
+            try {
+                this.visibilityObserver.disconnect();
+                this.visibilityObserver = null;
+            } catch (e) {
+                console.warn('Error disconnecting VisibilityObserver:', e);
+            }
+        }
+        
         // Remove event listeners from nodes
         if (this.svgGroup) {
             try {
@@ -744,5 +785,94 @@ export class GraphView {
         this.renderer = null as any;
         this.dragBehavior = null as any;
         this.nodeInteractions = null as any;
+    }
+
+    // Public method to recenter the graph
+    public recenterGraph(): void {
+        this.updateGraphTransform();
+    }
+    
+    // Public method to restart the force simulation gently
+    public restartSimulationGently(): void {
+        if (this.forceSimulation) {
+            this.forceSimulation.restartGently();
+        }
+    }
+    
+    // Public method to force a dimension update and transform 
+    public refreshGraphView(): void {
+        // First update dimensions
+        this.updateDimensions();
+        
+        // Then update graph transform, treating as if the view was invisible
+        this.wasInvisible = true;
+        this.updateGraphTransform();
+        
+        // Reset flag
+        this.wasInvisible = false;
+    }
+    
+    // Public method to set the wasInvisible flag
+    public setWasInvisible(value: boolean): void {
+        this.wasInvisible = value;
+    }
+
+    private setupVisibilityObserver() {
+        // Clean up any existing observer
+        if (this.visibilityObserver) {
+            this.visibilityObserver.disconnect();
+            this.visibilityObserver = null;
+        }
+        
+        // Create a new observer for visibility changes
+        this.visibilityObserver = new IntersectionObserver((entries) => {
+            if (!entries || !entries.length) return;
+            
+            // Get the entry for our container
+            const entry = entries[0];
+            const isVisible = entry.isIntersecting;
+            const now = Date.now();
+            
+            // Don't process too frequent visibility changes (debounce)
+            if (now - this.lastVisibilityChange < 200) {
+                return;
+            }
+            
+            this.lastVisibilityChange = now;
+            
+            if (isVisible && this.wasInvisible) {
+                // Container has become visible after being invisible
+                console.log("Graph view has become visible again, recentering...");
+                
+                // Mark as visible before updating transform to ensure direct transform application
+                this.wasInvisible = false;
+                
+                // When returning to visibility, ensure we get current dimensions
+                // before applying any transforms
+                this.updateDimensions();
+                
+                // Apply instant transform to avoid the "jump" effect
+                requestAnimationFrame(() => {
+                    this.updateGraphTransform();
+                    
+                    // After the transform is applied, restart simulation gently
+                    setTimeout(() => {
+                        if (this.forceSimulation) {
+                            this.forceSimulation.restartGently();
+                        }
+                    }, 100);
+                });
+            } else if (!isVisible) {
+                // Container has become invisible
+                this.wasInvisible = true;
+            }
+        }, { 
+            threshold: 0.05 // Trigger with just 5% visibility to respond faster
+        });
+        
+        // Start observing the container
+        if (this.container) {
+            this.visibilityObserver.observe(this.container);
+        }
     }
 }

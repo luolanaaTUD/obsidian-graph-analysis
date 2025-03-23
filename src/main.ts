@@ -131,7 +131,32 @@ export class GraphAnalysisView extends ItemView {
         
         return;
     }
-
+    
+    // Handle view reactivation to ensure graph is centered
+    async onResize(): Promise<void> {
+        // When view is resized, ensure the graph is properly centered
+        await this.centerGraphSafely();
+        return;
+    }
+    
+    // This event is triggered when the view becomes active
+    setEphemeralState(state: any): void {
+        super.setEphemeralState(state);
+        // When view becomes active, ensure the graph is properly positioned
+        this.centerGraphSafely();
+    }
+    
+    // Called when the parent plugin asks for the state
+    getState(): any {
+        const state = super.getState();
+        
+        // Return current view state with our additional info
+        return {
+            ...state,
+            lastActive: Date.now()
+        };
+    }
+    
     async onClose(): Promise<void> {
         // Clean up the graph view
         if (this.graphView) {
@@ -145,6 +170,29 @@ export class GraphAnalysisView extends ItemView {
         // Clear references
         this.contentEl.empty();
         return;
+    }
+    
+    // Safely center the graph with error handling
+    private async centerGraphSafely(): Promise<void> {
+        try {
+            // Use the new public methods we created
+            if (this.graphView) {
+                // Use the refreshGraphView method instead of individual calls
+                this.graphView.refreshGraphView();
+                console.log("Graph position updated after view activation/resize");
+                
+                // Restart the simulation gently after a short delay
+                setTimeout(() => {
+                    try {
+                        this.graphView.restartSimulationGently();
+                    } catch (e) {
+                        console.warn("Error restarting force simulation:", e);
+                    }
+                }, 50);
+            }
+        } catch (e) {
+            console.warn("Error updating graph position:", e);
+        }
     }
 }
 
