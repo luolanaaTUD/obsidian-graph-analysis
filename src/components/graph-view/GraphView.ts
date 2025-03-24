@@ -698,15 +698,20 @@ export class GraphView {
         const graphWidth = maxX - minX;
         const graphHeight = maxY - minY;
         
-        // Calculate scale to fill most of the available space
-        // Use a smaller margin to maximize graph size
-        const margin = 120;
-        const scaleX = (this.width - margin * 2) / graphWidth;
-        const scaleY = (this.height - margin * 2) / graphHeight;
+        // Calculate scale to fill 70% of the minimum dimension
+        // instead of using fixed margins
+        const containerScale = 0.69; // The graph should use 70% of the minimum dimension
+        const minDimension = Math.min(this.width, this.height);
+        const scaleX = (containerScale * minDimension) / graphWidth;
+        const scaleY = (containerScale * minDimension) / graphHeight;
         
         // Use the smallest scale to ensure everything fits
-        // Removed the 1.2 limit to allow scaling up small graphs
-        const scale = Math.min(scaleX, scaleY);
+        // Prevent scaling below 0.3 to avoid negative or too small values
+        const minScale = 0.3;
+        let scale = Math.min(scaleX, scaleY);
+        if (scale < minScale) {
+            scale = minScale;
+        }
         
         // Calculate center point of the graph
         const centerX = minX + graphWidth / 2;
@@ -719,7 +724,7 @@ export class GraphView {
             .scale(scale);
         
         this.svg.transition()
-            .duration(500)
+            .duration(300)
             .call(this.zoom.transform, transform);
     }
     
