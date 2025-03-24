@@ -775,15 +775,15 @@ export class GraphView {
         this.nodes = [];
         this.links = [];
         
-        // Null out references to help garbage collection
-        this.svg = null as any;
-        this.svgGroup = null as any;
-        this.zoom = null as any;
-        this.container = null as any;
-        this.forceSimulation = null as any;
-        this.renderer = null as any;
-        this.dragBehavior = null as any;
-        this.nodeInteractions = null as any;
+        // Null out references to help garbage collection - using proper TypeScript nulling
+        this.svg = null!;
+        this.svgGroup = null!;
+        this.zoom = null!;
+        this.container = null!;
+        this.forceSimulation = null!;
+        this.renderer = null!;
+        this.dragBehavior = null!;
+        this.nodeInteractions = null!;
     }
 
     // Public method to recenter the graph
