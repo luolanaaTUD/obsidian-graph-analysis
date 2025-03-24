@@ -517,14 +517,19 @@ export default class GraphAnalysisPlugin extends Plugin {
             this.wasmLoadingNotice = null;
         }
         
+        // Mark WASM as uninitialized to prevent further usage
+        this.wasmInitialized = false;
+        
+        // Release WASM resources for garbage collection
+        // Note: WebAssembly doesn't provide explicit unload methods,
+        // but marking as uninitialized and releasing references helps garbage collection
+        this.wasmLoadingPromise = null;
+        
         // Release event handlers explicitly (although registerEvent handles this)
         this.fileCreatedHandler = null;
         this.fileDeletedHandler = null;
         this.fileModifiedHandler = null;
         this.metadataChangedHandler = null;
-        
-        // Nullify WASM loading promise to allow garbage collection
-        this.wasmLoadingPromise = null;
         
         // Close any open graph views
         const leaves = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);

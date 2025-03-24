@@ -794,6 +794,10 @@ export class GraphView {
             this._tooltipTimeout = null;
         }
         
+        // Note: WASM resources are managed at the plugin level
+        // The main plugin class handles WASM initialization and cleanup
+        // This component does not directly interact with WASM resources
+        
         // Stop simulation and explicitly release force references
         if (this.simulation) {
             this.simulation.stop();
