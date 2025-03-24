@@ -794,10 +794,29 @@ export class GraphView {
             this._tooltipTimeout = null;
         }
         
-        // Stop simulation
+        // Stop simulation and explicitly release force references
         if (this.simulation) {
             this.simulation.stop();
+            // Remove all forces to release their references
+            this.simulation.force('link', null);
+            this.simulation.force('charge', null);
+            this.simulation.force('x', null);
+            this.simulation.force('y', null);
+            this.simulation.force('collision', null);
+            // Clear node references
+            this.simulation.nodes([]);
+            // @ts-ignore - explicitly break circular references
+            this.simulation = null;
         }
+        
+        // Remove event listeners from nodes and other elements
+        if (this.nodesSelection) {
+            this.nodesSelection.on('mouseover', null).on('mouseout', null).on('click', null);
+        }
+        
+        // Clear data arrays to release memory
+        this.nodes = [];
+        this.links = [];
         
         // Clean up observers
         if (this.resizeObserver) {
@@ -816,9 +835,58 @@ export class GraphView {
             this.loadingIndicator = null;
         }
         
-        // Remove all selections
+        // Remove any tooltips or other floating elements
+        this.removeNodeTooltip();
+        
+        // Remove all selections with proper cleanup
         if (this.svg) {
+            // Remove event listeners from SVG and zoom behavior
+            this.svg.on('.zoom', null);
+            // Clear the zoom reference
+            // @ts-ignore - explicitly break circular references
+            this.zoom = null;
+            
+            // Remove all elements and clear selection references
             this.svg.selectAll('*').remove();
+            
+            // Clear selection references in a type-safe way
+            // @ts-ignore - explicitly break circular references
+            this.svgGroup = null;
+            
+            // Don't directly set to null, but create empty selections if needed for type safety
+            if (this.nodesSelection) {
+                // @ts-ignore - we're intentionally clearing the selections
+                this.nodesSelection = undefined;
+            }
+            
+            if (this.linksSelection) {
+                // @ts-ignore - we're intentionally clearing the selections
+                this.linksSelection = undefined;
+            }
+            
+            if (this.labelsSelection) {
+                // @ts-ignore - we're intentionally clearing the selections
+                this.labelsSelection = undefined;
+            }
+            
+            // Finally remove the SVG element itself
+            this.svg.remove();
+            // @ts-ignore - explicitly break circular references
+            this.svg = null;
         }
+        
+        // Clear container reference
+        // @ts-ignore - explicitly break circular references
+        this.container = null;
+        
+        // Clear core component references
+        // @ts-ignore - explicitly break circular references
+        this.graphDataBuilder = null;
+        // @ts-ignore - explicitly break circular references
+        this.centralityCalculator = null;
+        
+        // Clear application reference
+        // @ts-ignore - explicitly break circular references
+        this.app = null;
     }
 } 
