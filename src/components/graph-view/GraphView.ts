@@ -125,7 +125,7 @@ export class GraphView {
         // Track zoom state to prevent redundant operations
         let isZooming = false;
         let zoomEndTimeout: number | null = null;
-        
+            
         // Add zoom behavior
         this.zoom = d3.zoom<SVGSVGElement, unknown>()
             .scaleExtent([0.1, 4])
@@ -134,7 +134,7 @@ export class GraphView {
                 this.svgGroup.attr('transform', event.transform);
                 
                 // Close tooltip on zoom
-                this.nodeInteractions.removeNodeTooltip();
+                    this.nodeInteractions.removeNodeTooltip();
                 
                 // Set zooming state
                 if (!isZooming) {
@@ -205,9 +205,9 @@ export class GraphView {
             
             this._resizeTimeout = window.setTimeout(() => {
                 // Get the entry for our container
-                const containerEntry = entries.find(entry => entry.target === this.container);
-                if (!containerEntry) return;
-                
+            const containerEntry = entries.find(entry => entry.target === this.container);
+            if (!containerEntry) return;
+            
                 // Get the new dimensions
                 const newWidth = containerEntry.contentRect.width;
                 const newHeight = containerEntry.contentRect.height;
@@ -260,8 +260,8 @@ export class GraphView {
         
         // Start observing the container
         if (this.container) {
-            this.resizeObserver.observe(this.container);
-        }
+        this.resizeObserver.observe(this.container);
+    }
     }
     
     private updateDimensions() {
@@ -461,10 +461,10 @@ export class GraphView {
                     // Fallback plan - just try to open the note without closing the graph
                     if (d.path) {
                         const file = this.app.vault.getAbstractFileByPath(d.path);
-                        if (file instanceof TFile) {
-                            this.app.workspace.getLeaf().openFile(file);
-                        }
-                    }
+            if (file instanceof TFile) {
+                this.app.workspace.getLeaf().openFile(file);
+            }
+        }
                 }
             })
             .on('mouseover', (event, d) => this.nodeInteractions.onNodeMouseOver(event, d))
@@ -514,7 +514,7 @@ export class GraphView {
         this.loadingIndicator.createSpan({ text: 'Loading graph data...' });
         return this.loadingIndicator;
     }
-    
+
     private hideLoadingIndicator() {
         if (this.loadingIndicator && this.loadingIndicator.parentNode) {
             this.loadingIndicator.remove();
@@ -525,38 +525,38 @@ export class GraphView {
     private async loadVaultData() {
         try {
             // Build the graph data
-            const graphData = await this.graphDataBuilder.buildGraphData();
-            
+        const graphData = await this.graphDataBuilder.buildGraphData();
+        
             // Calculate degree centrality using WASM
-            const centralityResults = this.centralityCalculator.calculate(graphData);
-            
+        const centralityResults = this.centralityCalculator.calculate(graphData);
+        
             // Convert to D3 format
             this.nodes = [];
             this.links = [];
             
             // Create nodes with centrality scores from WASM
             graphData.nodes.forEach((nodePath, index) => {
-                const fileName = nodePath.split('/').pop() || nodePath;
-                const displayName = fileName.replace('.md', '');
-                
+            const fileName = nodePath.split('/').pop() || nodePath;
+            const displayName = fileName.replace('.md', '');
+            
                 // Find corresponding centrality result
-                const centralityResult = centralityResults.find(r => r.node_id === index);
-                const centralityScore = centralityResult ? centralityResult.score : 0;
-                
+            const centralityResult = centralityResults.find(r => r.node_id === index);
+            const centralityScore = centralityResult ? centralityResult.score : 0;
+            
                 this.nodes.push({
-                    id: index.toString(),
-                    name: displayName,
-                    path: nodePath,
-                    centralityScore: centralityScore,
+                id: index.toString(),
+                name: displayName,
+                path: nodePath,
+                centralityScore: centralityScore,
                     degree: centralityScore // Ensure we're using the Rust-calculated degree score
                 });
-            });
-            
+        });
+        
             // Create links
             graphData.edges.forEach(([sourceIdx, targetIdx]) => {
                 this.links.push({
-                    source: sourceIdx.toString(),
-                    target: targetIdx.toString()
+            source: sourceIdx.toString(),
+            target: targetIdx.toString()
                 });
             });
             
@@ -702,8 +702,8 @@ export class GraphView {
         // Disconnect ResizeObserver if it exists
         if (this.resizeObserver) {
             try {
-                this.resizeObserver.disconnect();
-                this.resizeObserver = null;
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
             } catch (e) {
                 console.warn('Error disconnecting ResizeObserver:', e);
             }
@@ -712,8 +712,8 @@ export class GraphView {
         // Disconnect VisibilityObserver if it exists
         if (this.visibilityObserver) {
             try {
-                this.visibilityObserver.disconnect();
-                this.visibilityObserver = null;
+            this.visibilityObserver.disconnect();
+            this.visibilityObserver = null;
             } catch (e) {
                 console.warn('Error disconnecting VisibilityObserver:', e);
             }
@@ -790,14 +790,14 @@ export class GraphView {
     public recenterGraph(): void {
         this.updateGraphTransform();
     }
-    
+
     // Public method to restart the force simulation gently
     public restartSimulationGently(): void {
         if (this.forceSimulation) {
             this.forceSimulation.restartGently();
         }
     }
-    
+
     // Public method to force a dimension update and transform 
     public refreshGraphView(): void {
         // Cancel any pending resize timeouts to avoid duplicate updates
@@ -863,7 +863,7 @@ export class GraphView {
                 
                 // Mark as visible before updating dimensions to avoid unwanted
                 // transitions and double refreshes
-                this.wasInvisible = false;
+                    this.wasInvisible = false;
                 
                 // Cancel any existing timeouts to avoid conflicts
                 if (this._resizeTimeout) {
@@ -898,7 +898,7 @@ export class GraphView {
         
         // Start observing the container
         if (this.container) {
-            this.visibilityObserver.observe(this.container);
+        this.visibilityObserver.observe(this.container);
         }
     }
 }
