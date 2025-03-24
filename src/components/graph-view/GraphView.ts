@@ -176,10 +176,15 @@ export class GraphView {
             .force('charge', d3.forceManyBody().strength(-120)) // Stronger repulsion for more spread
             .force('x', d3.forceX().strength(0.1)) // Weaker center force for more natural layout
             .force('y', d3.forceY().strength(0.1)) // Weaker center force for more natural layout
-            // Replace the basic collision with a custom implementation using quadtree
+            // Add built-in collision detection with quadtree optimization
+            .force('collision', d3.forceCollide<SimulationGraphNode>()
+                .radius(d => this.getNodeRadius() + 2) // Same buffer as our custom implementation
+                .strength(0.8) // Slightly softer than full collision (1.0) for more natural movement
+                .iterations(2)) // More iterations = more accurate but more computationally expensive
+            .alphaDecay(0.0228) // Default D3 value for smoother transitions
+            .velocityDecay(0.4) // Slightly higher than D3 default (0.4 vs 0.3) for more stability
             .on('tick', () => {
-                // Apply custom forces
-                this.applyCollisionDetection();
+                // Apply only the custom bounding force
                 this.applyBoundingForce();
                 
                 // Use requestAnimationFrame to throttle render updates
@@ -190,68 +195,6 @@ export class GraphView {
                     });
                 }
             });
-    }
-    
-    /**
-     * Apply collision detection using D3's quadtree for better performance
-     */
-    private applyCollisionDetection() {
-        const nodeRadius = this.getNodeRadius();
-        const radius = nodeRadius + 2; // Slightly larger than node radius for better spacing
-        const nodes = this.nodes;
-        
-        // Create a quadtree for efficient spatial indexing
-        const quadtree = d3.quadtree<SimulationGraphNode>()
-            .x(d => d.x || 0)
-            .y(d => d.y || 0)
-            .addAll(nodes);
-            
-        // For each node, check for collisions with nearby nodes
-        for (let node of nodes) {
-            const nx = node.x || 0;
-            const ny = node.y || 0;
-            
-            // Define search area around this node
-            const x0 = nx - radius;
-            const y0 = ny - radius;
-            const x3 = nx + radius;
-            const y3 = ny + radius;
-            
-            // Find nodes within radius and apply collision forces
-            quadtree.visit((quad, x1, y1, x2, y2) => {
-                // Only process leaf nodes with data
-                if (!quad.length) {
-                    // Cast to QuadtreeLeaf to handle TypeScript type checks
-                    const leaf = quad as d3.QuadtreeLeaf<SimulationGraphNode>;
-                    
-                    if (leaf.data && leaf.data !== node) {
-                        const otherNode = leaf.data;
-                        const x = nx - (otherNode.x || 0);
-                        const y = ny - (otherNode.y || 0);
-                        let l = Math.sqrt(x * x + y * y);
-                        const r = radius * 2;
-                        
-                        // If nodes are overlapping, push them away from each other
-                        if (l < r) {
-                            l = (l - r) / l * 0.5;
-                            const lx = x * l;
-                            const ly = y * l;
-                            
-                            // Move current node away
-                            node.x = nx - lx;
-                            node.y = ny - ly;
-                            
-                            // Move colliding node away in opposite direction
-                            otherNode.x = (otherNode.x || 0) + lx;
-                            otherNode.y = (otherNode.y || 0) + ly;
-                        }
-                    }
-                }
-                
-                // Return true if this quad doesn't need to be checked further
-                return x1 > x3 || y1 > y3 || x2 < x0 || y2 < y0;
-            });
-        }
     }
     
     /**
@@ -783,7 +726,8 @@ export class GraphView {
     public restartSimulationGently(): void {
         try {
             if (this.simulation) {
-                this.simulation.alpha(0.3).restart();
+                // Use a lower alpha value for gentler restart with our optimized decay settings
+                this.simulation.alpha(0.1).restart();
             }
         } catch (e) {
             console.error("Error restarting simulation:", e);
