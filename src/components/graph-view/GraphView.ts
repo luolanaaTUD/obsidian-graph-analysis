@@ -64,6 +64,12 @@ export class GraphView {
     private highlightedNodeId: string | null = null;
     private _tooltipTimeout: number | null = null;
 
+    // Add these constants at the class level after the private member declarations
+    private readonly ANIMATION_DURATION = 200;
+    private readonly HOVER_ANIMATION_DURATION = 100; 
+    private readonly TOOLTIP_DELAY = 500;
+    private readonly RECENTER_ANIMATION_DURATION = 300;
+
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
         
@@ -113,7 +119,7 @@ export class GraphView {
         
         // Create groups for links, labels, and nodes with explicit rendering order
         const linksGroup = this.svgGroup.append('g')
-            .attr('stroke', '#999')
+            .attr('stroke', 'var(--graph-link-default)')
             .attr('stroke-opacity', 0.6)
             .attr('class', 'links-group');
             
@@ -121,7 +127,7 @@ export class GraphView {
             .attr('class', 'labels-group');
             
         const nodesGroup = this.svgGroup.append('g')
-            .attr('stroke', '#fff')
+            .attr('stroke', 'var(--graph-node-stroke)')
             .attr('stroke-width', 1.5)
             .attr('class', 'nodes-group');
 
@@ -297,9 +303,9 @@ export class GraphView {
         // Highlight the node
         d3.select(event.currentTarget as SVGCircleElement)
             .transition()
-            .duration(100)
+            .duration(this.HOVER_ANIMATION_DURATION)
             .attr('stroke-width', 2)
-            .style('fill', 'var(--graph-node-hover)');
+            .attr('fill', 'var(--graph-node-hover)');
         
         // Highlight connections
         this.highlightConnections(d.id, true);
@@ -316,7 +322,7 @@ export class GraphView {
                 this.showNodeTooltip(d, event);
             }
             this._tooltipTimeout = null;
-        }, 500);
+        }, this.TOOLTIP_DELAY);
         
         this.highlightedNodeId = d.id;
     }
@@ -325,9 +331,9 @@ export class GraphView {
         // Remove highlight
         d3.select(event.currentTarget as SVGCircleElement)
             .transition()
-            .duration(100)
+            .duration(this.HOVER_ANIMATION_DURATION)
             .attr('stroke-width', 1.5)
-            .style('fill', this.getNodeColor(d));
+            .attr('fill', this.getNodeColor(d));
         
         // Remove connections highlight
         this.highlightConnections(d.id, false);
@@ -428,6 +434,9 @@ export class GraphView {
             return;
         }
         
+        // Store animation duration in a local variable to use in callbacks
+        const animationDuration = this.ANIMATION_DURATION;
+        
         // Find connected nodes
         const connectedNodeIds = new Set<string>();
         this.links.forEach(link => {
@@ -446,8 +455,8 @@ export class GraphView {
             const isConnected = d.id === nodeId || connectedNodeIds.has(d.id);
             d3.select(this)
                 .transition()
-                .duration(200)
-                .style('opacity', isConnected ? 1 : 0.3);
+                .duration(animationDuration)
+                .attr('opacity', isConnected ? 1 : 0.3);
         });
         
         this.linksSelection.each(function(d) {
@@ -455,11 +464,15 @@ export class GraphView {
             const targetId = typeof d.target === 'string' ? d.target : (d.target as unknown as SimulationGraphNode).id;
             const isConnected = sourceId === nodeId || targetId === nodeId;
             
+            // Get base width
+            const baseWidth = d.value ? Math.sqrt(d.value) : 1;
+            
             d3.select(this)
                 .transition()
-                .duration(200)
-                .style('stroke-opacity', isConnected ? 0.8 : 0.2)
-                .style('stroke-width', isConnected ? 2 : 1);
+                .duration(animationDuration)
+                .attr('stroke-opacity', isConnected ? 1 : 0.2)
+                .attr('stroke-width', isConnected ? baseWidth * 1.5 : baseWidth)
+                .attr('stroke', isConnected ? 'var(--graph-link-highlighted)' : 'var(--graph-link-default)');
         });
         
         // Also dim unconnected labels
@@ -467,8 +480,8 @@ export class GraphView {
             const isConnected = d.id === nodeId || connectedNodeIds.has(d.id);
             d3.select(this)
                 .transition()
-                .duration(200)
-                .style('opacity', isConnected ? 1 : 0.2);
+                .duration(animationDuration)
+                .attr('opacity', isConnected ? 1 : 0.2);
         });
     }
     
@@ -476,20 +489,22 @@ export class GraphView {
         // Reset all nodes, links, and labels to default state
         this.nodesSelection
             .transition()
-            .duration(200)
-            .style('opacity', 1)
-            .style('fill', 'var(--graph-node-default)');
+            .duration(this.ANIMATION_DURATION)
+            .attr('opacity', 1)
+            .attr('fill', 'var(--graph-node-default)');
             
+        // Reset links to default style
         this.linksSelection
             .transition()
-            .duration(200)
-            .style('stroke-opacity', 0.6)
-            .style('stroke-width', 1);
+            .duration(this.ANIMATION_DURATION)
+            .attr('stroke-opacity', 0.6)
+            .attr('stroke-width', d => d.value ? Math.sqrt(d.value) : 1)
+            .attr('stroke', 'var(--graph-link-default)');
             
         this.labelsSelection
             .transition()
-            .duration(200)
-            .style('opacity', d => d.degree && d.degree > 3 ? 0.8 : 0.6);
+            .duration(this.ANIMATION_DURATION)
+            .attr('opacity', d => d.degree && d.degree > 3 ? 0.8 : 0.6);
     }
     
     private setupDragBehavior() {
@@ -510,6 +525,9 @@ export class GraphView {
                     // Set fixed position
                     d.fx = d.x;
                     d.fy = d.y;
+                    
+                    // Highlight connections when starting drag
+                    this.highlightConnections(d.id, true);
                 } catch (e) {
                     console.error("Error in drag start:", e);
                 }
@@ -532,6 +550,9 @@ export class GraphView {
                     // Clear fixed position
                     d.fx = null;
                     d.fy = null;
+                    
+                    // Reset highlights after drag ends
+                    this.resetHighlights();
                 } catch (e) {
                     console.error("Error in drag end:", e);
                 }
@@ -593,7 +614,9 @@ export class GraphView {
             .data(this.links, d => `${d.source}-${d.target}`)
             .join(
                 enter => enter.append('line')
-                    .attr('stroke-width', d => Math.sqrt(d.value || 1)) // Scale line width by value like example
+                    .attr('stroke-width', d => d.value ? Math.sqrt(d.value) : 1)
+                    .attr('stroke-opacity', 0.6)
+                    .attr('stroke', 'var(--graph-link-default)')
                     .attr('class', 'graph-link'),
                 update => update,
                 exit => exit.remove()
@@ -630,10 +653,10 @@ export class GraphView {
                 enter => enter.append('text')
                     .attr('dy', d => this.getNodeRadius(d) + 15)
                     .attr('text-anchor', 'middle')
-                    .style('fill', 'var(--text-normal)')
-                    .style('font-size', '12px')
-                    .style('opacity', 0.7)
-                    .style('pointer-events', 'none') // Prevent labels from interfering with interactions
+                    .attr('fill', 'var(--text-normal)')
+                    .attr('font-size', 'var(--font-ui-smaller)')
+                    .attr('opacity', 'var(--graph-label-opacity, 0.7)')
+                    .attr('pointer-events', 'none') // Prevent labels from interfering with interactions
                     .attr('class', 'graph-label')
                     .text(d => d.name),
                 update => update,
@@ -665,8 +688,16 @@ export class GraphView {
     }
     
     private getNodeColor(node: SimulationGraphNode): string {
-        // Use a consistent color for all nodes as requested
-        return '#1f77b4'; // D3's default blue color
+        // Use the CSS variable for consistent theming across light/dark modes
+        return 'var(--graph-node-default)';
+    }
+    
+    /**
+     * Get the color for links based on CSS variables for consistent theming
+     */
+    private getLinkColor(): string {
+        // Use the CSS variable for consistent theming across light/dark modes
+        return 'var(--graph-link-default)';
     }
     
     public refreshGraphView(): void {
@@ -698,7 +729,6 @@ export class GraphView {
         const graphWidth = maxX - minX;
         const graphHeight = maxY - minY;
         
-        // Calculate scale to fill 70% of the minimum dimension
         // instead of using fixed margins
         const containerScale = 0.69; // The graph should use 70% of the minimum dimension
         const minDimension = Math.min(this.width, this.height);
@@ -724,7 +754,7 @@ export class GraphView {
             .scale(scale);
         
         this.svg.transition()
-            .duration(300)
+            .duration(this.RECENTER_ANIMATION_DURATION)
             .call(this.zoom.transform, transform);
     }
     
