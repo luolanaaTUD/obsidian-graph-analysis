@@ -99,6 +99,11 @@ export class GraphView {
     private readonly ZOOM_OUT_SCALE_FACTOR = 600; // Higher = allows zooming out further
     private readonly ZOOM_IN_SCALE_FACTOR = 60;   // Lower = allows zooming in closer
 
+    // Constants for tooltip positioning
+    private readonly TOOLTIP_OFFSET_X = 20; // Fixed distance from node to tooltip
+    private readonly TOOLTIP_OFFSET_Y = 0;  // Vertical offset (0 = centered)
+    private readonly TOOLTIP_MARGIN = 15;   // Minimum margin from container edges
+
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
         
@@ -446,31 +451,7 @@ export class GraphView {
         const tooltip = this.container.createDiv({ cls: 'graph-node-tooltip' });
         this.currentTooltip = tooltip;
         
-        // Get the current transform to position tooltip correctly
-        const transform = d3.zoomTransform(this.svg.node() as Element);
-        
-        // Calculate position based on node coordinates and current transform
-        // With centered viewBox, we need to adjust by half the container dimensions
-        const nodeX = (node.x || 0) * transform.k + transform.x;
-        const nodeY = (node.y || 0) * transform.k + transform.y;
-        
-        // Get container dimensions for positioning
-        const containerRect = this.container.getBoundingClientRect();
-        const radius = this.getNodeRadius(node);
-        
-        // Position tooltip relative to the node's transformed coordinates
-        // Add offset to prevent tooltip from overlapping with the node
-        const offsetX = radius + 10;
-        const offsetY = -20; // Position slightly above the node
-        
-        // With the centered viewBox, we need to add half the container dimensions
-        const x = nodeX + containerRect.width / 2 + offsetX;
-        const y = nodeY + containerRect.height / 2 + offsetY;
-        
-        tooltip.style.left = `${x}px`;
-        tooltip.style.top = `${y}px`;
-        
-        // Add content
+        // Add content to tooltip
         tooltip.createEl('h3', { text: node.name });
         
         // Add metadata if available
@@ -490,16 +471,27 @@ export class GraphView {
             field.createSpan({ cls: 'tooltip-value', text: node.centralityScore.toFixed(3) });
         }
         
-        // Ensure tooltip stays within container bounds
-        const tooltipRect = tooltip.getBoundingClientRect();
-        if (tooltipRect.right > containerRect.right) {
-            tooltip.style.left = `${x - tooltipRect.width - radius - 20}px`;
-        }
-        if (tooltipRect.bottom > containerRect.bottom) {
-            tooltip.style.top = `${y - tooltipRect.height}px`;
-        }
+        // Placeholder for proper tooltip positioning
+        // Temporarily position in the middle of the container
+        const containerRect = this.container.getBoundingClientRect();
+        tooltip.style.left = `${containerRect.width / 2}px`;
+        tooltip.style.top = `${containerRect.height / 2}px`;
     }
 
+    /**
+     * Position the tooltip at a fixed distance from the node
+     */
+    private positionTooltip(
+        tooltip: HTMLElement, 
+        nodeX: number, 
+        nodeY: number, 
+        nodeRadius: number, 
+        containerRect: DOMRect
+    ): void {
+        // This method is kept as a stub but not used
+        // The user will implement their own tooltip positioning solution
+    }
+    
     private highlightConnections(nodeId: string, highlight: boolean) {
         if (!highlight) {
             this.resetHighlights();
