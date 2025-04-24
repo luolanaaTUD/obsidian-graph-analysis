@@ -20,6 +20,12 @@ interface SimulationGraphLink {
     value?: number;
 }
 
+// Define the type for cached node neighbors
+interface NodeNeighborsCache {
+    nodeId: string; // ID of the node whose neighbors are cached
+    neighbors: Set<string>; // Set of neighbor node IDs
+}
+
 // Type guard to check if a node is our SimulationGraphNode
 function isSimulationGraphNode(node: d3.SimulationNodeDatum): node is SimulationGraphNode {
     return 'id' in node && 'name' in node;
@@ -65,6 +71,9 @@ export class GraphView {
     private _tooltipTimeout: number | null = null;
     private isDraggingNode: boolean = false;
     
+    // Neighbors cache to avoid repeated WASM calls
+    private nodeNeighborsCache: NodeNeighborsCache | null = null;
+    
     // Highlight state constants to ensure consistency
     private readonly HIGHLIGHT_STATES = {
         NONE: 'none',
@@ -73,10 +82,13 @@ export class GraphView {
     } as const;
     
     // Add these constants at the class level after the private member declarations
-    private readonly ANIMATION_DURATION = 100;
-    private readonly HOVER_ANIMATION_DURATION = 100; 
+    private readonly ANIMATION_DURATION = 200;
+    private readonly HOVER_ANIMATION_DURATION = 200; 
     private readonly TOOLTIP_DELAY = 500;
     private readonly RECENTER_ANIMATION_DURATION = 300;
+
+    // Add this property at the class level after the private readonly constants section
+    private currentTooltip: HTMLElement | null = null;
 
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
@@ -185,6 +197,9 @@ export class GraphView {
 
     private initializeSimulation() {
         // Create a simulation with modified forces to better fill the available space
+        // Use a constant node radius for collision detection to avoid multiple function calls
+        const collisionRadius = this.getNodeRadius() + 2; // Same buffer as before
+        
         this.simulation = d3.forceSimulation<SimulationGraphNode>()
             .force('link', d3.forceLink<SimulationGraphNode, SimulationGraphLink>().id(d => d.id).distance(50)) // Increase link distance
             .force('charge', d3.forceManyBody().strength(-120)) // Stronger repulsion for more spread
@@ -192,7 +207,7 @@ export class GraphView {
             .force('y', d3.forceY().strength(0.1)) // Weaker center force for more natural layout
             // Add built-in collision detection with quadtree optimization
             .force('collision', d3.forceCollide<SimulationGraphNode>()
-                .radius(d => this.getNodeRadius() + 2) // Same buffer as our custom implementation
+                .radius(d => collisionRadius) // Use the constant collision radius
                 .strength(0.8) // Slightly softer than full collision (1.0) for more natural movement
                 .iterations(2)) // More iterations = more accurate but more computationally expensive
             .alphaDecay(0.0228) // Default D3 value for smoother transitions
@@ -234,23 +249,28 @@ export class GraphView {
     }
     
     private updateGraph() {
-        // Safety check
-        if (!this.linksSelection || !this.nodesSelection || !this.labelsSelection) return;
+        // Cache selection references for performance
+        const linksSelection = this.linksSelection;
+        const nodesSelection = this.nodesSelection;
+        const labelsSelection = this.labelsSelection;
+        
+        // Safety check - if selections don't exist, exit early
+        if (!linksSelection || !nodesSelection || !labelsSelection) return;
         
         // Update link positions
-        this.linksSelection
+        linksSelection
             .attr('x1', d => (d.source as unknown as SimulationGraphNode).x || 0)
             .attr('y1', d => (d.source as unknown as SimulationGraphNode).y || 0)
             .attr('x2', d => (d.target as unknown as SimulationGraphNode).x || 0)
             .attr('y2', d => (d.target as unknown as SimulationGraphNode).y || 0);
             
         // Update node positions
-        this.nodesSelection
+        nodesSelection
             .attr('cx', d => d.x || 0)
             .attr('cy', d => d.y || 0);
             
         // Update label positions
-        this.labelsSelection
+        labelsSelection
             .attr('x', d => d.x || 0)
             .attr('y', d => d.y || 0);
     }
@@ -337,6 +357,10 @@ export class GraphView {
         this.clearTooltipTimeout();
         this.highlightedNodeId = null;
         this.removeNodeTooltip();
+        
+        // We don't need to clear the neighbors cache here
+        // It will be overwritten when we interact with another node
+        // And must be cleared only when the graph data changes
     }
     
     private onNodeClick(event: any, d: SimulationGraphNode) {
@@ -352,8 +376,11 @@ export class GraphView {
     }
     
     private removeNodeTooltip() {
-        // Remove any existing tooltip
-        this.container.querySelectorAll('.graph-node-tooltip').forEach(el => el.remove());
+        // Remove any existing tooltip using our cached reference
+        if (this.currentTooltip) {
+            this.currentTooltip.remove();
+            this.currentTooltip = null;
+        }
     }
     
     private showNodeTooltip(node: SimulationGraphNode, event: any) {
@@ -362,6 +389,7 @@ export class GraphView {
         
         // Create tooltip
         const tooltip = this.container.createDiv({ cls: 'graph-node-tooltip' });
+        this.currentTooltip = tooltip;
         
         // Get the current transform to position tooltip correctly
         const transform = d3.zoomTransform(this.svg.node() as Element);
@@ -427,14 +455,33 @@ export class GraphView {
         const animationDuration = this.ANIMATION_DURATION;
         
         // Find connected nodes
-        const connectedNodeIds = new Set<string>();
+        let connectedNodeIds = new Set<string>();
         
-        // Try to use the cached graph in WASM first if available
-        try {
-            const nodeIdInt = parseInt(nodeId);
-            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            
-            if (plugin && plugin.getNodeNeighborsCached) {
+        // Check if we have a valid cache for this node
+        const cacheValid = this.nodeNeighborsCache && 
+                           this.nodeNeighborsCache.nodeId === nodeId;
+        
+        // If we're in a drag operation or we have a valid cache, use the cached data
+        if ((this.isDraggingNode && this.highlightedNodeId === nodeId) || cacheValid) {
+            if (this.nodeNeighborsCache) {
+                connectedNodeIds = this.nodeNeighborsCache.neighbors;
+                
+                // Only log in development mode or when debug is enabled
+                if (process.env.NODE_ENV === 'development') {
+                    console.log(`Using cached neighbors (${connectedNodeIds.size}) for node ${nodeId}`);
+                }
+            }
+        } else {
+            // No cache hit, need to get data from WASM
+            try {
+                const nodeIdInt = parseInt(nodeId);
+                const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+                
+                if (!plugin || !plugin.getNodeNeighborsCached) {
+                    console.error('WASM functions are not available. Make sure the plugin is properly initialized.');
+                    throw new Error('WASM functions not available');
+                }
+                
                 // Use the WASM cached implementation
                 const neighborResult = plugin.getNodeNeighborsCached(nodeIdInt);
                 
@@ -444,35 +491,66 @@ export class GraphView {
                         connectedNodeIds.add(neighbor.node_id.toString());
                     });
                     
-                    console.log(`Retrieved ${connectedNodeIds.size} neighbors from WASM cache`);
-                }
-            } else {
-                // Fallback to JavaScript implementation
-                this.links.forEach(link => {
-                    const sourceId = typeof link.source === 'string' ? link.source : (link.source as unknown as SimulationGraphNode).id;
-                    const targetId = typeof link.target === 'string' ? link.target : (link.target as unknown as SimulationGraphNode).id;
-                    
-                    if (sourceId === nodeId) {
-                        connectedNodeIds.add(targetId);
-                    } else if (targetId === nodeId) {
-                        connectedNodeIds.add(sourceId);
+                    // Only log in development mode or when debug is enabled
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log(`Retrieved ${connectedNodeIds.size} neighbors from WASM cache for node ${nodeId}`);
                     }
-                });
-            }
-        } catch (error) {
-            console.error('Error getting neighbors from WASM cache, falling back to JS implementation:', error);
-            
-            // Fallback to JavaScript implementation
-            this.links.forEach(link => {
-                const sourceId = typeof link.source === 'string' ? link.source : (link.source as unknown as SimulationGraphNode).id;
-                const targetId = typeof link.target === 'string' ? link.target : (link.target as unknown as SimulationGraphNode).id;
-                
-                if (sourceId === nodeId) {
-                    connectedNodeIds.add(targetId);
-                } else if (targetId === nodeId) {
-                    connectedNodeIds.add(sourceId);
+                    
+                    // Update the cache with the new data
+                    this.nodeNeighborsCache = {
+                        nodeId: nodeId,
+                        neighbors: connectedNodeIds
+                    };
+                } else if (neighborResult && neighborResult.error) {
+                    // If there's an error message in the result, handle it
+                    console.error(`Error from WASM neighbor function: ${neighborResult.error}`);
+                    throw new Error(neighborResult.error);
+                } else {
+                    // If no neighbor data and no error, it's an unexpected result format
+                    console.error('Unexpected result format from WASM neighbor function', neighborResult);
+                    throw new Error('Unexpected result format from WASM');
                 }
-            });
+            } catch (error) {
+                // Log the error and initialize/refresh the graph cache as a recovery attempt
+                console.error('Error in highlightConnections with WASM:', error);
+                
+                // Clear the cache on error
+                this.nodeNeighborsCache = null;
+                
+                // Attempt to reinitialize the graph cache with current data
+                try {
+                    const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+                    if (plugin && plugin.initializeGraphCache) {
+                        // Format the graph data for WASM
+                        const wasmGraphData = {
+                            nodes: this.nodes.map(node => node.name),
+                            edges: this.links.map(link => {
+                                const source = typeof link.source === 'string' ? parseInt(link.source) : parseInt((link.source as unknown as SimulationGraphNode).id);
+                                const target = typeof link.target === 'string' ? parseInt(link.target) : parseInt((link.target as unknown as SimulationGraphNode).id);
+                                return [source, target];
+                            })
+                        };
+                        
+                        // Reinitialize the graph in WASM
+                        plugin.initializeGraphCache(JSON.stringify(wasmGraphData))
+                            .then(() => {
+                                console.log('Graph cache reinitialized after error');
+                                // Retry the highlight operation after reinitialization
+                                this.highlightConnections(nodeId, highlight);
+                                return;
+                            })
+                            .catch((reinitError: any) => {
+                                console.error('Failed to reinitialize graph cache:', reinitError);
+                            });
+                    }
+                } catch (reinitError) {
+                    console.error('Error attempting to reinitialize graph cache:', reinitError);
+                }
+                
+                // Since we're returning early after attempting reinitialization,
+                // we don't proceed with any fallback or highlighting updates
+                return;
+            }
         }
         
         // Dim all nodes and links not connected
@@ -511,24 +589,30 @@ export class GraphView {
     }
     
     private resetHighlights() {
+        // Clear the neighbors cache when resetting highlights
+        this.nodeNeighborsCache = null;
+        
+        // Store animation duration in a local variable for consistency with other methods
+        const animationDuration = this.ANIMATION_DURATION;
+        
         // Reset all nodes, links, and labels to default state
         this.nodesSelection
             .transition()
-            .duration(this.ANIMATION_DURATION)
+            .duration(animationDuration)
             .attr('opacity', 1)
             .attr('fill', 'var(--graph-node-default)');
             
         // Reset links to default style
         this.linksSelection
             .transition()
-            .duration(this.ANIMATION_DURATION)
+            .duration(animationDuration)
             .attr('stroke-opacity', 0.6)
             .attr('stroke-width', d => d.value ? Math.sqrt(d.value) : 1)
             .attr('stroke', 'var(--graph-link-default)');
             
         this.labelsSelection
             .transition()
-            .duration(this.ANIMATION_DURATION)
+            .duration(animationDuration)
             .attr('opacity', d => d.degree && d.degree > 3 ? 0.8 : 0.6);
     }
     
@@ -586,6 +670,10 @@ export class GraphView {
                     // Reset drag state
                     this.isDraggingNode = false;
                     
+                    // We keep both the highlight and the cache when drag ends
+                    // The cache will be overwritten when we interact with another node
+                    // The highlight will be cleared when the mouse leaves the node
+                    
                     // Note: We intentionally don't clear highlights here to match hover behavior
                     // The highlight will only be cleared when the mouse leaves the node
                 } catch (e) {
@@ -614,8 +702,12 @@ export class GraphView {
         // Clear any existing tooltip timeout
         this.clearTooltipTimeout();
         
+        // If no node is highlighted or a different node is highlighted, don't schedule
+        if (this.highlightedNodeId !== node.id) return;
+        
         // Show tooltip after a delay
         this._tooltipTimeout = window.setTimeout(() => {
+            // Double-check that the node is still highlighted when the timeout fires
             if (this.highlightedNodeId === node.id) {
                 this.showNodeTooltip(node, event);
             }
@@ -681,6 +773,9 @@ export class GraphView {
         this.nodes = graphData.nodes || [];
         this.links = graphData.links || [];
         
+        // Clear any existing neighbors cache as the graph data has changed
+        this.nodeNeighborsCache = null;
+        
         // Initialize the graph cache in WASM with current graph data
         try {
             // Format the graph data for WASM
@@ -695,13 +790,29 @@ export class GraphView {
             
             // Initialize the graph in WASM
             const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            if (plugin) {
-                await plugin.initializeGraphCache(JSON.stringify(wasmGraphData));
+            if (!plugin || !plugin.initializeGraphCache) {
+                throw new Error('WASM functions are not available. Make sure the plugin is properly initialized.');
+            }
+            
+            const result = await plugin.initializeGraphCache(JSON.stringify(wasmGraphData));
+            
+            if (result && result.error) {
+                console.error(`Error initializing graph cache in WASM: ${result.error}`);
+                throw new Error(`Failed to initialize graph cache: ${result.error}`);
+            }
+            
+            if (process.env.NODE_ENV === 'development') {
                 console.log('Graph cache initialized in WASM');
             }
         } catch (error) {
             console.error('Failed to initialize graph cache:', error);
-            // Continue anyway, we'll fall back to the JavaScript implementation
+            
+            // Throw the error to indicate initialization failure
+            // This is critical for graph functionality, so we want to make it clear there's an issue
+            new Notice(`Graph initialization failed: ${(error as Error).message || 'Unknown error'}`);
+            
+            // Don't throw here to allow the UI to render even with reduced functionality
+            // Instead, we'll gracefully proceed but log the error
         }
         
         // Create D3 selections for the graph elements
@@ -914,16 +1025,52 @@ export class GraphView {
     }
     
     public onunload() {
-        // Cancel any pending animation frame
+        // Cancel any pending timers or animation frames
         if (this._frameRequest) {
             window.cancelAnimationFrame(this._frameRequest);
             this._frameRequest = null;
         }
         
-        // Clear any pending tooltip timeout
         if (this._tooltipTimeout) {
             window.clearTimeout(this._tooltipTimeout);
             this._tooltipTimeout = null;
+        }
+        
+        // Clean up UI elements
+        this.removeNodeTooltip();
+        
+        if (this.loadingIndicator) {
+            this.loadingIndicator.remove();
+            this.loadingIndicator = null;
+        }
+        
+        // Clear data caches
+        this.nodeNeighborsCache = null;
+        this.nodes = [];
+        this.links = [];
+        
+        // Stop and clean up D3 simulation
+        if (this.simulation) {
+            this.simulation.stop();
+            // Remove all forces in one block
+            ['link', 'charge', 'x', 'y', 'collision'].forEach(force => 
+                this.simulation.force(force, null)
+            );
+            // Clear node references
+            this.simulation.nodes([]);
+            // @ts-ignore - explicitly break circular references
+            this.simulation = null;
+        }
+        
+        // Clean up observers
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
+        
+        if (this.visibilityObserver) {
+            this.visibilityObserver.disconnect();
+            this.visibilityObserver = null;
         }
         
         // Clear the graph cache in WASM
@@ -937,102 +1084,41 @@ export class GraphView {
             console.error('Error clearing graph cache:', error);
         }
         
-        // Note: WASM resources are managed at the plugin level
-        // The main plugin class handles WASM initialization and cleanup
-        // This component does not directly interact with WASM resources
-        
-        // Stop simulation and explicitly release force references
-        if (this.simulation) {
-            this.simulation.stop();
-            // Remove all forces to release their references
-            this.simulation.force('link', null);
-            this.simulation.force('charge', null);
-            this.simulation.force('x', null);
-            this.simulation.force('y', null);
-            this.simulation.force('collision', null);
-            // Clear node references
-            this.simulation.nodes([]);
-            // @ts-ignore - explicitly break circular references
-            this.simulation = null;
-        }
-        
-        // Remove event listeners from nodes and other elements
+        // Clean up D3 selections and SVG
         if (this.nodesSelection) {
             this.nodesSelection.on('mouseover', null).on('mouseout', null).on('click', null);
         }
         
-        // Clear data arrays to release memory
-        this.nodes = [];
-        this.links = [];
-        
-        // Clean up observers
-        if (this.resizeObserver) {
-            this.resizeObserver.disconnect();
-            this.resizeObserver = null;
-        }
-        
-        if (this.visibilityObserver) {
-            this.visibilityObserver.disconnect();
-            this.visibilityObserver = null;
-        }
-        
-        // Clean up UI elements
-        if (this.loadingIndicator) {
-            this.loadingIndicator.remove();
-            this.loadingIndicator = null;
-        }
-        
-        // Remove any tooltips or other floating elements
-        this.removeNodeTooltip();
-        
-        // Remove all selections with proper cleanup
         if (this.svg) {
-            // Remove event listeners from SVG and zoom behavior
+            // Remove event listeners
             this.svg.on('.zoom', null);
-            // Clear the zoom reference
-            // @ts-ignore - explicitly break circular references
-            this.zoom = null;
             
-            // Remove all elements and clear selection references
+            // Remove all elements and clear selections in one operation
             this.svg.selectAll('*').remove();
+            this.svg.remove();
             
-            // Clear selection references in a type-safe way
+            // Clear selection references
             // @ts-ignore - explicitly break circular references
             this.svgGroup = null;
-            
-            // Don't directly set to null, but create empty selections if needed for type safety
-            if (this.nodesSelection) {
-                // @ts-ignore - we're intentionally clearing the selections
-                this.nodesSelection = undefined;
-            }
-            
-            if (this.linksSelection) {
-                // @ts-ignore - we're intentionally clearing the selections
-                this.linksSelection = undefined;
-            }
-            
-            if (this.labelsSelection) {
-                // @ts-ignore - we're intentionally clearing the selections
-                this.labelsSelection = undefined;
-            }
-            
-            // Finally remove the SVG element itself
-            this.svg.remove();
+            // @ts-ignore - explicitly break circular references
+            this.zoom = null;
+            // @ts-ignore - we're intentionally clearing the selections
+            this.nodesSelection = undefined;
+            // @ts-ignore - we're intentionally clearing the selections
+            this.linksSelection = undefined;
+            // @ts-ignore - we're intentionally clearing the selections
+            this.labelsSelection = undefined;
             // @ts-ignore - explicitly break circular references
             this.svg = null;
         }
         
-        // Clear container reference
+        // Clear remaining references
         // @ts-ignore - explicitly break circular references
         this.container = null;
-        
-        // Clear core component references
         // @ts-ignore - explicitly break circular references
         this.graphDataBuilder = null;
         // @ts-ignore - explicitly break circular references
         this.centralityCalculator = null;
-        
-        // Clear application reference
         // @ts-ignore - explicitly break circular references
         this.app = null;
     }

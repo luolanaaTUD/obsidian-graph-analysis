@@ -152,7 +152,35 @@ pub fn clear_graph() -> String {
     serde_json::to_string(&result).unwrap_or_else(|_| r#"{"status":"error","message":"Failed to serialize status"}"#.to_string())
 }
 
-// Function to get neighbors of a node from the cached graph
+#[derive(Serialize)]
+pub struct NeighborInfo {
+    node_id: usize,
+    node_name: String,
+}
+
+#[derive(Serialize)]
+pub struct GraphNeighborsResult {
+    node_id: usize,
+    node_name: String,
+    neighbors: Vec<NeighborInfo>,
+}
+
+#[derive(Serialize)]
+pub struct GraphMetadata {
+    node_count: usize,
+    edge_count: usize,
+    max_degree: usize,
+    avg_degree: f64,
+    is_directed: bool,
+}
+
+#[derive(Serialize)]
+pub struct PathNode {
+    node_id: usize,
+    node_name: String,
+}
+
+// Function to get node neighbors from the cached graph
 #[wasm_bindgen]
 pub fn get_node_neighbors_cached(node_id: usize) -> String {
     utils::set_panic_hook();
@@ -169,14 +197,13 @@ pub fn get_node_neighbors_cached(node_id: usize) -> String {
     
     // Error handling for invalid node ID
     if node_id >= manager.graph.node_count() {
-        let error = ErrorResponse { error: format!("Invalid node_id: {}", node_id) };
+        let error = ErrorResponse { error: format!("Invalid node ID: {}", node_id) };
         return serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string());
     }
     
-    // Get the node index
+    // Get node index
     let node_idx = manager.graph.node_indices().nth(node_id).unwrap();
     
-    // Collect both incoming and outgoing neighbors
     let mut neighbors = Vec::new();
     
     // Add outgoing neighbors
@@ -196,18 +223,6 @@ pub fn get_node_neighbors_cached(node_id: usize) -> String {
     neighbors.dedup();
     
     // Create a result object with neighbor IDs and names
-    #[derive(Serialize)]
-    struct NeighborInfo {
-        node_id: usize,
-        node_name: String,
-    }
-    
-    #[derive(Serialize)]
-    struct GraphNeighborsResult {
-        node_id: usize,
-        node_name: String,
-        neighbors: Vec<NeighborInfo>,
-    }
     
     // Convert neighbor indices to neighbor info objects
     let neighbor_infos: Vec<NeighborInfo> = neighbors.iter()
@@ -313,14 +328,6 @@ pub fn get_graph_metadata() -> String {
     let avg_degree = if node_count > 0 { total_degree as f64 / node_count as f64 } else { 0.0 };
     
     // Create metadata object
-    #[derive(Serialize)]
-    struct GraphMetadata {
-        node_count: usize,
-        edge_count: usize,
-        max_degree: usize,
-        avg_degree: f64,
-        is_directed: bool,
-    }
     
     let metadata = GraphMetadata {
         node_count,
@@ -433,12 +440,6 @@ pub fn find_shortest_path_cached(source_id: usize, target_id: usize) -> String {
     path.reverse();
     
     // Create a more informative result with node names
-    #[derive(Serialize)]
-    struct PathNode {
-        node_id: usize,
-        node_name: String,
-    }
-    
     let path_with_names: Vec<PathNode> = path.iter()
         .map(|&id| PathNode {
             node_id: id,
