@@ -90,6 +90,15 @@ export class GraphView {
     // Add this property at the class level after the private readonly constants section
     private currentTooltip: HTMLElement | null = null;
 
+    // Radius sizing constants
+    private readonly BASE_NODE_RADIUS = 4; // Minimum size for nodes
+    private readonly MAX_NODE_RADIUS = 12; // Maximum size for nodes with highest centrality
+    private readonly NODE_RADIUS_SCALE_FACTOR = 0.69; // How much to scale by centrality (0-1)
+    
+    // Zoom behavior tuning constants
+    private readonly ZOOM_OUT_SCALE_FACTOR = 600; // Higher = allows zooming out further
+    private readonly ZOOM_IN_SCALE_FACTOR = 60;   // Lower = allows zooming in closer
+
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
         
@@ -166,10 +175,47 @@ export class GraphView {
         this.setupResizeObserver();
     }
     
+    /**
+     * Calculate dynamic zoom limits based on screen size and node radius
+     * Centralized method to ensure consistent limits across the application
+     */
+    private calculateZoomLimits(): [number, number] {
+        if (!this.nodes || this.nodes.length === 0) {
+            // Default values when no nodes are available
+            const defaultRadius = this.BASE_NODE_RADIUS;
+            const minZoom = this.width / (defaultRadius * this.ZOOM_OUT_SCALE_FACTOR);
+            const maxZoom = this.width / (defaultRadius * this.ZOOM_IN_SCALE_FACTOR);
+            return [minZoom, maxZoom];
+        }
+        
+        // Calculate statistics for node sizes in the current graph
+        let maxRadius = 0;
+        let totalRadius = 0;
+        let nodeCount = 0;
+        
+        this.nodes.forEach(node => {
+            const radius = this.getNodeRadius(node);
+            maxRadius = Math.max(maxRadius, radius);
+            totalRadius += radius;
+            nodeCount++;
+        });
+        
+        // Use average node radius for min zoom (to see entire graph)
+        const avgRadius = nodeCount > 0 ? totalRadius / nodeCount : this.BASE_NODE_RADIUS;
+        // Use max node radius for max zoom (to prevent largest nodes from getting too big)
+        const largestRadius = maxRadius > 0 ? maxRadius : this.BASE_NODE_RADIUS;
+        
+        // Calculate zoom limits based on these statistics
+        const minZoom = this.width / (avgRadius * this.ZOOM_OUT_SCALE_FACTOR);
+        const maxZoom = this.width / (largestRadius * this.ZOOM_IN_SCALE_FACTOR);
+        
+        return [minZoom, maxZoom];
+    }
+
     private setupZoomBehavior() {
-        // Add zoom behavior
+        // Add zoom behavior with dynamic limits
         this.zoom = d3.zoom<SVGSVGElement, unknown>()
-            .scaleExtent([0.1, 10]) // Wider zoom range for better flexibility
+            .scaleExtent(this.calculateZoomLimits())
             .on('start', () => {
                 if (this._frameRequest) {
                     window.cancelAnimationFrame(this._frameRequest);
@@ -279,6 +325,11 @@ export class GraphView {
         const rect = this.container.getBoundingClientRect();
         this.width = rect.width || 800;
         this.height = rect.height || 600;
+        
+        // Update zoom limits when dimensions change
+        if (this.zoom) {
+            this.zoom.scaleExtent(this.calculateZoomLimits());
+        }
     }
     
     private setupResizeObserver() {
@@ -307,6 +358,10 @@ export class GraphView {
                 
                 // Update SVG viewBox to keep it centered at origin and fill the container
                 this.svg.attr('viewBox', [-this.width / 2, -this.height / 2, this.width, this.height]);
+                
+                // Update zoom behavior with new limits
+                const transform = d3.zoomTransform(this.svg.node() as Element);
+                this.svg.call(this.zoom.transform, transform);
                 
                 // Recenter the graph with animation to ensure it fills the available space
                 this.recenterGraph();
@@ -891,8 +946,26 @@ export class GraphView {
      * Calculate node radius based on centrality and other factors
      */
     private getNodeRadius(node?: SimulationGraphNode | null): number {
-        // Use a slightly larger radius for better visibility
-        return 6;
+        if (!node) {
+            return this.BASE_NODE_RADIUS;
+        }
+        
+        // Scale node size based on centrality or degree
+        if (node.centralityScore !== undefined && node.centralityScore > 0) {
+            // Find a normalized value between 0 and 1 for the centrality score
+            // We'd need to know the max centrality across all nodes for perfect normalization
+            // As a simple approach, cap at 1.0 and ensure positive values
+            const normalizedScore = Math.min(1.0, Math.max(0, node.centralityScore));
+            
+            // Scale the node radius between BASE_NODE_RADIUS and MAX_NODE_RADIUS
+            // Linear scaling: radius = base + (max-base) * normalized * scale_factor
+            return this.BASE_NODE_RADIUS + 
+                   (this.MAX_NODE_RADIUS - this.BASE_NODE_RADIUS) * 
+                   normalizedScore * this.NODE_RADIUS_SCALE_FACTOR;
+        }
+        
+        // Default size if no centrality data available
+        return this.BASE_NODE_RADIUS;
     }
     
     private getNodeColor(node: SimulationGraphNode): string {
@@ -938,7 +1011,7 @@ export class GraphView {
         const graphHeight = maxY - minY;
         
         // instead of using fixed margins
-        const containerScale = 0.69; // The graph should use 70% of the minimum dimension
+        const containerScale = 0.6; // The graph should use 70% of the minimum dimension
         const minDimension = Math.min(this.width, this.height);
         const scaleX = (containerScale * minDimension) / graphWidth;
         const scaleY = (containerScale * minDimension) / graphHeight;
