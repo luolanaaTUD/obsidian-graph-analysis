@@ -86,6 +86,108 @@ function getDataViewMemory0() {
  * @param {string} graph_data_json
  * @returns {string}
  */
+export function initialize_graph(graph_data_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(graph_data_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.initialize_graph(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * @returns {string}
+ */
+export function clear_graph() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.clear_graph();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * @param {number} node_id
+ * @returns {string}
+ */
+export function get_node_neighbors_cached(node_id) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.get_node_neighbors_cached(node_id);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * @returns {string}
+ */
+export function calculate_degree_centrality_cached() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.calculate_degree_centrality_cached();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * @returns {string}
+ */
+export function get_graph_metadata() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.get_graph_metadata();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * @param {number} source_id
+ * @param {number} target_id
+ * @returns {string}
+ */
+export function find_shortest_path_cached(source_id, target_id) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.find_shortest_path_cached(source_id, target_id);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * @param {string} graph_data_json
+ * @returns {string}
+ */
 export function calculate_degree_centrality(graph_data_json) {
     let deferred2_0;
     let deferred2_1;
@@ -93,6 +195,25 @@ export function calculate_degree_centrality(graph_data_json) {
         const ptr0 = passStringToWasm0(graph_data_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.calculate_degree_centrality(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * @param {string} vault_data_json
+ * @returns {string}
+ */
+export function build_graph_from_vault(vault_data_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(vault_data_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.build_graph_from_vault(ptr0, len0);
         deferred2_0 = ret[0];
         deferred2_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -112,9 +233,12 @@ async function __wbg_load(module, imports) {
                 return await WebAssembly.instantiateStreaming(module, imports);
 
             } catch (e) {
-                console.warn("WebAssembly.instantiateStreaming failed, falling back to WebAssembly.instantiate", e);
-                const bytes = await module.arrayBuffer();
-                return await WebAssembly.instantiate(bytes, imports);
+                if (module.headers.get('Content-Type') != 'application/wasm') {
+                    console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
+
+                } else {
+                    throw e;
+                }
             }
         }
 
@@ -122,29 +246,13 @@ async function __wbg_load(module, imports) {
         return await WebAssembly.instantiate(bytes, imports);
 
     } else {
-        // If module is a string or URL, fetch it first
-        if (typeof module === 'string' || (typeof URL === 'function' && module instanceof URL)) {
-            try {
-                console.log("Fetching WASM module from path:", module);
-                const response = await fetch(module);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch WASM module: ${response.status} ${response.statusText}`);
-                }
-                const bytes = await response.arrayBuffer();
-                return await WebAssembly.instantiate(bytes, imports);
-            } catch (e) {
-                console.error("Error fetching or instantiating WASM module:", e);
-                throw e;
-            }
-        } else {
-            // Direct instantiation with a WebAssembly.Module
-            const instance = await WebAssembly.instantiate(module, imports);
+        const instance = await WebAssembly.instantiate(module, imports);
 
-            if (instance instanceof WebAssembly.Instance) {
-                return { instance, module };
-            } else {
-                return instance;
-            }
+        if (instance instanceof WebAssembly.Instance) {
+            return { instance, module };
+
+        } else {
+            return instance;
         }
     }
 }
@@ -234,34 +342,29 @@ function initSync(module) {
 async function __wbg_init(module_or_path) {
     if (wasm !== undefined) return wasm;
 
+
     if (typeof module_or_path !== 'undefined') {
         if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
             ({module_or_path} = module_or_path)
         } else {
-            console.log('Initializing with path:', module_or_path);
+            console.warn('using deprecated parameters for the initialization function; pass a single object instead')
         }
     }
 
     if (typeof module_or_path === 'undefined') {
-        // Default path if none provided
-        module_or_path = 'graph_analysis_wasm_bg.wasm';
-        console.log('Using default WASM path:', module_or_path);
+        module_or_path = new URL('graph_analysis_wasm_bg.wasm', import.meta.url);
     }
-    
     const imports = __wbg_get_imports();
 
-    // No need to convert string to fetch here, __wbg_load will handle it
+    if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
+        module_or_path = fetch(module_or_path);
+    }
+
     __wbg_init_memory(imports);
 
-    try {
-        console.log('Loading WASM module from:', module_or_path);
-        const { instance, module } = await __wbg_load(module_or_path, imports);
-        console.log('WASM module loaded successfully');
-        return __wbg_finalize_init(instance, module);
-    } catch (error) {
-        console.error('Error loading WASM module:', error);
-        throw error;
-    }
+    const { instance, module } = await __wbg_load(await module_or_path, imports);
+
+    return __wbg_finalize_init(instance, module);
 }
 
 export { initSync };

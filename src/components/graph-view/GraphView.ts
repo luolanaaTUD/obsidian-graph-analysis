@@ -63,9 +63,17 @@ export class GraphView {
     private _frameRequest: number | null = null;
     private highlightedNodeId: string | null = null;
     private _tooltipTimeout: number | null = null;
-
+    private isDraggingNode: boolean = false;
+    
+    // Highlight state constants to ensure consistency
+    private readonly HIGHLIGHT_STATES = {
+        NONE: 'none',
+        HOVER: 'hover',
+        DRAG: 'drag'
+    } as const;
+    
     // Add these constants at the class level after the private member declarations
-    private readonly ANIMATION_DURATION = 200;
+    private readonly ANIMATION_DURATION = 100;
     private readonly HOVER_ANIMATION_DURATION = 100; 
     private readonly TOOLTIP_DELAY = 500;
     private readonly RECENTER_ANIMATION_DURATION = 300;
@@ -300,53 +308,34 @@ export class GraphView {
     }
     
     private onNodeMouseOver(event: any, d: SimulationGraphNode) {
-        // Highlight the node
-        d3.select(event.currentTarget as SVGCircleElement)
-            .transition()
-            .duration(this.HOVER_ANIMATION_DURATION)
-            .attr('stroke-width', 2)
-            .attr('fill', 'var(--graph-node-hover)');
+        // Set the highlighted node ID
+        this.highlightedNodeId = d.id;
+        
+        // Highlight the node visually
+        this.highlightNode(event.currentTarget, true);
         
         // Highlight connections
         this.highlightConnections(d.id, true);
         
-        // Clear any existing tooltip timeout
-        if (this._tooltipTimeout) {
-            window.clearTimeout(this._tooltipTimeout);
-            this._tooltipTimeout = null;
-        }
-        
-        // Show tooltip after a delay
-        this._tooltipTimeout = window.setTimeout(() => {
-            if (this.highlightedNodeId === d.id) {
-                this.showNodeTooltip(d, event);
-            }
-            this._tooltipTimeout = null;
-        }, this.TOOLTIP_DELAY);
-        
-        this.highlightedNodeId = d.id;
+        // Handle tooltip with delay
+        this.scheduleTooltip(d, event);
     }
     
     private onNodeMouseOut(event: any, d: SimulationGraphNode) {
-        // Remove highlight
-        d3.select(event.currentTarget as SVGCircleElement)
-            .transition()
-            .duration(this.HOVER_ANIMATION_DURATION)
-            .attr('stroke-width', 1.5)
-            .attr('fill', this.getNodeColor(d));
+        // Don't remove highlights if we're dragging this node
+        if (this.isDraggingNode && this.highlightedNodeId === d.id) {
+            return;
+        }
+        
+        // Remove visual highlight
+        this.highlightNode(event.currentTarget, false);
         
         // Remove connections highlight
         this.highlightConnections(d.id, false);
         
-        // Clear any pending tooltip timeout
-        if (this._tooltipTimeout) {
-            window.clearTimeout(this._tooltipTimeout);
-            this._tooltipTimeout = null;
-        }
-        
+        // Clean up tooltip
+        this.clearTooltipTimeout();
         this.highlightedNodeId = null;
-        
-        // Remove tooltip
         this.removeNodeTooltip();
     }
     
@@ -439,16 +428,52 @@ export class GraphView {
         
         // Find connected nodes
         const connectedNodeIds = new Set<string>();
-        this.links.forEach(link => {
-            const sourceId = typeof link.source === 'string' ? link.source : (link.source as unknown as SimulationGraphNode).id;
-            const targetId = typeof link.target === 'string' ? link.target : (link.target as unknown as SimulationGraphNode).id;
+        
+        // Try to use the cached graph in WASM first if available
+        try {
+            const nodeIdInt = parseInt(nodeId);
+            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
             
-            if (sourceId === nodeId) {
-                connectedNodeIds.add(targetId);
-            } else if (targetId === nodeId) {
-                connectedNodeIds.add(sourceId);
+            if (plugin && plugin.getNodeNeighborsCached) {
+                // Use the WASM cached implementation
+                const neighborResult = plugin.getNodeNeighborsCached(nodeIdInt);
+                
+                // Extract neighbor IDs from the result
+                if (neighborResult && neighborResult.neighbors) {
+                    neighborResult.neighbors.forEach((neighbor: { node_id: number }) => {
+                        connectedNodeIds.add(neighbor.node_id.toString());
+                    });
+                    
+                    console.log(`Retrieved ${connectedNodeIds.size} neighbors from WASM cache`);
+                }
+            } else {
+                // Fallback to JavaScript implementation
+                this.links.forEach(link => {
+                    const sourceId = typeof link.source === 'string' ? link.source : (link.source as unknown as SimulationGraphNode).id;
+                    const targetId = typeof link.target === 'string' ? link.target : (link.target as unknown as SimulationGraphNode).id;
+                    
+                    if (sourceId === nodeId) {
+                        connectedNodeIds.add(targetId);
+                    } else if (targetId === nodeId) {
+                        connectedNodeIds.add(sourceId);
+                    }
+                });
             }
-        });
+        } catch (error) {
+            console.error('Error getting neighbors from WASM cache, falling back to JS implementation:', error);
+            
+            // Fallback to JavaScript implementation
+            this.links.forEach(link => {
+                const sourceId = typeof link.source === 'string' ? link.source : (link.source as unknown as SimulationGraphNode).id;
+                const targetId = typeof link.target === 'string' ? link.target : (link.target as unknown as SimulationGraphNode).id;
+                
+                if (sourceId === nodeId) {
+                    connectedNodeIds.add(targetId);
+                } else if (targetId === nodeId) {
+                    connectedNodeIds.add(sourceId);
+                }
+            });
+        }
         
         // Dim all nodes and links not connected
         this.nodesSelection.each(function(d) {
@@ -526,8 +551,15 @@ export class GraphView {
                     d.fx = d.x;
                     d.fy = d.y;
                     
-                    // Highlight connections when starting drag
-                    this.highlightConnections(d.id, true);
+                    // Set drag state
+                    this.isDraggingNode = true;
+                    
+                    // Apply node highlighting if not already highlighted
+                    if (this.highlightedNodeId !== d.id) {
+                        this.highlightNode(event.sourceEvent.currentTarget, true);
+                        this.highlightConnections(d.id, true);
+                        this.highlightedNodeId = d.id;
+                    }
                 } catch (e) {
                     console.error("Error in drag start:", e);
                 }
@@ -551,12 +583,54 @@ export class GraphView {
                     d.fx = null;
                     d.fy = null;
                     
-                    // Reset highlights after drag ends
-                    this.resetHighlights();
+                    // Reset drag state
+                    this.isDraggingNode = false;
+                    
+                    // Note: We intentionally don't clear highlights here to match hover behavior
+                    // The highlight will only be cleared when the mouse leaves the node
                 } catch (e) {
                     console.error("Error in drag end:", e);
                 }
             });
+    }
+    
+    /**
+     * Apply or remove visual highlighting from a node element
+     */
+    private highlightNode(element: SVGCircleElement, highlight: boolean) {
+        const node = d3.select(element);
+        const nodeData = node.datum() as SimulationGraphNode;
+        
+        node.transition()
+            .duration(this.HOVER_ANIMATION_DURATION)
+            .attr('stroke-width', highlight ? 2 : 1.5)
+            .attr('fill', highlight ? 'var(--graph-node-hover)' : this.getNodeColor(nodeData));
+    }
+    
+    /**
+     * Schedule tooltip display after delay
+     */
+    private scheduleTooltip(node: SimulationGraphNode, event: any) {
+        // Clear any existing tooltip timeout
+        this.clearTooltipTimeout();
+        
+        // Show tooltip after a delay
+        this._tooltipTimeout = window.setTimeout(() => {
+            if (this.highlightedNodeId === node.id) {
+                this.showNodeTooltip(node, event);
+            }
+            this._tooltipTimeout = null;
+        }, this.TOOLTIP_DELAY);
+    }
+    
+    /**
+     * Clear tooltip timeout if it exists
+     */
+    private clearTooltipTimeout() {
+        if (this._tooltipTimeout) {
+            window.clearTimeout(this._tooltipTimeout);
+            this._tooltipTimeout = null;
+        }
     }
     
     private async loadVaultData() {
@@ -606,6 +680,29 @@ export class GraphView {
         // Store the data
         this.nodes = graphData.nodes || [];
         this.links = graphData.links || [];
+        
+        // Initialize the graph cache in WASM with current graph data
+        try {
+            // Format the graph data for WASM
+            const wasmGraphData = {
+                nodes: this.nodes.map(node => node.name),
+                edges: this.links.map(link => {
+                    const source = typeof link.source === 'string' ? parseInt(link.source) : parseInt((link.source as unknown as SimulationGraphNode).id);
+                    const target = typeof link.target === 'string' ? parseInt(link.target) : parseInt((link.target as unknown as SimulationGraphNode).id);
+                    return [source, target];
+                })
+            };
+            
+            // Initialize the graph in WASM
+            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+            if (plugin) {
+                await plugin.initializeGraphCache(JSON.stringify(wasmGraphData));
+                console.log('Graph cache initialized in WASM');
+            }
+        } catch (error) {
+            console.error('Failed to initialize graph cache:', error);
+            // Continue anyway, we'll fall back to the JavaScript implementation
+        }
         
         // Create D3 selections for the graph elements
         // Links first to ensure they're behind nodes
@@ -827,6 +924,17 @@ export class GraphView {
         if (this._tooltipTimeout) {
             window.clearTimeout(this._tooltipTimeout);
             this._tooltipTimeout = null;
+        }
+        
+        // Clear the graph cache in WASM
+        try {
+            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+            if (plugin && plugin.clearGraphCache) {
+                plugin.clearGraphCache();
+                console.log('Graph cache cleared from WASM');
+            }
+        } catch (error) {
+            console.error('Error clearing graph cache:', error);
         }
         
         // Note: WASM resources are managed at the plugin level

@@ -12,6 +12,14 @@ declare function calculate_betweenness_centrality(graph_data_json: string): stri
 declare function build_graph_from_vault(vault_data_json: string): string;
 declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<any>;
 
+// New cached graph functions
+declare function initialize_graph(graph_data_json: string): string;
+declare function clear_graph(): string;
+declare function get_node_neighbors_cached(node_id: number): string;
+declare function calculate_degree_centrality_cached(): string;
+declare function get_graph_metadata(): string;
+declare function find_shortest_path_cached(source_id: number, target_id: number): string;
+
 interface GraphAnalysisSettings {
     excludeFolders: string[];
     excludeTags: string[];
@@ -784,6 +792,96 @@ export default class GraphAnalysisPlugin extends Plugin {
         } catch (error) {
             console.error('Error in WASM betweenness centrality calculation:', error);
             throw new Error('Failed to calculate betweenness centrality');
+        }
+    }
+    
+    // Method to initialize the cached graph
+    public initializeGraphCache(graphDataJson: string): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = initialize_graph(graphDataJson);
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error initializing graph cache:', error);
+            throw new Error('Failed to initialize graph cache');
+        }
+    }
+    
+    // Method to clear the cached graph
+    public clearGraphCache(): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = clear_graph();
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error clearing graph cache:', error);
+            throw new Error('Failed to clear graph cache');
+        }
+    }
+    
+    // Method to get neighbors for a node using the cached graph
+    public getNodeNeighborsCached(nodeId: number): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = get_node_neighbors_cached(nodeId);
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error getting node neighbors from cache:', error);
+            throw new Error('Failed to get node neighbors');
+        }
+    }
+    
+    // Method to calculate degree centrality using the cached graph
+    public calculateDegreeCentralityCached(): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = calculate_degree_centrality_cached();
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error calculating degree centrality from cache:', error);
+            throw new Error('Failed to calculate degree centrality');
+        }
+    }
+    
+    // Method to get metadata about the cached graph
+    public getGraphMetadata(): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = get_graph_metadata();
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error getting graph metadata:', error);
+            throw new Error('Failed to get graph metadata');
+        }
+    }
+    
+    // Method to find shortest path between nodes using the cached graph
+    public findShortestPathCached(sourceId: number, targetId: number): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = find_shortest_path_cached(sourceId, targetId);
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error finding shortest path from cache:', error);
+            throw new Error('Failed to find shortest path');
         }
     }
 }
