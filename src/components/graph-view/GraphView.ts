@@ -397,8 +397,11 @@ export class GraphView {
         // Highlight connections
         this.highlightConnections(d.id, true);
         
-        // Handle tooltip with delay
-        this.scheduleTooltip(d, event);
+        // Only show tooltip if not dragging
+        if (!this.isDraggingNode) {
+            // Handle tooltip with delay
+            this.scheduleTooltip(d, event);
+        }
     }
     
     private onNodeMouseOut(event: any, d: SimulationGraphNode) {
@@ -417,10 +420,6 @@ export class GraphView {
         this.clearTooltipTimeout();
         this.highlightedNodeId = null;
         this.removeNodeTooltip();
-        
-        // We don't need to clear the neighbors cache here
-        // It will be overwritten when we interact with another node
-        // And must be cleared only when the graph data changes
     }
     
     private onNodeClick(event: any, d: SimulationGraphNode) {
@@ -470,26 +469,52 @@ export class GraphView {
             field.createSpan({ cls: 'tooltip-label', text: 'Centrality:' });
             field.createSpan({ cls: 'tooltip-value', text: node.centralityScore.toFixed(3) });
         }
-        
-        // Placeholder for proper tooltip positioning
-        // Temporarily position in the middle of the container
+
+        // Position tooltip at mouse location
         const containerRect = this.container.getBoundingClientRect();
-        tooltip.style.left = `${containerRect.width / 2}px`;
-        tooltip.style.top = `${containerRect.height / 2}px`;
+        this.positionTooltip(tooltip, event.clientX - containerRect.left, event.clientY - containerRect.top, containerRect);
     }
 
     /**
-     * Position the tooltip at a fixed distance from the node
+     * Position the tooltip relative to the mouse position
      */
     private positionTooltip(
-        tooltip: HTMLElement, 
-        nodeX: number, 
-        nodeY: number, 
-        nodeRadius: number, 
+        tooltip: HTMLElement,
+        mouseX: number,
+        mouseY: number,
         containerRect: DOMRect
     ): void {
-        // This method is kept as a stub but not used
-        // The user will implement their own tooltip positioning solution
+        // Fixed dimensions for tooltip
+        const tooltipWidth = 300;
+        const tooltipHeight = 150; // Reduced from 600 to be more manageable
+        
+        // Add a small offset from the cursor
+        const offsetX = 20;
+        const offsetY = 10;
+        
+        // Initial position to the right of the cursor
+        let tooltipX = mouseX + offsetX;
+        let tooltipY = mouseY + offsetY;
+        
+        // Flip to left side if it would go off right edge
+        if (tooltipX + tooltipWidth > containerRect.width) {
+            tooltipX = mouseX - offsetX - tooltipWidth;
+        }
+        
+        // Ensure tooltip doesn't go above the top edge
+        if (tooltipY < 0) {
+            tooltipY = 0;
+        }
+        
+        // Ensure tooltip doesn't go below the bottom edge
+        if (tooltipY + tooltipHeight > containerRect.height) {
+            tooltipY = containerRect.height - tooltipHeight;
+        }
+        
+        // Apply the calculated position
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${tooltipX}px`;
+        tooltip.style.top = `${tooltipY}px`;
     }
     
     private highlightConnections(nodeId: string, highlight: boolean) {
@@ -682,8 +707,10 @@ export class GraphView {
                     d.fx = d.x;
                     d.fy = d.y;
                     
-                    // Set drag state
+                    // Set drag state and remove tooltip
                     this.isDraggingNode = true;
+                    this.clearTooltipTimeout();
+                    this.removeNodeTooltip();
                     
                     // Apply node highlighting if not already highlighted
                     if (this.highlightedNodeId !== d.id) {
@@ -710,19 +737,23 @@ export class GraphView {
                         this.simulation.alphaTarget(0);
                     }
                     
-                    // Clear fixed position
-                    d.fx = null;
-                    d.fy = null;
+                    // Clear fixed position if shift key is not pressed
+                    if (!event.sourceEvent.shiftKey) {
+                        d.fx = null;
+                        d.fy = null;
+                    }
                     
                     // Reset drag state
                     this.isDraggingNode = false;
                     
-                    // We keep both the highlight and the cache when drag ends
-                    // The cache will be overwritten when we interact with another node
-                    // The highlight will be cleared when the mouse leaves the node
-                    
-                    // Note: We intentionally don't clear highlights here to match hover behavior
-                    // The highlight will only be cleared when the mouse leaves the node
+                    // Trigger mouseout to clean up highlights if mouse is not over the node
+                    const element = event.sourceEvent.target;
+                    const mouseEvent = new MouseEvent('mouseout', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    });
+                    element.dispatchEvent(mouseEvent);
                 } catch (e) {
                     console.error("Error in drag end:", e);
                 }
@@ -889,10 +920,6 @@ export class GraphView {
                         .attr('fill', d => this.getNodeColor(d))
                         .attr('class', 'graph-node')
                         .call(this.setupDragBehavior());
-                    
-                    // Add title elements separately like in D3 example
-                    nodeEnter.append('title')
-                        .text(d => d.name);
                     
                     return nodeEnter;
                 },
