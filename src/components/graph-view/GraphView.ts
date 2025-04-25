@@ -1,17 +1,8 @@
 import { App, Notice, TFile } from 'obsidian';
 import * as d3 from 'd3';
-import { GraphNode, GraphLink, CentralityCalculator } from './types';
+import { GraphNode, GraphLink, CentralityCalculator, SimulationGraphNode } from './types';
 import { CentralityCalculator as CentralityCalculatorImpl } from './data/centrality';
 import { GraphDataBuilder } from './data/graph-builder';
-
-// Extend D3's simulation node type with our properties
-interface SimulationGraphNode extends d3.SimulationNodeDatum {
-    id: string;
-    name: string;
-    path?: string;
-    centralityScore?: number;
-    degree?: number;
-}
 
 // Define the link type for D3 simulation
 interface SimulationGraphLink {
@@ -150,17 +141,18 @@ export class GraphView {
         
         // Create groups for links, labels, and nodes with explicit rendering order
         const linksGroup = this.svgGroup.append('g')
-            .attr('stroke', 'var(--graph-link-default)')
-            .attr('stroke-opacity', 0.6)
-            .attr('class', 'links-group');
+            .attr('class', 'links-group')
+            .style('stroke', 'var(--graph-link-default)')
+            .style('stroke-opacity', 'var(--graph-link-stroke-opacity)')
+            .style('stroke-width', 'var(--graph-link-stroke-width)');
             
         const labelsGroup = this.svgGroup.append('g')
             .attr('class', 'labels-group');
             
         const nodesGroup = this.svgGroup.append('g')
-            .attr('stroke', 'var(--graph-node-stroke)')
-            .attr('stroke-width', 1.5)
-            .attr('class', 'nodes-group');
+            .attr('class', 'nodes-group')
+            .style('stroke', 'var(--graph-node-default)')
+            .style('stroke-width', 'var(--graph-node-stroke-width)');
 
         // Initialize selections
         this.linksSelection = linksGroup.selectAll('line');
@@ -245,26 +237,27 @@ export class GraphView {
 
     private initializeSimulation() {
         // Create a simulation with modified forces to better fill the available space
-        // Use a constant node radius for collision detection to avoid multiple function calls
-        const collisionRadius = this.getNodeRadius() + 2; // Same buffer as before
+        const collisionRadius = this.getNodeRadius() + 2;
         
         this.simulation = d3.forceSimulation<SimulationGraphNode>()
-            .force('link', d3.forceLink<SimulationGraphNode, SimulationGraphLink>().id(d => d.id).distance(50)) // Increase link distance
-            .force('charge', d3.forceManyBody().strength(-120)) // Stronger repulsion for more spread
-            .force('x', d3.forceX().strength(0.1)) // Weaker center force for more natural layout
-            .force('y', d3.forceY().strength(0.1)) // Weaker center force for more natural layout
-            // Add built-in collision detection with quadtree optimization
+            .force('link', d3.forceLink<SimulationGraphNode, SimulationGraphLink>()
+                .id(d => d.id)
+                .distance(50)
+                .strength(0.7)) // Slightly reduced for smoother movement
+            .force('charge', d3.forceManyBody()
+                .strength(-120)
+                .distanceMax(300)) // Limit the distance of charge effect
+            .force('x', d3.forceX().strength(0.15)) // Increased for better centering stability
+            .force('y', d3.forceY().strength(0.15)) // Increased for better centering stability
             .force('collision', d3.forceCollide<SimulationGraphNode>()
-                .radius(d => collisionRadius) // Use the constant collision radius
-                .strength(0.8) // Slightly softer than full collision (1.0) for more natural movement
-                .iterations(2)) // More iterations = more accurate but more computationally expensive
-            .alphaDecay(0.0228) // Default D3 value for smoother transitions
-            .velocityDecay(0.4) // Slightly higher than D3 default (0.4 vs 0.3) for more stability
+                .radius(d => collisionRadius)
+                .strength(0.5) // Reduced for smoother collisions
+                .iterations(2))
+            .alphaDecay(0.02) // Slower decay for smoother transitions
+            .velocityDecay(0.35) // Slightly increased for more stability
             .on('tick', () => {
-                // Apply only the custom bounding force
                 this.applyBoundingForce();
                 
-                // Use requestAnimationFrame to throttle render updates
                 if (!this._frameRequest) {
                     this._frameRequest = window.requestAnimationFrame(() => {
                         this.updateGraph();
@@ -385,6 +378,11 @@ export class GraphView {
     }
     
     private onNodeMouseOver(event: any, d: SimulationGraphNode) {
+        // Don't process mouseover during drag operations
+        if (this.isDraggingNode) {
+            return;
+        }
+
         // Clear any existing hide timeout
         if (this._hideTooltipTimeout) {
             window.clearTimeout(this._hideTooltipTimeout);
@@ -408,8 +406,8 @@ export class GraphView {
     }
     
     private onNodeMouseOut(event: any, d: SimulationGraphNode) {
-        // Don't remove highlights if we're dragging this node
-        if (this.isDraggingNode && this.highlightedNodeId === d.id) {
+        // Don't process mouseout during drag operations
+        if (this.isDraggingNode) {
             return;
         }
         
@@ -688,6 +686,11 @@ export class GraphView {
     }
     
     private highlightConnections(nodeId: string, highlight: boolean) {
+        // Don't reset highlights during drag operations
+        if (!highlight && this.isDraggingNode && this.highlightedNodeId === nodeId) {
+            return;
+        }
+
         if (!highlight) {
             this.resetHighlights();
             return;
@@ -801,7 +804,8 @@ export class GraphView {
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
-                .attr('opacity', isConnected ? 1 : 0.3);
+                .style('fill', isConnected ? 'var(--graph-node-highlighted)' : 'var(--graph-node-dimmed)')
+                .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)');
         });
         
         this.linksSelection.each(function(d) {
@@ -809,15 +813,12 @@ export class GraphView {
             const targetId = typeof d.target === 'string' ? d.target : (d.target as unknown as SimulationGraphNode).id;
             const isConnected = sourceId === nodeId || targetId === nodeId;
             
-            // Get base width
-            const baseWidth = d.value ? Math.sqrt(d.value) : 1;
-            
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
-                .attr('stroke-opacity', isConnected ? 1 : 0.2)
-                .attr('stroke-width', isConnected ? baseWidth * 1.5 : baseWidth)
-                .attr('stroke', isConnected ? 'var(--graph-link-highlighted)' : 'var(--graph-link-default)');
+                .style('stroke-opacity', isConnected ? 'var(--graph-link-stroke-opacity)' : 'var(--graph-link-stroke-opacity-dimmed)')
+                .style('stroke-width', isConnected ? 'var(--graph-link-stroke-width-highlighted)' : 'var(--graph-link-stroke-width)')
+                .style('stroke', isConnected ? 'var(--graph-link-highlighted)' : 'var(--graph-link-dimmed)');
         });
         
         // Also dim unconnected labels
@@ -826,7 +827,8 @@ export class GraphView {
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
-                .attr('opacity', isConnected ? 1 : 0.2);
+                .style('fill', isConnected ? 'var(--graph-label-highlighted)' : 'var(--graph-label-dimmed)')
+                .style('opacity', isConnected ? 'var(--graph-label-opacity-default)' : 'var(--graph-label-opacity-dimmed)');
         });
     }
     
@@ -841,21 +843,21 @@ export class GraphView {
         this.nodesSelection
             .transition()
             .duration(animationDuration)
-            .attr('opacity', 1)
-            .attr('fill', 'var(--graph-node-default)');
+            .style('opacity', 'var(--graph-node-opacity-default)')
+            .style('fill', 'var(--graph-node-default)');
             
         // Reset links to default style
         this.linksSelection
             .transition()
             .duration(animationDuration)
-            .attr('stroke-opacity', 0.6)
-            .attr('stroke-width', d => d.value ? Math.sqrt(d.value) : 1)
-            .attr('stroke', 'var(--graph-link-default)');
+            .style('stroke-opacity', 'var(--graph-link-stroke-opacity)')
+            .style('stroke-width', 'var(--graph-link-stroke-width)')
+            .style('stroke', 'var(--graph-link-default)');
             
         this.labelsSelection
             .transition()
             .duration(animationDuration)
-            .attr('opacity', d => d.degree && d.degree > 3 ? 0.8 : 0.6);
+            .style('opacity', d => d.degree && d.degree > 3 ? 'var(--graph-label-opacity-high-degree)' : 'var(--graph-label-opacity-low-degree)');
     }
     
     private setupDragBehavior() {
@@ -883,11 +885,9 @@ export class GraphView {
                     this.removeNodeTooltip();
                     
                     // Apply node highlighting if not already highlighted
-                    if (this.highlightedNodeId !== d.id) {
-                        this.highlightNode(event.sourceEvent.currentTarget, true);
-                        this.highlightConnections(d.id, true);
-                        this.highlightedNodeId = d.id;
-                    }
+                    this.highlightedNodeId = d.id;
+                    this.highlightNode(event.sourceEvent.currentTarget, true);
+                    this.highlightConnections(d.id, true);
                 } catch (e) {
                     console.error("Error in drag start:", e);
                 }
@@ -896,34 +896,63 @@ export class GraphView {
                 try {
                     d.fx = event.x;
                     d.fy = event.y;
+                    
+                    // Ensure highlight state is maintained during drag
+                    if (this.highlightedNodeId !== d.id) {
+                        this.highlightedNodeId = d.id;
+                        this.highlightNode(event.sourceEvent.currentTarget, true);
+                        this.highlightConnections(d.id, true);
+                    }
                 } catch (e) {
                     console.error("Error in drag:", e);
                 }
             })
             .on('end', (event, d) => {
                 try {
-                    // Update simulation if it exists
-                    if (this.simulation && !event.active) {
-                        this.simulation.alphaTarget(0);
-                    }
+                    const wasFixed = d.fx !== null || d.fy !== null;
                     
                     // Clear fixed position if shift key is not pressed
                     if (!event.sourceEvent.shiftKey) {
                         d.fx = null;
                         d.fy = null;
                     }
+
+                    // Gently transition the simulation
+                    if (this.simulation) {
+                        if (wasFixed && !event.sourceEvent.shiftKey) {
+                            // If we're releasing a fixed node, use a gentler transition
+                            this.simulation
+                                .alphaTarget(0)
+                                .alpha(0.1) // Start with a lower alpha for gentler movement
+                                .restart();
+                        } else {
+                            // For other cases (like fixing a node), stop more quickly
+                            this.simulation.alphaTarget(0);
+                        }
+                    }
+
+                    // Check if mouse is still over the node
+                    const element = event.sourceEvent.target;
+                    const bounds = element.getBoundingClientRect();
+                    const mouseX = event.sourceEvent.clientX;
+                    const mouseY = event.sourceEvent.clientY;
                     
+                    const isMouseOver = mouseX >= bounds.left && mouseX <= bounds.right && 
+                                      mouseY >= bounds.top && mouseY <= bounds.bottom;
+
                     // Reset drag state
                     this.isDraggingNode = false;
-                    
-                    // Trigger mouseout to clean up highlights if mouse is not over the node
-                    const element = event.sourceEvent.target;
-                    const mouseEvent = new MouseEvent('mouseout', {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                    });
-                    element.dispatchEvent(mouseEvent);
+
+                    if (!isMouseOver) {
+                        // Only reset highlights if mouse is not over the node
+                        setTimeout(() => {
+                            if (!this.isDraggingNode && this.highlightedNodeId === d.id) {
+                                this.highlightNode(element, false);
+                                this.highlightConnections(d.id, false);
+                                this.highlightedNodeId = null;
+                            }
+                        }, this.ANIMATION_DURATION);
+                    }
                 } catch (e) {
                     console.error("Error in drag end:", e);
                 }
@@ -939,8 +968,8 @@ export class GraphView {
         
         node.transition()
             .duration(this.ANIMATION_DURATION)
-            .attr('stroke-width', highlight ? 2 : 1.5)
-            .attr('fill', highlight ? 'var(--graph-node-hover)' : this.getNodeColor(nodeData));
+            .style('stroke-width', highlight ? 'var(--graph-node-stroke-width-highlighted)' : 'var(--graph-node-stroke-width)')
+            .style('fill', highlight ? 'var(--graph-node-highlighted)' : this.getNodeColor(nodeData));
     }
     
     /**
@@ -1070,9 +1099,9 @@ export class GraphView {
             .data(this.links, d => `${d.source}-${d.target}`)
             .join(
                 enter => enter.append('line')
-                    .attr('stroke-width', d => d.value ? Math.sqrt(d.value) : 1)
-                    .attr('stroke-opacity', 0.6)
-                    .attr('stroke', 'var(--graph-link-default)')
+                    .style('stroke', 'var(--graph-link-default)')
+                    .style('stroke-width', 'var(--graph-link-stroke-width)')
+                    .style('stroke-opacity', 'var(--graph-link-stroke-opacity)')
                     .attr('class', 'graph-link'),
                 update => update,
                 exit => exit.remove()
@@ -1087,9 +1116,22 @@ export class GraphView {
                     // Create the node elements
                     const nodeEnter = enter.append('circle')
                         .attr('r', d => this.getNodeRadius(d))
-                        .attr('fill', d => this.getNodeColor(d))
+                        .style('fill', 'var(--graph-node-default)')
+                        .style('stroke', 'var(--graph-node-default)')
+                        .style('stroke-width', 'var(--graph-node-stroke-width)')
+                        .style('opacity', 'var(--graph-node-opacity-default)')
                         .attr('class', 'graph-node')
                         .call(this.setupDragBehavior());
+                    
+                    // Update node colors and opacity based on state
+                    nodeEnter.style('fill', d => {
+                        if (d.highlighted) return 'var(--graph-node-highlighted)';
+                        return 'var(--graph-node-default)';
+                    })
+                    .style('opacity', d => {
+                        if (d.dimmed) return 'var(--graph-node-opacity-dimmed)';
+                        return 'var(--graph-node-opacity-default)';
+                    });
                     
                     return nodeEnter;
                 },
@@ -1105,9 +1147,9 @@ export class GraphView {
                 enter => enter.append('text')
                     .attr('dy', d => this.getNodeRadius(d) + 15)
                     .attr('text-anchor', 'middle')
-                    .attr('fill', 'var(--text-normal)')
-                    .attr('font-size', 'var(--font-ui-smaller)')
-                    .attr('opacity', 'var(--graph-label-opacity, 0.7)')
+                    .style('fill', 'var(--text-normal)')
+                    .style('font-size', 'var(--font-ui-smaller)')
+                    .style('opacity', 'var(--graph-label-opacity, 0.7)')
                     .attr('pointer-events', 'none') // Prevent labels from interfering with interactions
                     .attr('class', 'graph-label')
                     .text(d => d.name),
