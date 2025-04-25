@@ -81,11 +81,10 @@ export class GraphView {
         DRAG: 'drag'
     } as const;
     
-    // Add these constants at the class level after the private member declarations
-    private readonly ANIMATION_DURATION = 200;
-    private readonly HOVER_ANIMATION_DURATION = 200; 
-    private readonly TOOLTIP_DELAY = 500;
-    private readonly RECENTER_ANIMATION_DURATION = 300;
+    // Animation constants
+    private readonly ANIMATION_DURATION = 200; // Base animation duration for all transitions
+    private readonly TOOLTIP_DELAY = 500; // Delay before showing tooltips
+    private readonly RECENTER_ANIMATION_DURATION = 300; // Duration for recentering animations
 
     // Add this property at the class level after the private readonly constants section
     private currentTooltip: HTMLElement | null = null;
@@ -99,12 +98,8 @@ export class GraphView {
     private readonly ZOOM_OUT_SCALE_FACTOR = 600; // Higher = allows zooming out further
     private readonly ZOOM_IN_SCALE_FACTOR = 60;   // Lower = allows zooming in closer
 
-    // Constants for tooltip positioning
-    private readonly TOOLTIP_OFFSET_X = 20; // Fixed distance from cursor
-    private readonly TOOLTIP_OFFSET_Y = 0; // Vertical offset from cursor
-    private readonly TOOLTIP_WIDTH = 300; // Fixed width of tooltip
-    private readonly TOOLTIP_HEIGHT = 150; // Fixed height of tooltip
-
+    // New tooltip timeout
+    private _hideTooltipTimeout: number | null = null;
 
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
@@ -390,6 +385,12 @@ export class GraphView {
     }
     
     private onNodeMouseOver(event: any, d: SimulationGraphNode) {
+        // Clear any existing hide timeout
+        if (this._hideTooltipTimeout) {
+            window.clearTimeout(this._hideTooltipTimeout);
+            this._hideTooltipTimeout = null;
+        }
+
         // Set the highlighted node ID
         this.highlightedNodeId = d.id;
         
@@ -418,10 +419,10 @@ export class GraphView {
         // Remove connections highlight
         this.highlightConnections(d.id, false);
         
-        // Clean up tooltip
-        this.clearTooltipTimeout();
+        // Schedule tooltip removal with delay
+        this.scheduleTooltipRemoval();
+        
         this.highlightedNodeId = null;
-        this.removeNodeTooltip();
     }
     
     private onNodeClick(event: any, d: SimulationGraphNode) {
@@ -444,32 +445,190 @@ export class GraphView {
         }
     }
     
-    private showNodeTooltip(node: SimulationGraphNode, event: any) {
-        // Remove any existing tooltip
+    private createTooltip(node: SimulationGraphNode, event: any) {
+        // Remove existing tooltip if any
         this.removeNodeTooltip();
-        
+
         // Create tooltip
         const tooltip = this.container.createDiv({ cls: 'graph-node-tooltip' });
         this.currentTooltip = tooltip;
+
+        // Add mouse enter/leave handlers for the tooltip itself
+        tooltip.addEventListener('mouseenter', () => {
+            if (this._hideTooltipTimeout) {
+                clearTimeout(this._hideTooltipTimeout);
+                this._hideTooltipTimeout = null;
+            }
+        });
+
+        tooltip.addEventListener('mouseleave', () => {
+            this.scheduleTooltipRemoval();
+        });
+
+        // Add title
+        tooltip.createEl('h4', { text: node.name, cls: 'node-tooltip-title' });
         
-        // Add content to tooltip
-        tooltip.createEl('h3', { text: node.name });
+        // Add metadata content
+        const metadataContainer = tooltip.createDiv({ cls: 'metadata-container' });
         
-        // Add metadata if available
-        const metadataContainer = tooltip.createDiv({ cls: 'tooltip-metadata' });
-        
-        // Display degree centrality if available
-        if (node.degree !== undefined) {
-            const field = metadataContainer.createDiv({ cls: 'tooltip-field' });
-            field.createSpan({ cls: 'tooltip-label', text: 'Connections:' });
-            field.createSpan({ cls: 'tooltip-value', text: node.degree.toString() });
-        }
-        
-        // Add centrality score if available
-        if (node.centralityScore !== undefined) {
-            const field = metadataContainer.createDiv({ cls: 'tooltip-field' });
-            field.createSpan({ cls: 'tooltip-label', text: 'Centrality:' });
-            field.createSpan({ cls: 'tooltip-value', text: node.centralityScore.toFixed(3) });
+        // Get Obsidian metadata for the file
+        if (node.path) {
+            const file = this.app.vault.getAbstractFileByPath(node.path);
+            if (file instanceof TFile) {
+                // Get file metadata from Obsidian cache
+                const metadata = this.app.metadataCache.getFileCache(file);
+                
+                // Show creation and modification times
+                const createdField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                createdField.createSpan({ text: 'Created: ', cls: 'metadata-label' });
+                createdField.createSpan({ 
+                    text: new Date(file.stat.ctime).toLocaleString(),
+                    cls: 'metadata-value' 
+                });
+                
+                const modifiedField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                modifiedField.createSpan({ text: 'Modified: ', cls: 'metadata-label' });
+                modifiedField.createSpan({ 
+                    text: new Date(file.stat.mtime).toLocaleString(),
+                    cls: 'metadata-value' 
+                });
+                
+                const sizeField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                sizeField.createSpan({ text: 'Size: ', cls: 'metadata-label' });
+                sizeField.createSpan({ 
+                    text: `${(file.stat.size / 1024).toFixed(2)} KB`,
+                    cls: 'metadata-value' 
+                });
+
+                // Show tags if available
+                if (metadata && metadata.tags && metadata.tags.length > 0) {
+                    const tagsField = metadataContainer.createDiv({ cls: 'metadata-field' });
+                    tagsField.createSpan({ text: 'Tags: ', cls: 'metadata-label' });
+                    const tagsContainer = tagsField.createSpan({ cls: 'metadata-value metadata-tags' });
+                    
+                    metadata.tags.forEach((tag) => {
+                        tagsContainer.createSpan({ 
+                            text: tag.tag,
+                            cls: 'metadata-tag' 
+                        });
+                    });
+                }
+                
+                // Show frontmatter if available
+                if (metadata && metadata.frontmatter) {
+                    const frontmatterField = metadataContainer.createDiv({ cls: 'metadata-section' });
+                    const frontmatterTitle = frontmatterField.createEl('div', { 
+                        text: 'Frontmatter', 
+                        cls: 'metadata-section-title' 
+                    });
+                    
+                    const frontmatterContent = frontmatterField.createDiv({ cls: 'frontmatter-content' });
+                    
+                    // Filter out sensitive or system properties
+                    const excludedProps = ['position', 'cssclass', 'tag', 'tags'];
+                    
+                    Object.entries(metadata.frontmatter).forEach(([key, value]) => {
+                        if (!excludedProps.includes(key.toLowerCase())) {
+                            const propDiv = frontmatterContent.createDiv({ cls: 'metadata-field' });
+                            propDiv.createSpan({ 
+                                text: `${key}: `, 
+                                cls: 'metadata-label' 
+                            });
+                            
+                            // Handle different value types
+                            let displayValue: string;
+                            if (value === null || value === undefined) {
+                                displayValue = '';
+                            } else if (Array.isArray(value)) {
+                                displayValue = value.join(', ');
+                            } else if (typeof value === 'object') {
+                                try {
+                                    displayValue = JSON.stringify(value);
+                                } catch (e) {
+                                    displayValue = '[Object]';
+                                }
+                            } else {
+                                displayValue = String(value);
+                            }
+                            
+                            propDiv.createSpan({ 
+                                text: displayValue, 
+                                cls: 'metadata-value' 
+                            });
+                        }
+                    });
+                }
+
+                // Create a button to open the note
+                const actionHint = metadataContainer.createDiv({ cls: 'action-hint' });
+                const openNoteBtn = actionHint.createEl('button', {
+                    text: 'Open Note',
+                    cls: 'open-note-button',
+                });
+                
+                // Add click handler to open the note
+                openNoteBtn.addEventListener('click', (e: MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (node.path) {
+                        const file = this.app.vault.getAbstractFileByPath(node.path);
+                        if (file instanceof TFile) {
+                            this.app.workspace.getLeaf().openFile(file);
+                        }
+                    }
+                });
+                
+                // Note preview section
+                const previewSection = tooltip.createDiv({ cls: 'note-preview-section' });
+                previewSection.createEl('div', {
+                    text: 'Note Preview',
+                    cls: 'preview-section-title'
+                });
+                
+                // Create preview content container
+                const previewContent = previewSection.createDiv({ cls: 'preview-content' });
+                
+                // Load and format note content
+                this.app.vault.read(file).then(content => {
+                    let previewText = content.slice(0, 500) + (content.length > 500 ? '...' : '');
+                    
+                    // Format headings
+                    previewText = previewText.replace(/^(#{1,6})\s+(.+?)$/gm, (_, hashes, text) => {
+                        const lineEnd = '\n';
+                        const headingLevel = hashes.length;
+                        return `<span style="font-weight: bold; font-size: ${1.2 - (headingLevel * 0.1)}em;">${text}</span>${lineEnd}`;
+                    });
+                    
+                    // Format bold text
+                    previewText = previewText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                    
+                    // Format italic text
+                    previewText = previewText.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                    
+                    // Format links
+                    previewText = previewText.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="#" style="color: var(--text-accent);">$1</a>');
+                    
+                    // Set HTML content with basic formatting
+                    previewContent.innerHTML = previewText;
+                }).catch(err => {
+                    previewContent.setText('Unable to load note preview.');
+                    previewContent.classList.add('metadata-error-text');
+                });
+            } else {
+                // If file doesn't exist, show an error message
+                const noteInfo = metadataContainer.createDiv({ cls: 'metadata-error' });
+                noteInfo.createSpan({ 
+                    text: 'Note not found in vault. It may have been renamed or deleted.',
+                    cls: 'metadata-error-text'
+                });
+            }
+        } else {
+            // No path information
+            const errorInfo = metadataContainer.createDiv({ cls: 'metadata-error' });
+            errorInfo.createSpan({ 
+                text: 'No file path associated with this node.',
+                cls: 'metadata-error-text'
+            });
         }
 
         // Position tooltip at mouse location
@@ -477,31 +636,49 @@ export class GraphView {
         this.positionTooltip(tooltip, event.clientX - containerRect.left, event.clientY - containerRect.top, containerRect);
     }
 
-    /**
-     * Position the tooltip relative to the mouse position
-     */
+    private getTooltipSetting(settingName: string): number {
+        const value = getComputedStyle(document.documentElement)
+            .getPropertyValue(`--graph-tooltip-${settingName}`)
+            .trim();
+        return parseInt(value) || 0;
+    }
+
+    private getTooltipTiming(timingName: string): number {
+        const value = getComputedStyle(document.documentElement)
+            .getPropertyValue(`--graph-tooltip-${timingName}`)
+            .trim();
+        return parseInt(value) || 0;
+    }
+
     private positionTooltip(
         tooltip: HTMLElement,
         mouseX: number,
         mouseY: number,
         containerRect: DOMRect
     ): void {
-        // Use class constants for dimensions
-        const tooltipWidth = this.TOOLTIP_WIDTH;
-        const tooltipHeight = this.TOOLTIP_HEIGHT;
+        // Get dimensions from CSS variables
+        const tooltipWidth = this.getTooltipSetting('width');
+        const tooltipHeight = this.getTooltipSetting('height');
+        const tooltipPadding = this.getTooltipSetting('padding');
+        const offsetX = this.getTooltipSetting('offset-x');
+        const offsetY = this.getTooltipSetting('offset-y');
         
-        // Use class constants for offsets
-        let tooltipX = mouseX + this.TOOLTIP_OFFSET_X;
-        let tooltipY = mouseY + this.TOOLTIP_OFFSET_Y;
+        // Calculate total width including padding
+        const totalWidth = tooltipWidth + (2 * tooltipPadding);
+        const totalHeight = tooltipHeight;
+        
+        // Initial position (prefer showing below and to the right of cursor)
+        let tooltipX = mouseX + offsetX;
+        let tooltipY = mouseY + offsetY;
         
         // Flip to left side if it would go off right edge
-        if (tooltipX + tooltipWidth > containerRect.width) {
-            tooltipX = mouseX - this.TOOLTIP_OFFSET_X - tooltipWidth;
+        if (tooltipX + totalWidth > containerRect.width) {
+            tooltipX = mouseX - offsetX - totalWidth;
         }
         
-        // Ensure tooltip doesn't go below the bottom edge
-        if (tooltipY + tooltipHeight > containerRect.height) {
-            tooltipY = mouseY - this.TOOLTIP_OFFSET_Y - tooltipHeight;
+        // Flip to above cursor if it would go off bottom edge
+        if (tooltipY + totalHeight > containerRect.height) {
+            tooltipY = mouseY - offsetY - totalHeight;
         }
         
         // Apply the calculated position
@@ -761,7 +938,7 @@ export class GraphView {
         const nodeData = node.datum() as SimulationGraphNode;
         
         node.transition()
-            .duration(this.HOVER_ANIMATION_DURATION)
+            .duration(this.ANIMATION_DURATION)
             .attr('stroke-width', highlight ? 2 : 1.5)
             .attr('fill', highlight ? 'var(--graph-node-hover)' : this.getNodeColor(nodeData));
     }
@@ -780,7 +957,7 @@ export class GraphView {
         this._tooltipTimeout = window.setTimeout(() => {
             // Double-check that the node is still highlighted when the timeout fires
             if (this.highlightedNodeId === node.id) {
-                this.showNodeTooltip(node, event);
+                this.createTooltip(node, event);
             }
             this._tooltipTimeout = null;
         }, this.TOOLTIP_DELAY);
@@ -1206,5 +1383,23 @@ export class GraphView {
         this.centralityCalculator = null;
         // @ts-ignore - explicitly break circular references
         this.app = null;
+    }
+
+    private scheduleTooltipRemoval() {
+        // Clear any existing timeouts
+        this.clearTooltipTimeout();
+        if (this._hideTooltipTimeout) {
+            window.clearTimeout(this._hideTooltipTimeout);
+        }
+
+        // Set new timeout for hiding
+        this._hideTooltipTimeout = window.setTimeout(() => {
+            // Only remove if mouse is not over tooltip
+            const tooltip = this.currentTooltip;
+            if (tooltip && !tooltip.matches(':hover')) {
+                this.removeNodeTooltip();
+            }
+            this._hideTooltipTimeout = null;
+        }, this.getTooltipTiming('hide-delay'));
     }
 } 
