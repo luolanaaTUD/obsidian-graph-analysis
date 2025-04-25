@@ -100,9 +100,11 @@ export class GraphView {
     private readonly ZOOM_IN_SCALE_FACTOR = 60;   // Lower = allows zooming in closer
 
     // Constants for tooltip positioning
-    private readonly TOOLTIP_OFFSET_X = 20; // Fixed distance from node to tooltip
-    private readonly TOOLTIP_OFFSET_Y = 0;  // Vertical offset (0 = centered)
-    private readonly TOOLTIP_MARGIN = 15;   // Minimum margin from container edges
+    private readonly TOOLTIP_OFFSET_X = 20; // Fixed distance from cursor
+    private readonly TOOLTIP_OFFSET_Y = 0; // Vertical offset from cursor
+    private readonly TOOLTIP_WIDTH = 300; // Fixed width of tooltip
+    private readonly TOOLTIP_HEIGHT = 150; // Fixed height of tooltip
+
 
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
@@ -484,31 +486,22 @@ export class GraphView {
         mouseY: number,
         containerRect: DOMRect
     ): void {
-        // Fixed dimensions for tooltip
-        const tooltipWidth = 300;
-        const tooltipHeight = 150; // Reduced from 600 to be more manageable
+        // Use class constants for dimensions
+        const tooltipWidth = this.TOOLTIP_WIDTH;
+        const tooltipHeight = this.TOOLTIP_HEIGHT;
         
-        // Add a small offset from the cursor
-        const offsetX = 20;
-        const offsetY = 10;
-        
-        // Initial position to the right of the cursor
-        let tooltipX = mouseX + offsetX;
-        let tooltipY = mouseY + offsetY;
+        // Use class constants for offsets
+        let tooltipX = mouseX + this.TOOLTIP_OFFSET_X;
+        let tooltipY = mouseY + this.TOOLTIP_OFFSET_Y;
         
         // Flip to left side if it would go off right edge
         if (tooltipX + tooltipWidth > containerRect.width) {
-            tooltipX = mouseX - offsetX - tooltipWidth;
-        }
-        
-        // Ensure tooltip doesn't go above the top edge
-        if (tooltipY < 0) {
-            tooltipY = 0;
+            tooltipX = mouseX - this.TOOLTIP_OFFSET_X - tooltipWidth;
         }
         
         // Ensure tooltip doesn't go below the bottom edge
         if (tooltipY + tooltipHeight > containerRect.height) {
-            tooltipY = containerRect.height - tooltipHeight;
+            tooltipY = mouseY - this.TOOLTIP_OFFSET_Y - tooltipHeight;
         }
         
         // Apply the calculated position
