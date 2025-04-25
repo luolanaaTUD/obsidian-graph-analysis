@@ -6,49 +6,43 @@
  * in both light and dark modes.
  *----------------------------------------*/
 
-/*----------------------------------------
- * THEME VARIABLES FOR GRAPH ANALYSIS
- * Centralized styles for consistent theming
- *----------------------------------------*/
-
 :root {
     /* Graph background */
     --graph-background: var(--background-primary);
-    --background-primary-rgb: 255, 255, 255;  /* Light mode default */
+    
+    /* Node states */
+    --graph-node-default: var(--interactive-accent);
+    --graph-node-highlighted: var(--interactive-hover);
+    --graph-node-dimmed: var(--text-muted);
+    --graph-node-stroke-width: 1.5px;
+    --graph-node-stroke-width-highlighted: 2px;
+    --graph-node-selected-stroke-width: 3px;
+    --graph-node-selected-stroke: var(--interactive-accent);
+    --graph-node-opacity-default: 1;
+    --graph-node-opacity-dimmed: 0.6;
 
-    /* Node colors */
-    --graph-node-fill: var(--interactive-accent);
-    --graph-node-stroke: var(--interactive-accent-hover);
-    --graph-node-selected: var(--text-accent);
-    --graph-node-highlighted: var(--text-accent-hover);
-    --graph-node-dimmed: rgba(var(--interactive-accent-rgb), 0.3);
-    --graph-node-muted: var(--text-muted);
+    /* Link states */
+    --graph-link-default: var(--interactive-normal);
+    --graph-link-highlighted: var(--interactive-accent);
+    --graph-link-dimmed: var(--text-faint);
+    --graph-link-stroke-width: 1.5px;
+    --graph-link-stroke-width-highlighted: 2px;
+    --graph-link-stroke-opacity: 0.8;
+    --graph-link-stroke-opacity-dimmed: 0.4;
 
-    /* Link colors */
-    --graph-link-color: var(--text-muted);
-    --graph-link-highlighted: var(--text-accent);
-    --graph-link-dimmed: rgba(var(--text-muted-rgb), 0.3);
-
-    /* Label colors */
-    --graph-label-color: var(--text-normal);
-    --graph-label-background: var(--background-primary);
+    /* Label states */
+    --graph-label-default: var(--text-normal);
     --graph-label-highlighted: var(--text-accent);
     --graph-label-dimmed: var(--text-muted);
+    --graph-label-opacity-default: 0.8;
+    --graph-label-opacity-dimmed: 0.6;
+    --graph-label-opacity-high-degree: 0.8;
+    --graph-label-opacity-low-degree: 0.6;
 
-    /* Tooltip */
+    /* Tooltip styling */
     --graph-tooltip-background: var(--background-primary);
     --graph-tooltip-border: var(--background-modifier-border);
     --graph-tooltip-shadow: var(--background-modifier-box-shadow);
-
-    /* Loading indicator */
-    --graph-loading-background: var(--background-primary);
-    --graph-loading-text: var(--text-normal);
-    
-    /* Controls */
-    --graph-help-icon-background: var(--background-modifier-hover);
-    --graph-help-icon-text: var(--text-normal);
-
-    /* Tooltip dimensions and positioning */
     --graph-tooltip-width: 300px;
     --graph-tooltip-height: 450px;
     --graph-tooltip-padding: 12px;
@@ -56,64 +50,27 @@
     --graph-tooltip-offset-x: 20px;
     --graph-tooltip-offset-y: 0px;
     --graph-tooltip-preview-height: 150px;
+    --graph-tooltip-title: var(--text-accent);
     
     /* Tooltip timing */
     --graph-tooltip-show-delay: 500ms;
     --graph-tooltip-hide-delay: 300ms;
+
+    /* Loading indicator */
+    --graph-loading-background: var(--background-primary);
+    --graph-loading-text: var(--text-normal);
 }
 
 /* Dark theme adjustments */
 .theme-dark {
-    --graph-link-color: rgba(255, 255, 255, 0.4);
-    --graph-link-dimmed: rgba(255, 255, 255, 0.1);
-    --graph-tooltip-shadow: rgba(0, 0, 0, 0.3);
-    --background-primary-rgb: 32, 32, 32;  /* Dark mode value */
+    --graph-link-stroke-opacity: 0.6;
+    --graph-link-stroke-opacity-dimmed: 0.3;
 }
 
 /* Light theme adjustments */
 .theme-light {
-    --graph-link-color: rgba(0, 0, 0, 0.3);
-    --graph-link-dimmed: rgba(0, 0, 0, 0.1);
-    --background-primary-rgb: 255, 255, 255;  /* Light mode value */
-}
-
-/*----------------------------------------
- * THEME VARIABLES
- *----------------------------------------*/
-
-.theme-light, .theme-dark {
-  /* Node colors */
-  --graph-node-default: var(--interactive-accent);
-  --graph-node-highlight: var(--interactive-accent-hover);
-  --graph-node-faded: var(--text-muted);
-  --graph-node-hover: var(--interactive-accent-hover);
-  
-  /* Link colors */
-  --graph-link-default: var(--background-modifier-border);
-  --graph-link-highlight: var(--interactive-accent);
-  --graph-link-faded: var(--background-modifier-border-hover);
-  
-  /* Label colors */
-  --graph-label-highlight: var(--text-accent);
-  --graph-label-faded: var(--text-muted);
-  
-  /* Background and borders */
-  --graph-canvas-border: var(--background-modifier-border);
-  
-  /* Tooltip styling */
-  --graph-tooltip-title: var(--text-accent);
-  
-  /* UI elements */
-  --graph-handle-background: var(--background-secondary);
-  --graph-handle-text: var(--text-normal);
-  
-  /* Loading indicators */
-  --graph-loading-background: var(--background-secondary-alt);
-}
-
-/* Theme-specific overrides for dark mode */
-.theme-dark {
-  --graph-tooltip-shadow: rgba(0, 0, 0, 0.3);
+    --graph-link-stroke-opacity: 0.8;
+    --graph-link-stroke-opacity-dimmed: 0.4;
 }
 
 /*----------------------------------------
@@ -122,27 +79,27 @@
 
 /* Node tooltip */
 .graph-node-tooltip {
-  background-color: var(--background-primary);
-  border: 1px solid var(--graph-tooltip-border);
-  border-radius: var(--graph-tooltip-border-radius);
-  box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.1),
-    0 8px 24px rgba(0, 0, 0, 0.08);
-  padding: var(--graph-tooltip-padding);
-  position: absolute;
-  z-index: 9999;
-  width: var(--graph-tooltip-width);
-  height: var(--graph-tooltip-height);
-  overflow-y: auto;
-  pointer-events: auto;
-  scroll-behavior: smooth;
-  overscroll-behavior: contain;
-  display: flex;
-  flex-direction: column;
-  color: var(--text-normal);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  background-color: rgba(var(--background-primary-rgb), 0.85);
+    background-color: var(--background-primary);
+    border: 1px solid var(--graph-tooltip-border);
+    border-radius: var(--graph-tooltip-border-radius);
+    box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.1),
+        0 8px 24px rgba(0, 0, 0, 0.08);
+    padding: var(--graph-tooltip-padding);
+    position: absolute;
+    z-index: 9999;
+    width: var(--graph-tooltip-width);
+    height: var(--graph-tooltip-height);
+    overflow-y: auto;
+    pointer-events: auto;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    color: var(--text-normal);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-color: rgba(var(--background-primary-rgb), 0.85);
 }
 
 /* Node tooltip title */
