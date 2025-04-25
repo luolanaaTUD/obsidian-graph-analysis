@@ -6,29 +6,25 @@
  * in both light and dark modes.
  *----------------------------------------*/
 
-:root {
+.workspace {
     /* Graph background */
     --graph-background: var(--background-primary);
     
     /* Node states */
-    --graph-node-default: var(--interactive-accent);
-    --graph-node-highlighted: var(--interactive-hover);
-    --graph-node-dimmed: var(--text-muted);
-    --graph-node-stroke-width: 1.5px;
-    --graph-node-stroke-width-highlighted: 2px;
-    --graph-node-selected-stroke-width: 3px;
-    --graph-node-selected-stroke: var(--interactive-accent);
+    --graph-node-color-default: var(--interactive-accent);
+    --graph-node-color-highlighted: var(--interactive-accent-hover);
     --graph-node-opacity-default: 1;
-    --graph-node-opacity-dimmed: 0.6;
+    --graph-node-opacity-dimmed: 0.3;
+    
 
     /* Link states */
-    --graph-link-default: var(--interactive-normal);
-    --graph-link-highlighted: var(--interactive-accent);
-    --graph-link-dimmed: var(--text-faint);
-    --graph-link-stroke-width: 1.5px;
-    --graph-link-stroke-width-highlighted: 2px;
-    --graph-link-stroke-opacity: 0.8;
-    --graph-link-stroke-opacity-dimmed: 0.4;
+    --graph-link-color-default: var(--background-modifier-border);
+    --graph-link-color-highlighted: var(--interactive-accent);
+    --graph-link-opacity-default: 1;
+    --graph-link-opacity-dimmed: 0.3;
+    --graph-link-width-default: 1px;
+    --graph-link-width-highlighted: 1.2px;
+
 
     /* Label states */
     --graph-label-default: var(--text-normal);
@@ -36,25 +32,24 @@
     --graph-label-dimmed: var(--text-muted);
     --graph-label-opacity-default: 0.8;
     --graph-label-opacity-dimmed: 0.6;
-    --graph-label-opacity-high-degree: 0.8;
-    --graph-label-opacity-low-degree: 0.6;
 
     /* Tooltip styling */
     --graph-tooltip-background: var(--background-primary);
     --graph-tooltip-border: var(--background-modifier-border);
     --graph-tooltip-shadow: var(--background-modifier-box-shadow);
+    --graph-tooltip-title: var(--text-accent);
+
     --graph-tooltip-width: 300px;
     --graph-tooltip-height: 450px;
     --graph-tooltip-padding: 12px;
     --graph-tooltip-border-radius: 6px;
+    --graph-tooltip-preview-height: 150px;
     --graph-tooltip-offset-x: 20px;
     --graph-tooltip-offset-y: 0px;
-    --graph-tooltip-preview-height: 150px;
-    --graph-tooltip-title: var(--text-accent);
     
     /* Tooltip timing */
-    --graph-tooltip-show-delay: 500ms;
-    --graph-tooltip-hide-delay: 300ms;
+    --graph-tooltip-show-delay: 300ms;
+    --graph-tooltip-hide-delay: 150ms;
 
     /* Loading indicator */
     --graph-loading-background: var(--background-primary);
@@ -62,16 +57,14 @@
 }
 
 /* Dark theme adjustments */
-.theme-dark {
-    --graph-link-stroke-opacity: 0.6;
-    --graph-link-stroke-opacity-dimmed: 0.3;
-}
+/* .theme-dark .workspace {
+    --graph-link-color-default: var(--interactive-normal);
+} */
 
 /* Light theme adjustments */
-.theme-light {
-    --graph-link-stroke-opacity: 0.8;
-    --graph-link-stroke-opacity-dimmed: 0.4;
-}
+/* .theme-light .workspace {
+    --graph-link-color-default: var(--background-modifier-border);
+} */
 
 /*----------------------------------------
  * TOOLTIPS AND POPUPS
@@ -97,19 +90,21 @@
     display: flex;
     flex-direction: column;
     color: var(--text-normal);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    background-color: rgba(var(--background-primary-rgb), 0.85);
+    scrollbar-width: none;  /* Firefox */
+}
+
+.graph-node-tooltip::-webkit-scrollbar {
+    display: none;
 }
 
 /* Node tooltip title */
 .node-tooltip-title {
-  color: var(--graph-tooltip-title);
-  font-size: var(--font-ui-medium);
-  font-weight: var(--font-medium);
-  margin: 0 0 8px 0;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--background-modifier-border);
+    color: var(--graph-tooltip-title);
+    font-size: var(--font-ui-medium);
+    font-weight: var(--font-medium);
+    margin: 0 0 8px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--background-modifier-border);
 }
 
 /* Metadata container */
@@ -196,19 +191,21 @@
 
 /* Preview content */
 .preview-content {
-  background-color: var(--background-secondary);
-  color: var(--text-normal);
-  padding: 8px;
-  border-radius: 4px;
-  font-size: var(--font-ui-smaller);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow: hidden;
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    padding: 8px;
+    border-radius: 4px;
+    font-size: var(--font-ui-smaller);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: hidden;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    scrollbar-width: none;
 }
+
 
 /* Error text */
 .metadata-error-text {
@@ -219,22 +216,21 @@
 
 /* Open Note Button */
 .open-note-button {
-  background-color: var(--interactive-accent) !important;
-  color: var(--text-on-accent) !important;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-  font-weight: var(--font-medium);
-  font-size: var(--font-ui-small);
-  transition: background-color 0.2s ease;
-  outline: none;
-  display: inline-block;
-  width: 100%;
+    background-color: var(--graph-node-color-default) !important;
+    color: var(--text-on-accent) !important;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-weight: var(--font-medium);
+    font-size: var(--font-ui-small);
+    transition: background-color 0.2s ease;
+    display: inline-block;
+    width: 100%;
 }
 
 .open-note-button:hover {
-  background-color: var(--interactive-accent-hover) !important;
+    background-color: var(--graph-node-color-highlighted) !important;
 }
 
 /* Action hint */
@@ -258,18 +254,3 @@
   box-shadow: 0 2px 8px var(--graph-tooltip-shadow);
   font-size: var(--font-ui-small);
 }
-
-/* Enhance scrollbars for tooltips */
-.graph-node-tooltip ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.graph-node-tooltip ::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb-bg);
-  border-radius: 4px;
-}
-
-.graph-node-tooltip ::-webkit-scrollbar-track {
-  background-color: var(--scrollbar-bg);
-} 
