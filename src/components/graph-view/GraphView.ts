@@ -142,17 +142,17 @@ export class GraphView {
         // Create groups for links, labels, and nodes with explicit rendering order
         const linksGroup = this.svgGroup.append('g')
             .attr('class', 'links-group')
-            .style('stroke', 'var(--graph-link-default)')
-            .style('stroke-opacity', 'var(--graph-link-stroke-opacity)')
-            .style('stroke-width', 'var(--graph-link-stroke-width)');
+            .style('stroke', 'var(--graph-link-color-default)')
+            .style('stroke-width', 'var(--graph-link-width-default)')
+            .style('stroke-opacity', 'var(--graph-link-opacity-default)');
             
         const labelsGroup = this.svgGroup.append('g')
             .attr('class', 'labels-group');
             
         const nodesGroup = this.svgGroup.append('g')
             .attr('class', 'nodes-group')
-            .style('stroke', 'var(--graph-node-default)')
-            .style('stroke-width', 'var(--graph-node-stroke-width)');
+            .style('fill', 'var(--graph-node-color-default)')
+            .style('opacity', 'var(--graph-node-opacity-default)');
 
         // Initialize selections
         this.linksSelection = linksGroup.selectAll('line');
@@ -635,15 +635,14 @@ export class GraphView {
     }
 
     private getTooltipSetting(settingName: string): number {
-        const value = getComputedStyle(document.documentElement)
+        const workspace = document.querySelector('.workspace');
+        if (!workspace) {
+            console.warn('Workspace element not found for tooltip settings');
+            return 0;
+        }
+        
+        const value = getComputedStyle(workspace)
             .getPropertyValue(`--graph-tooltip-${settingName}`)
-            .trim();
-        return parseInt(value) || 0;
-    }
-
-    private getTooltipTiming(timingName: string): number {
-        const value = getComputedStyle(document.documentElement)
-            .getPropertyValue(`--graph-tooltip-${timingName}`)
             .trim();
         return parseInt(value) || 0;
     }
@@ -657,26 +656,23 @@ export class GraphView {
         // Get dimensions from CSS variables
         const tooltipWidth = this.getTooltipSetting('width');
         const tooltipHeight = this.getTooltipSetting('height');
-        const tooltipPadding = this.getTooltipSetting('padding');
         const offsetX = this.getTooltipSetting('offset-x');
         const offsetY = this.getTooltipSetting('offset-y');
         
-        // Calculate total width including padding
-        const totalWidth = tooltipWidth + (2 * tooltipPadding);
-        const totalHeight = tooltipHeight;
+
         
         // Initial position (prefer showing below and to the right of cursor)
         let tooltipX = mouseX + offsetX;
         let tooltipY = mouseY + offsetY;
         
         // Flip to left side if it would go off right edge
-        if (tooltipX + totalWidth > containerRect.width) {
-            tooltipX = mouseX - offsetX - totalWidth;
+        if (tooltipX + tooltipWidth > containerRect.width) {
+            tooltipX = mouseX - offsetX - tooltipWidth;
         }
         
         // Flip to above cursor if it would go off bottom edge
-        if (tooltipY + totalHeight > containerRect.height) {
-            tooltipY = mouseY - offsetY - totalHeight;
+        if (tooltipY + tooltipHeight > containerRect.height) {
+            tooltipY = mouseY - offsetY - tooltipHeight;
         }
         
         // Apply the calculated position
@@ -804,7 +800,7 @@ export class GraphView {
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
-                .style('fill', isConnected ? 'var(--graph-node-highlighted)' : 'var(--graph-node-dimmed)')
+                .style('fill', isConnected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)')
                 .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)');
         });
         
@@ -816,9 +812,9 @@ export class GraphView {
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
-                .style('stroke-opacity', isConnected ? 'var(--graph-link-stroke-opacity)' : 'var(--graph-link-stroke-opacity-dimmed)')
-                .style('stroke-width', isConnected ? 'var(--graph-link-stroke-width-highlighted)' : 'var(--graph-link-stroke-width)')
-                .style('stroke', isConnected ? 'var(--graph-link-highlighted)' : 'var(--graph-link-dimmed)');
+                .style('stroke', isConnected ? 'var(--graph-link-color-highlighted)' : 'var(--graph-link-color-default)')
+                .style('stroke-width', isConnected ? 'var(--graph-link-width-highlighted)' : 'var(--graph-link-width-default)')
+                .style('stroke-opacity', isConnected ? 'var(--graph-link-opacity-default)' : 'var(--graph-link-opacity-dimmed)');
         });
         
         // Also dim unconnected labels
@@ -844,15 +840,15 @@ export class GraphView {
             .transition()
             .duration(animationDuration)
             .style('opacity', 'var(--graph-node-opacity-default)')
-            .style('fill', 'var(--graph-node-default)');
+            .style('fill', 'var(--graph-node-color-default)');
             
         // Reset links to default style
         this.linksSelection
             .transition()
             .duration(animationDuration)
-            .style('stroke-opacity', 'var(--graph-link-stroke-opacity)')
-            .style('stroke-width', 'var(--graph-link-stroke-width)')
-            .style('stroke', 'var(--graph-link-default)');
+            .style('stroke-opacity', 'var(--graph-link-opacity-default)')
+            .style('stroke-width', 'var(--graph-link-width-default)')
+            .style('stroke', 'var(--graph-link-color-default)');
             
         this.labelsSelection
             .transition()
@@ -968,8 +964,7 @@ export class GraphView {
         
         node.transition()
             .duration(this.ANIMATION_DURATION)
-            .style('stroke-width', highlight ? 'var(--graph-node-stroke-width-highlighted)' : 'var(--graph-node-stroke-width)')
-            .style('fill', highlight ? 'var(--graph-node-highlighted)' : this.getNodeColor(nodeData));
+            .style('fill', highlight ? 'var(--graph-node-color-highlighted)' : this.getNodeColor(nodeData));
     }
     
     /**
@@ -1099,9 +1094,9 @@ export class GraphView {
             .data(this.links, d => `${d.source}-${d.target}`)
             .join(
                 enter => enter.append('line')
-                    .style('stroke', 'var(--graph-link-default)')
-                    .style('stroke-width', 'var(--graph-link-stroke-width)')
-                    .style('stroke-opacity', 'var(--graph-link-stroke-opacity)')
+                    .style('stroke', 'var(--graph-link-color-default)')
+                    .style('stroke-width', 'var(--graph-link-width-default)')
+                    .style('stroke-opacity', 'var(--graph-link-opacity-default)')
                     .attr('class', 'graph-link'),
                 update => update,
                 exit => exit.remove()
@@ -1116,8 +1111,8 @@ export class GraphView {
                     // Create the node elements
                     const nodeEnter = enter.append('circle')
                         .attr('r', d => this.getNodeRadius(d))
-                        .style('fill', 'var(--graph-node-default)')
-                        .style('stroke', 'var(--graph-node-default)')
+                        .style('fill', 'var(--graph-node-color-default)')
+                        .style('stroke', 'var(--graph-node-color-default)')
                         .style('stroke-width', 'var(--graph-node-stroke-width)')
                         .style('opacity', 'var(--graph-node-opacity-default)')
                         .attr('class', 'graph-node')
@@ -1125,8 +1120,8 @@ export class GraphView {
                     
                     // Update node colors and opacity based on state
                     nodeEnter.style('fill', d => {
-                        if (d.highlighted) return 'var(--graph-node-highlighted)';
-                        return 'var(--graph-node-default)';
+                        if (d.highlighted) return 'var(--graph-node-color-highlighted)';
+                        return 'var(--graph-node-color-default)';
                     })
                     .style('opacity', d => {
                         if (d.dimmed) return 'var(--graph-node-opacity-dimmed)';
@@ -1200,16 +1195,14 @@ export class GraphView {
     }
     
     private getNodeColor(node: SimulationGraphNode): string {
-        // Use the CSS variable for consistent theming across light/dark modes
-        return 'var(--graph-node-default)';
+        return 'var(--graph-node-color-default)';
     }
     
     /**
      * Get the color for links based on CSS variables for consistent theming
      */
     private getLinkColor(): string {
-        // Use the CSS variable for consistent theming across light/dark modes
-        return 'var(--graph-link-default)';
+        return 'var(--graph-link-color-default)';
     }
     
     public refreshGraphView(): void {
@@ -1442,6 +1435,6 @@ export class GraphView {
                 this.removeNodeTooltip();
             }
             this._hideTooltipTimeout = null;
-        }, this.getTooltipTiming('hide-delay'));
+        }, this.getTooltipSetting('hide-delay'));
     }
 } 
