@@ -796,11 +796,12 @@ export class GraphView {
         
         // Dim all nodes and links not connected
         this.nodesSelection.each(function(d) {
-            const isConnected = d.id === nodeId || connectedNodeIds.has(d.id);
+            const isSelected = d.id === nodeId;
+            const isConnected = isSelected || connectedNodeIds.has(d.id);
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
-                .style('fill', isConnected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)')
+                .style('fill', isSelected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)')
                 .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)');
         });
         
@@ -819,11 +820,12 @@ export class GraphView {
         
         // Also dim unconnected labels
         this.labelsSelection.each(function(d) {
-            const isConnected = d.id === nodeId || connectedNodeIds.has(d.id);
+            const isSelected = d.id === nodeId;
+            const isConnected = isSelected || connectedNodeIds.has(d.id);
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
-                .style('fill', isConnected ? 'var(--graph-label-highlighted)' : 'var(--graph-label-dimmed)')
+                .style('fill', isSelected ? 'var(--graph-label-highlighted)' : 'var(--graph-label-default)')
                 .style('opacity', isConnected ? 'var(--graph-label-opacity-default)' : 'var(--graph-label-opacity-dimmed)');
         });
     }
