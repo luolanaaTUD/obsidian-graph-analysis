@@ -17,10 +17,6 @@ interface NodeNeighborsCache {
     neighbors: Set<string>; // Set of neighbor node IDs
 }
 
-// Type guard to check if a node is our SimulationGraphNode
-function isSimulationGraphNode(node: d3.SimulationNodeDatum): node is SimulationGraphNode {
-    return 'id' in node && 'name' in node;
-}
 
 /**
  * A simplified graph view implementation based on the D3 example
@@ -44,7 +40,6 @@ export class GraphView {
     // D3 selections
     private nodesSelection: d3.Selection<SVGCircleElement, SimulationGraphNode, d3.BaseType, unknown>;
     private linksSelection: d3.Selection<SVGLineElement, SimulationGraphLink, d3.BaseType, unknown>;
-    private labelsSelection: d3.Selection<SVGTextElement, SimulationGraphNode, d3.BaseType, unknown>;
     
     // Force simulation
     private simulation: d3.Simulation<SimulationGraphNode, SimulationGraphLink>;
@@ -125,29 +120,31 @@ export class GraphView {
         // Get container dimensions
         this.updateDimensions();
         
-        // Create SVG container with centered viewBox like the D3 example
+        // Create SVG container with centered viewBox
         this.svg = d3.select(this.container)
             .append('svg')
-            .attr('width', '100%')  // Ensure SVG fills container width
-            .attr('height', '100%') // Ensure SVG fills container height
-            .attr('viewBox', [-this.width / 2, -this.height / 2, this.width, this.height])
+            .attr('width', '100%')
+            .attr('height', '100%')
+            .attr('viewBox', [
+                -this.width / 2,
+                -this.height / 2,
+                this.width,
+                this.height
+            ].join(' '))
             .style('display', 'block')
-            .style('max-width', 'none') // Remove max-width constraints
-            .style('max-height', 'none') // Remove max-height constraints
+            .style('max-width', 'none')
+            .style('max-height', 'none')
             .attr('class', 'graph-view-svg');
-        
-        // In the D3 example, SVG uses a viewBox centered at origin, so our group doesn't need translation
+
+        // Create the main SVG group
         this.svgGroup = this.svg.append('g');
         
-        // Create groups for links, labels, and nodes with explicit rendering order
+        // Create groups for links and nodes
         const linksGroup = this.svgGroup.append('g')
             .attr('class', 'links-group')
             .style('stroke', 'var(--graph-link-color-default)')
             .style('stroke-width', 'var(--graph-link-width-default)')
             .style('stroke-opacity', 'var(--graph-link-opacity-default)');
-            
-        const labelsGroup = this.svgGroup.append('g')
-            .attr('class', 'labels-group');
             
         const nodesGroup = this.svgGroup.append('g')
             .attr('class', 'nodes-group')
@@ -156,7 +153,6 @@ export class GraphView {
 
         // Initialize selections
         this.linksSelection = linksGroup.selectAll('line');
-        this.labelsSelection = labelsGroup.selectAll('text');
         this.nodesSelection = nodesGroup.selectAll('circle');
         
         // Initialize force simulation
@@ -293,10 +289,9 @@ export class GraphView {
         // Cache selection references for performance
         const linksSelection = this.linksSelection;
         const nodesSelection = this.nodesSelection;
-        const labelsSelection = this.labelsSelection;
         
         // Safety check - if selections don't exist, exit early
-        if (!linksSelection || !nodesSelection || !labelsSelection) return;
+        if (!linksSelection || !nodesSelection) return;
         
         // Update link positions
         linksSelection
@@ -309,11 +304,6 @@ export class GraphView {
         nodesSelection
             .attr('cx', d => d.x || 0)
             .attr('cy', d => d.y || 0);
-            
-        // Update label positions
-        labelsSelection
-            .attr('x', d => d.x || 0)
-            .attr('y', d => d.y || 0);
     }
     
     private updateDimensions() {
@@ -817,17 +807,6 @@ export class GraphView {
                 .style('stroke-width', isConnected ? 'var(--graph-link-width-highlighted)' : 'var(--graph-link-width-default)')
                 .style('stroke-opacity', isConnected ? 'var(--graph-link-opacity-default)' : 'var(--graph-link-opacity-dimmed)');
         });
-        
-        // Also dim unconnected labels
-        this.labelsSelection.each(function(d) {
-            const isSelected = d.id === nodeId;
-            const isConnected = isSelected || connectedNodeIds.has(d.id);
-            d3.select(this)
-                .transition()
-                .duration(animationDuration)
-                .style('fill', isSelected ? 'var(--graph-label-highlighted)' : 'var(--graph-label-default)')
-                .style('opacity', isConnected ? 'var(--graph-label-opacity-default)' : 'var(--graph-label-opacity-dimmed)');
-        });
     }
     
     private resetHighlights() {
@@ -851,11 +830,6 @@ export class GraphView {
             .style('stroke-opacity', 'var(--graph-link-opacity-default)')
             .style('stroke-width', 'var(--graph-link-width-default)')
             .style('stroke', 'var(--graph-link-color-default)');
-            
-        this.labelsSelection
-            .transition()
-            .duration(animationDuration)
-            .style('opacity', d => d.degree && d.degree > 3 ? 'var(--graph-label-opacity-high-degree)' : 'var(--graph-label-opacity-low-degree)');
     }
     
     private setupDragBehavior() {
@@ -1074,23 +1048,12 @@ export class GraphView {
                 console.error(`Error initializing graph cache in WASM: ${result.error}`);
                 throw new Error(`Failed to initialize graph cache: ${result.error}`);
             }
-            
-            if (process.env.NODE_ENV === 'development') {
-                console.log('Graph cache initialized in WASM');
-            }
         } catch (error) {
             console.error('Failed to initialize graph cache:', error);
-            
-            // Throw the error to indicate initialization failure
-            // This is critical for graph functionality, so we want to make it clear there's an issue
             new Notice(`Graph initialization failed: ${(error as Error).message || 'Unknown error'}`);
-            
-            // Don't throw here to allow the UI to render even with reduced functionality
-            // Instead, we'll gracefully proceed but log the error
         }
         
         // Create D3 selections for the graph elements
-        // Links first to ensure they're behind nodes
         this.linksSelection = this.svgGroup.select('.links-group')
             .selectAll<SVGLineElement, SimulationGraphLink>('line')
             .data(this.links, d => `${d.source}-${d.target}`)
@@ -1103,14 +1066,13 @@ export class GraphView {
                 update => update,
                 exit => exit.remove()
             );
-        
+
         // Add nodes
         this.nodesSelection = this.svgGroup.select('.nodes-group')
             .selectAll<SVGCircleElement, SimulationGraphNode>('circle')
             .data(this.nodes, d => d.id)
             .join(
                 enter => {
-                    // Create the node elements
                     const nodeEnter = enter.append('circle')
                         .attr('r', d => this.getNodeRadius(d))
                         .style('fill', 'var(--graph-node-color-default)')
@@ -1120,36 +1082,11 @@ export class GraphView {
                         .attr('class', 'graph-node')
                         .call(this.setupDragBehavior());
                     
-                    // Update node colors and opacity based on state
-                    nodeEnter.style('fill', d => {
-                        if (d.highlighted) return 'var(--graph-node-color-highlighted)';
-                        return 'var(--graph-node-color-default)';
-                    })
-                    .style('opacity', d => {
-                        if (d.dimmed) return 'var(--graph-node-opacity-dimmed)';
-                        return 'var(--graph-node-opacity-default)';
-                    });
+                    nodeEnter.style('fill', d => d.highlighted ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)')
+                            .style('opacity', d => d.dimmed ? 'var(--graph-node-opacity-dimmed)' : 'var(--graph-node-opacity-default)');
                     
                     return nodeEnter;
                 },
-                update => update,
-                exit => exit.remove()
-            );
-        
-        // Add labels with improved visibility - but keep minimal for performance
-        this.labelsSelection = this.svgGroup.select('.labels-group')
-            .selectAll<SVGTextElement, SimulationGraphNode>('text')
-            .data(this.nodes.filter(d => d.degree && d.degree > 2), d => d.id) // Only label nodes with higher degree
-            .join(
-                enter => enter.append('text')
-                    .attr('dy', d => this.getNodeRadius(d) + 15)
-                    .attr('text-anchor', 'middle')
-                    .style('fill', 'var(--text-normal)')
-                    .style('font-size', 'var(--font-ui-smaller)')
-                    .style('opacity', 'var(--graph-label-opacity, 0.7)')
-                    .attr('pointer-events', 'none') // Prevent labels from interfering with interactions
-                    .attr('class', 'graph-label')
-                    .text(d => d.name),
                 update => update,
                 exit => exit.remove()
             );
@@ -1164,8 +1101,6 @@ export class GraphView {
             if (linkForce) {
                 linkForce.links(this.links);
             }
-            
-            // Restart the simulation
             this.simulation.alpha(1).restart();
         }
     }
@@ -1405,8 +1340,6 @@ export class GraphView {
             this.nodesSelection = undefined;
             // @ts-ignore - we're intentionally clearing the selections
             this.linksSelection = undefined;
-            // @ts-ignore - we're intentionally clearing the selections
-            this.labelsSelection = undefined;
             // @ts-ignore - explicitly break circular references
             this.svg = null;
         }
