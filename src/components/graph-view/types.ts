@@ -27,3 +27,15 @@ export interface CentralityResult {
 
 // Type for centrality calculation function
 export type CentralityCalculator = (graphDataJson: string) => string;
+
+export interface SimulationGraphNode extends d3.SimulationNodeDatum {
+    id: string;
+    name: string;
+    path?: string;
+    centralityScore?: number;
+    degree?: number;
+    x?: number;
+    y?: number;
+    highlighted?: boolean;
+    dimmed?: boolean;
+}
