@@ -24,6 +24,15 @@
     --graph-link-width-default: 1px;
     --graph-link-width-highlighted: 1.2px;
 
+    /* Label states */
+    --graph-label-color: var(--text-muted);
+    --graph-label-color-highlighted: var(--text-normal);
+    --graph-label-font-size: 6px;
+    --graph-label-opacity: 0.8;
+    --graph-label-opacity-highlighted: 1;
+    --graph-label-opacity-dimmed: 0.3;
+    --graph-label-margin: 3px;
+
     /* Tooltip styling */
     --graph-tooltip-background: var(--background-primary);
     --graph-tooltip-border: var(--background-modifier-border);

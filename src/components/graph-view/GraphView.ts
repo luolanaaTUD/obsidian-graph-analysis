@@ -40,6 +40,7 @@ export class GraphView {
     // D3 selections
     private nodesSelection: d3.Selection<SVGCircleElement, SimulationGraphNode, d3.BaseType, unknown>;
     private linksSelection: d3.Selection<SVGLineElement, SimulationGraphLink, d3.BaseType, unknown>;
+    private labelsSelection: d3.Selection<SVGTextElement, SimulationGraphNode, d3.BaseType, unknown>;
     
     // Force simulation
     private simulation: d3.Simulation<SimulationGraphNode, SimulationGraphLink>;
@@ -87,6 +88,13 @@ export class GraphView {
     // New tooltip timeout
     private _hideTooltipTimeout: number | null = null;
 
+    // Event handlers
+    private vaultModifyHandler: (file: TFile) => void;
+    private vaultCreateHandler: (file: TFile) => void;
+    private vaultDeleteHandler: (file: TFile) => void;
+    private vaultRenameHandler: (file: TFile, oldPath: string) => void;
+    private debounceTimeout: number | null = null;
+
     constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
         this.app = app;
         
@@ -103,6 +111,9 @@ export class GraphView {
         
         // Setup visibility detection
         this.setupVisibilityObserver();
+
+        // Setup vault event handlers
+        this.setupVaultEventHandlers();
         
         // Load vault data
         this.showLoadingIndicator();
@@ -139,7 +150,7 @@ export class GraphView {
         // Create the main SVG group
         this.svgGroup = this.svg.append('g');
         
-        // Create groups for links and nodes
+        // Create groups for links, nodes, and labels
         const linksGroup = this.svgGroup.append('g')
             .attr('class', 'links-group')
             .style('stroke', 'var(--graph-link-color-default)')
@@ -151,9 +162,18 @@ export class GraphView {
             .style('fill', 'var(--graph-node-color-default)')
             .style('opacity', 'var(--graph-node-opacity-default)');
 
+        const labelsGroup = this.svgGroup.append('g')
+            .attr('class', 'labels-group')
+            .style('fill', 'var(--graph-label-color)')
+            .style('font-size', 'var(--graph-label-font-size)')
+            .style('opacity', 'var(--graph-label-opacity)')
+            .style('pointer-events', 'none')
+            .style('text-anchor', 'middle');
+
         // Initialize selections
         this.linksSelection = linksGroup.selectAll('line');
         this.nodesSelection = nodesGroup.selectAll('circle');
+        this.labelsSelection = labelsGroup.selectAll('text');
         
         // Initialize force simulation
         this.initializeSimulation();
@@ -298,9 +318,10 @@ export class GraphView {
         // Cache selection references for performance
         const linksSelection = this.linksSelection;
         const nodesSelection = this.nodesSelection;
+        const labelsSelection = this.labelsSelection;
         
         // Safety check - if selections don't exist, exit early
-        if (!linksSelection || !nodesSelection) return;
+        if (!linksSelection || !nodesSelection || !labelsSelection) return;
         
         // Update link positions
         linksSelection
@@ -313,6 +334,17 @@ export class GraphView {
         nodesSelection
             .attr('cx', d => d.x || 0)
             .attr('cy', d => d.y || 0);
+
+        // Update label positions
+        labelsSelection
+            .attr('x', d => (d.x || 0)) // Center horizontally with node
+            .attr('y', d => {
+                const radius = this.getNodeRadius(d);
+                const margin = parseInt(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--graph-label-margin')
+                    .trim()) || 8;
+                return (d.y || 0) + radius + margin;
+            });
     }
     
     private updateDimensions() {
@@ -1078,6 +1110,20 @@ export class GraphView {
                 exit => exit.remove()
             );
 
+        // Add labels with proper data binding and update handling
+        this.labelsSelection = this.svgGroup.select('.labels-group')
+            .selectAll<SVGTextElement, SimulationGraphNode>('text')
+            .data(this.nodes, d => d.id) // Use the same key function as nodes
+            .join(
+                enter => enter.append('text')
+                    .text(d => d.name)
+                    .attr('class', 'graph-label')
+                    .style('pointer-events', 'none')
+                    .style('text-anchor', 'middle'),
+                update => update.text(d => d.name), // Update text content on update
+                exit => exit.remove()
+            );
+
         // Setup event handlers
         this.setupNodeEventHandlers();
             
@@ -1246,6 +1292,18 @@ export class GraphView {
     }
     
     public onunload() {
+        // Remove vault event handlers
+        this.app.vault.off('modify', this.vaultModifyHandler);
+        this.app.vault.off('create', this.vaultCreateHandler);
+        this.app.vault.off('delete', this.vaultDeleteHandler);
+        this.app.vault.off('rename', this.vaultRenameHandler);
+
+        // Clear any pending debounce timeout
+        if (this.debounceTimeout) {
+            window.clearTimeout(this.debounceTimeout);
+            this.debounceTimeout = null;
+        }
+
         // Cancel any pending timers or animation frames
         if (this._frameRequest) {
             window.cancelAnimationFrame(this._frameRequest);
@@ -1358,5 +1416,56 @@ export class GraphView {
             }
             this._hideTooltipTimeout = null;
         }, this.getTooltipSetting('hide-delay'));
+    }
+
+    private setupVaultEventHandlers() {
+        // Create handlers that debounce updates
+        this.vaultModifyHandler = (file: TFile) => {
+            if (file.extension === 'md') {
+                this.debouncedUpdate();
+            }
+        };
+
+        this.vaultCreateHandler = (file: TFile) => {
+            if (file.extension === 'md') {
+                this.debouncedUpdate();
+            }
+        };
+
+        this.vaultDeleteHandler = (file: TFile) => {
+            if (file.extension === 'md') {
+                this.debouncedUpdate();
+            }
+        };
+
+        this.vaultRenameHandler = (file: TFile, oldPath: string) => {
+            if (file.extension === 'md') {
+                this.debouncedUpdate();
+            }
+        };
+
+        // Register the event handlers
+        this.app.vault.on('modify', this.vaultModifyHandler);
+        this.app.vault.on('create', this.vaultCreateHandler);
+        this.app.vault.on('delete', this.vaultDeleteHandler);
+        this.app.vault.on('rename', this.vaultRenameHandler);
+    }
+
+    private debouncedUpdate() {
+        // Clear any existing timeout
+        if (this.debounceTimeout) {
+            window.clearTimeout(this.debounceTimeout);
+        }
+
+        // Set a new timeout to update after a delay
+        this.debounceTimeout = window.setTimeout(async () => {
+            try {
+                await this.loadVaultData();
+            } catch (error) {
+                console.error('Error updating graph data:', error);
+                new Notice('Failed to update graph view');
+            }
+            this.debounceTimeout = null;
+        }, 2000); // 2 second debounce delay
     }
 } 
