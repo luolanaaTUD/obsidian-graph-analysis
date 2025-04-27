@@ -16,7 +16,6 @@
     --graph-node-opacity-default: 1;
     --graph-node-opacity-dimmed: 0.3;
     
-
     /* Link states */
     --graph-link-color-default: var(--background-modifier-border);
     --graph-link-color-highlighted: var(--interactive-accent);
@@ -24,14 +23,6 @@
     --graph-link-opacity-dimmed: 0.3;
     --graph-link-width-default: 1px;
     --graph-link-width-highlighted: 1.2px;
-
-
-    /* Label states */
-    --graph-label-default: var(--text-normal);
-    --graph-label-highlighted: var(--text-accent);
-    --graph-label-dimmed: var(--text-muted);
-    --graph-label-opacity-default: 0.8;
-    --graph-label-opacity-dimmed: 0.6;
 
     /* Tooltip styling */
     --graph-tooltip-background: var(--background-primary);

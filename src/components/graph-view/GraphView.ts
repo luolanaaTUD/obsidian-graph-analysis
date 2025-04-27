@@ -214,13 +214,22 @@ export class GraphView {
                 if (this.simulation) {
                     this.simulation.alphaTarget(0);
                 }
-                this.removeNodeTooltip();
+                this.container.addClass('zooming');
             })
             .on('zoom', (event) => {
-                // With a centered viewBox, we can directly apply the transform to our group
+                // Update SVG group transform
                 this.svgGroup.attr('transform', event.transform);
+                
+                // Request a frame to update labels
+                if (!this._frameRequest) {
+                    this._frameRequest = window.requestAnimationFrame(() => {
+                        this.updateGraph();
+                        this._frameRequest = null;
+                    });
+                }
             })
             .on('end', () => {
+                this.container.removeClass('zooming');
                 this.restartSimulationGently();
             });
             
@@ -696,11 +705,6 @@ export class GraphView {
         if ((this.isDraggingNode && this.highlightedNodeId === nodeId) || cacheValid) {
             if (this.nodeNeighborsCache) {
                 connectedNodeIds = this.nodeNeighborsCache.neighbors;
-                
-                // Only log in development mode or when debug is enabled
-                if (process.env.NODE_ENV === 'development') {
-                    console.log(`Using cached neighbors (${connectedNodeIds.size}) for node ${nodeId}`);
-                }
             }
         } else {
             // No cache hit, need to get data from WASM
@@ -722,37 +726,25 @@ export class GraphView {
                         connectedNodeIds.add(neighbor.node_id.toString());
                     });
                     
-                    // Only log in development mode or when debug is enabled
-                    if (process.env.NODE_ENV === 'development') {
-                        console.log(`Retrieved ${connectedNodeIds.size} neighbors from WASM cache for node ${nodeId}`);
-                    }
-                    
                     // Update the cache with the new data
                     this.nodeNeighborsCache = {
                         nodeId: nodeId,
                         neighbors: connectedNodeIds
                     };
                 } else if (neighborResult && neighborResult.error) {
-                    // If there's an error message in the result, handle it
                     console.error(`Error from WASM neighbor function: ${neighborResult.error}`);
                     throw new Error(neighborResult.error);
                 } else {
-                    // If no neighbor data and no error, it's an unexpected result format
                     console.error('Unexpected result format from WASM neighbor function', neighborResult);
                     throw new Error('Unexpected result format from WASM');
                 }
             } catch (error) {
-                // Log the error and initialize/refresh the graph cache as a recovery attempt
                 console.error('Error in highlightConnections with WASM:', error);
-                
-                // Clear the cache on error
                 this.nodeNeighborsCache = null;
                 
-                // Attempt to reinitialize the graph cache with current data
                 try {
                     const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
                     if (plugin && plugin.initializeGraphCache) {
-                        // Format the graph data for WASM
                         const wasmGraphData = {
                             nodes: this.nodes.map(node => node.name),
                             edges: this.links.map(link => {
@@ -762,11 +754,9 @@ export class GraphView {
                             })
                         };
                         
-                        // Reinitialize the graph in WASM
                         plugin.initializeGraphCache(JSON.stringify(wasmGraphData))
                             .then(() => {
                                 console.log('Graph cache reinitialized after error');
-                                // Retry the highlight operation after reinitialization
                                 this.highlightConnections(nodeId, highlight);
                                 return;
                             })
@@ -777,9 +767,6 @@ export class GraphView {
                 } catch (reinitError) {
                     console.error('Error attempting to reinitialize graph cache:', reinitError);
                 }
-                
-                // Since we're returning early after attempting reinitialization,
-                // we don't proceed with any fallback or highlighting updates
                 return;
             }
         }
@@ -1090,7 +1077,7 @@ export class GraphView {
                 update => update,
                 exit => exit.remove()
             );
-            
+
         // Setup event handlers
         this.setupNodeEventHandlers();
             

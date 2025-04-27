@@ -36,14 +36,6 @@
   transform: translateZ(0);
 }
 
-/* Label element optimization */
-.graph-label {
-  will-change: x, y, opacity;
-  contain: paint;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
-
 /*----------------------------------------
  * INTERACTION STATES
  *----------------------------------------*/
@@ -68,8 +60,7 @@
 }
 
 .dragging .graph-node,
-.dragging .graph-link,
-.dragging .graph-label {
+.dragging .graph-link {
   transition: none !important;
   animation: none !important;
 }
@@ -81,8 +72,7 @@
 }
 
 .zooming .graph-node,
-.zooming .graph-link,
-.zooming .graph-label {
+.zooming .graph-link {
   transition: none !important;
   animation: none !important;
   contain: strict;
@@ -90,8 +80,7 @@
 
 /* Default animations */
 .graph-initialized .graph-node,
-.graph-initialized .graph-link,
-.graph-initialized .graph-label {
+.graph-initialized .graph-link {
   transition: 
     transform 200ms ease-out, 
     opacity 200ms ease-out, 
@@ -107,8 +96,7 @@
 /* High-DPI optimizations */
 @media (min-resolution: 2dppx) {
   .graph-node,
-  .graph-link,
-  .graph-label {
+  .graph-link {
     image-rendering: optimizeSpeed;
   }
 }
@@ -116,8 +104,7 @@
 /* Accessibility - respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   .graph-node,
-  .graph-link,
-  .graph-label {
+  .graph-link {
     transition: none !important;
     animation: none !important;
   }
@@ -140,4 +127,89 @@
   height: 100%;
   background-color: var(--graph-background);
   flex: 1;
+}
+
+/* Graph HTML labels container */
+.graph-labels-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Individual label style */
+.graph-node-label {
+  position: absolute;
+  transform-origin: center top;
+  font-size: var(--graph-label-font-size, 10px);
+  color: var(--graph-label-color, var(--text-muted));
+  opacity: var(--graph-label-opacity, 0.7);
+  pointer-events: none;
+  user-select: none;
+  text-align: center;
+  white-space: nowrap;
+  transition: opacity 200ms ease-out, color 200ms ease-out;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+  text-rendering: optimizeLegibility;
+}
+
+/* Label states */
+.graph-node-label.highlighted {
+  opacity: var(--graph-label-opacity-highlighted, 1);
+  color: var(--graph-label-color-highlighted, var(--text-normal));
+}
+
+.graph-node-label.dimmed {
+  opacity: var(--graph-label-opacity-dimmed, 0.3);
+}
+
+/* When zooming/dragging, disable transitions */
+.zooming .graph-node-label,
+.dragging .graph-node-label {
+  transition: none !important;
+}
+
+/* Graph label styles */
+.graph-label {
+  pointer-events: none; /* Make labels non-interactive */
+  user-select: none; /* Prevent text selection */
+  font-family: var(--font-interface);
+  font-size: var(--graph-label-font-size, 10px);
+  fill: var(--graph-label-color, var(--text-normal));
+  opacity: var(--graph-label-opacity, 0.7);
+  text-anchor: middle;
+  dominant-baseline: text-after-edge;
+  transition: opacity 200ms ease-out, fill 200ms ease-out;
+}
+
+/* Label states */
+.graph-label.highlighted {
+  opacity: var(--graph-label-opacity-highlighted, 1);
+  fill: var(--graph-label-color-highlighted, var(--text-accent));
+}
+
+.graph-label.dimmed {
+  opacity: var(--graph-label-opacity-dimmed, 0.3);
+}
+
+/* When node is highlighted, make its label more visible */
+.graph-node.highlighted + .graph-label {
+  opacity: 1;
+  fill: var(--text-normal);
+}
+
+/* When nodes are dimmed, make their labels more subtle */
+.graph-node.dimmed + .graph-label {
+  opacity: 0.3;
 } 
