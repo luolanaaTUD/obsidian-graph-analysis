@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal, MarkdownRenderer } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, Notice, Modal, MarkdownRenderer, WorkspaceLeaf, ItemView } from 'obsidian';
 import { GraphView } from './components/graph-view/GraphView';
 
 // Import our styles 
@@ -11,6 +11,14 @@ declare function calculate_eigenvector_centrality(graph_data_json: string): stri
 declare function calculate_betweenness_centrality(graph_data_json: string): string;
 declare function build_graph_from_vault(vault_data_json: string): string;
 declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<any>;
+
+// New cached graph functions
+declare function initialize_graph(graph_data_json: string): string;
+declare function clear_graph(): string;
+declare function get_node_neighbors_cached(node_id: number): string;
+declare function calculate_degree_centrality_cached(): string;
+declare function get_graph_metadata(): string;
+declare function find_shortest_path_cached(source_id: number, target_id: number): string;
 
 interface GraphAnalysisSettings {
     excludeFolders: string[];
@@ -94,6 +102,115 @@ class ResultsModal extends Modal {
     }
 }
 
+// Define a new view type for our graph analysis
+export const GRAPH_ANALYSIS_VIEW_TYPE = 'graph-analysis-view';
+
+// Create a new ItemView for our graph
+export class GraphAnalysisView extends ItemView {
+    private graphView: GraphView;
+    
+    constructor(leaf: WorkspaceLeaf, private plugin: GraphAnalysisPlugin) {
+        super(leaf);
+        this.graphView = new GraphView(
+            this.app,
+            this.plugin.calculateDegreeCentrality.bind(this.plugin)
+        );
+    }
+
+    getViewType(): string {
+        return GRAPH_ANALYSIS_VIEW_TYPE;
+    }
+
+    getDisplayText(): string {
+        return 'Graph Analysis';
+    }
+
+    getIcon(): string {
+        return 'waypoints';
+    }
+
+    async onOpen(): Promise<void> {
+        const container = this.containerEl.children[1] as HTMLElement;
+        container.empty();
+        container.classList.add('graph-analysis-view-container');
+        
+        // Initialize the graph view
+        await this.graphView.onload(container);
+        
+        return;
+    }
+    
+    // Handle view reactivation to ensure graph is centered
+    async onResize(): Promise<void> {
+        // When view is resized, ensure the graph is properly centered
+        // with a slight delay to allow DOM elements to settle
+        if (this.graphView) {
+            // Use larger timeout for resize since the container needs time
+            // to be fully resized by Obsidian before we calculate dimensions
+            setTimeout(() => {
+                this.centerGraphSafely();
+            }, 50);
+        }
+        return;
+    }
+    
+    // This event is triggered when the view becomes active
+    setEphemeralState(state: any): void {
+        super.setEphemeralState(state);
+        // When view becomes active, ensure the graph is properly positioned
+        this.centerGraphSafely();
+    }
+    
+    // Called when the parent plugin asks for the state
+    getState(): any {
+        const state = super.getState();
+        
+        // Return current view state with our additional info
+        return {
+            ...state,
+            lastActive: Date.now()
+        };
+    }
+    
+    async onClose(): Promise<void> {
+        // Clean up the graph view
+        if (this.graphView) {
+            try {
+                this.graphView.onunload();
+            } catch (e) {
+                console.warn('Error unloading graph view:', e);
+            }
+        }
+        
+        // Clear references
+        this.contentEl.empty();
+        return;
+    }
+    
+    // Safely center the graph with error handling
+    private async centerGraphSafely(): Promise<void> {
+        try {
+            // Use the new public methods we created
+            if (this.graphView) {
+                // Use the refreshGraphView method instead of individual calls
+                this.graphView.refreshGraphView();
+                console.log("Graph position updated after view activation/resize");
+                
+                // Restart the simulation gently after a short delay
+                setTimeout(() => {
+                    try {
+                        this.graphView.restartSimulationGently();
+                    } catch (e) {
+                        console.warn("Error restarting force simulation:", e);
+                    }
+                }, 50);
+            }
+        } catch (e) {
+            console.warn("Error updating graph position:", e);
+        }
+    }
+}
+
 export default class GraphAnalysisPlugin extends Plugin {
     settings: GraphAnalysisSettings;
     wasmInitialized: boolean = false;
@@ -123,6 +240,12 @@ export default class GraphAnalysisPlugin extends Plugin {
         
         // Register event handlers for vault changes
         this.registerVaultEventListeners();
+        
+        // Register the graph analysis view
+        this.registerView(
+            GRAPH_ANALYSIS_VIEW_TYPE,
+            (leaf) => new GraphAnalysisView(leaf, this)
+        );
 
         // Add commands for different centrality algorithms
         this.addCommand({
@@ -149,27 +272,37 @@ export default class GraphAnalysisPlugin extends Plugin {
 
         // Add a ribbon icon to show the graph view
         this.addRibbonIcon('waypoints', 'Graph Analysis View', async () => {
-            if (this.graphView) {
-                // If view exists, show a notice instead of opening a new one
-                new Notice('Graph view is already open');
-                
-                // Flash the existing canvas to help user locate it
-                const canvas = this.graphView.getCanvas();
-                canvas.addClass('graph-analysis-canvas-flash');
-                setTimeout(() => {
-                    canvas.removeClass('graph-analysis-canvas-flash');
-                }, 1000);
-            } else {
-                // Ensure WASM is loaded before creating graph view
-                await this.ensureWasmLoaded();
-                
-                // Create and show new graph view
-                this.graphView = new GraphView(
-                    this.app, 
-                    this.calculateDegreeCentrality.bind(this)
-                );
-                await this.graphView.onload(this.app.workspace.containerEl);
+            // First, check if view is already open
+            const existing = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
+            if (existing.length > 0) {
+                // If already open, just reveal the leaf
+                this.app.workspace.revealLeaf(existing[0]);
+                return;
             }
+            
+            // Ensure WASM is loaded before creating view
+            await this.ensureWasmLoaded();
+            
+            // Get the most appropriate leaf - use current leaf if empty, otherwise create a new one
+            let leaf: WorkspaceLeaf;
+            const activeLeaf = this.app.workspace.activeLeaf;
+            
+            if (activeLeaf && !activeLeaf.getViewState().pinned && !activeLeaf.getViewState().active) {
+                // If active leaf exists and isn't pinned/active with content, use it
+                leaf = activeLeaf;
+            } else {
+                // Otherwise create a new leaf without splitting
+                leaf = this.app.workspace.getLeaf(false);
+            }
+            
+            // Set the view in the selected leaf
+            await leaf.setViewState({
+                type: GRAPH_ANALYSIS_VIEW_TYPE,
+                active: true
+            });
+            
+            // Focus the leaf
+            this.app.workspace.revealLeaf(leaf);
         });
     }
     
@@ -219,7 +352,8 @@ export default class GraphAnalysisPlugin extends Plugin {
                 await this.saveData(dataToSave);
                 
                 this.wasmInitialized = true;
-                console.log('Graph Analysis WASM module initialized successfully');
+                // Keep a simpler log message for WASM initialization
+                console.log('Graph Analysis: WASM initialized');
                 
                 // Hide the loading notice
                 if (this.wasmLoadingNotice) {
@@ -289,7 +423,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.fileCreatedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
-                console.log(`File created: ${file.path}`);
                 this.scheduleGraphDataRefresh('File created');
             }
         };
@@ -298,7 +431,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.fileDeletedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md') {
-                console.log(`File deleted: ${file.path}`);
                 this.scheduleGraphDataRefresh('File deleted');
             }
         };
@@ -307,7 +439,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.fileModifiedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
-                console.log(`File modified: ${file.path}`);
                 this.scheduleGraphDataRefresh('File modified');
             }
         };
@@ -316,7 +447,6 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.metadataChangedHandler = (file: TFile) => {
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
-                console.log(`Metadata changed: ${file.path}`);
                 this.scheduleGraphDataRefresh('Metadata changed');
             }
         };
@@ -359,8 +489,6 @@ export default class GraphAnalysisPlugin extends Plugin {
             return;
         }
         
-        console.log(`Refreshing graph data. Reason: ${reason}`);
-        
         // Only refresh if the graph view is loaded
         if (this.graphView) {
             try {
@@ -376,8 +504,6 @@ export default class GraphAnalysisPlugin extends Plugin {
                 // Mark as refreshed
                 this.graphDataNeedsRefresh = false;
                 this.lastRefreshTime = Date.now();
-                
-                console.log('Graph data refreshed successfully');
             } catch (error) {
                 console.error('Failed to refresh graph data:', error);
             }
@@ -399,35 +525,29 @@ export default class GraphAnalysisPlugin extends Plugin {
             this.wasmLoadingNotice = null;
         }
         
+        // Mark WASM as uninitialized to prevent further usage
+        this.wasmInitialized = false;
+        
+        // Release WASM resources for garbage collection
+        // Note: WebAssembly doesn't provide explicit unload methods,
+        // but marking as uninitialized and releasing references helps garbage collection
+        this.wasmLoadingPromise = null;
+        
         // Release event handlers explicitly (although registerEvent handles this)
         this.fileCreatedHandler = null;
         this.fileDeletedHandler = null;
         this.fileModifiedHandler = null;
         this.metadataChangedHandler = null;
         
-        // Nullify WASM loading promise to allow garbage collection
-        this.wasmLoadingPromise = null;
-        
-        // Ensure any open modals are closed
-        const activeLeaves = this.app.workspace.getLeavesOfType('graph-analysis-view');
-        activeLeaves.forEach(leaf => {
-            this.app.workspace.revealLeaf(leaf);
+        // Close any open graph views
+        const leaves = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
+        for (const leaf of leaves) {
             leaf.detach();
-        });
-        
-        // Remove any remaining DOM elements
-        const canvasElements = document.querySelectorAll('.graph-analysis-canvas');
-        canvasElements.forEach(element => element.remove());
+        }
         
         // Remove any added CSS classes from the body
         document.body.classList.remove('graph-view-dragging');
         document.body.classList.remove('graph-analysis-active');
-        
-        // Unload graph view if it exists - with proper cleanup
-        if (this.graphView) {
-            this.graphView.onunload();
-            this.graphView = null;
-        }
     }
 
     async loadSettings() {
@@ -672,6 +792,96 @@ export default class GraphAnalysisPlugin extends Plugin {
         } catch (error) {
             console.error('Error in WASM betweenness centrality calculation:', error);
             throw new Error('Failed to calculate betweenness centrality');
+        }
+    }
+    
+    // Method to initialize the cached graph
+    public initializeGraphCache(graphDataJson: string): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = initialize_graph(graphDataJson);
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error initializing graph cache:', error);
+            throw new Error('Failed to initialize graph cache');
+        }
+    }
+    
+    // Method to clear the cached graph
+    public clearGraphCache(): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = clear_graph();
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error clearing graph cache:', error);
+            throw new Error('Failed to clear graph cache');
+        }
+    }
+    
+    // Method to get neighbors for a node using the cached graph
+    public getNodeNeighborsCached(nodeId: number): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = get_node_neighbors_cached(nodeId);
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error getting node neighbors from cache:', error);
+            throw new Error('Failed to get node neighbors');
+        }
+    }
+    
+    // Method to calculate degree centrality using the cached graph
+    public calculateDegreeCentralityCached(): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = calculate_degree_centrality_cached();
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error calculating degree centrality from cache:', error);
+            throw new Error('Failed to calculate degree centrality');
+        }
+    }
+    
+    // Method to get metadata about the cached graph
+    public getGraphMetadata(): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = get_graph_metadata();
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error getting graph metadata:', error);
+            throw new Error('Failed to get graph metadata');
+        }
+    }
+    
+    // Method to find shortest path between nodes using the cached graph
+    public findShortestPathCached(sourceId: number, targetId: number): any {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
+        }
+        
+        try {
+            const result = find_shortest_path_cached(sourceId, targetId);
+            return JSON.parse(result);
+        } catch (error) {
+            console.error('Error finding shortest path from cache:', error);
+            throw new Error('Failed to find shortest path');
         }
     }
 }
