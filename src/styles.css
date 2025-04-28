@@ -1,116 +1,23 @@
-/* 
- * Main stylesheet for Obsidian Graph Analysis plugin
- * This file imports all theme variables and components
- * and contains performance optimizations and state styles
- */
+/*----------------------------------------
+ * Obsidian Graph Analysis Plugin Styles
+ * 
+ * Table of Contents:
+ * 1. Variables & Imports
+ * 2. Base Container Styles
+ * 3. Graph Elements
+ * 4. Labels & Text
+ * 5. Interaction States
+ * 6. Tooltips & Popups
+ * 7. Performance Optimizations
+ * 8. Media Queries
+ *----------------------------------------*/
 
-/* Import theme variables */
+/* 1. Variables & Imports
+/*----------------------------------------*/
 @import './styles/theme.css';
 
-/*----------------------------------------
- * PERFORMANCE OPTIMIZATIONS
- *----------------------------------------*/
-
-/* SVG and container optimization */
-.graph-view-svg,
-.graph-container {
-  will-change: transform;
-  contain: strict;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
-
-/* Node element optimization */
-.graph-node {
-  will-change: cx, cy, r, fill, opacity;
-  contain: strict;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  transform-origin: center;
-}
-
-/* Link element optimization */
-.graph-link {
-  will-change: x1, y1, x2, y2, stroke, stroke-width;
-  contain: paint;
-  transform: translateZ(0);
-}
-
-/*----------------------------------------
- * INTERACTION STATES
- *----------------------------------------*/
-
-/* Dragging state */
-.dragging {
-  cursor: grabbing !important;
-  touch-action: none;
-}
-
-.graph-view-dragging {
-  user-select: none !important;
-  -webkit-user-select: none !important;
-  touch-action: none !important;
-  cursor: grabbing !important;
-}
-
-.graph-view-dragging .graph-container {
-  pointer-events: auto !important;
-  contain: strict !important;
-  will-change: transform !important;
-}
-
-.dragging .graph-node,
-.dragging .graph-link {
-  transition: none !important;
-  animation: none !important;
-}
-
-/* Zooming state */
-.zooming {
-  cursor: grab;
-  touch-action: none;
-}
-
-.zooming .graph-node,
-.zooming .graph-link {
-  transition: none !important;
-  animation: none !important;
-  contain: strict;
-}
-
-/* Default animations */
-.graph-initialized .graph-node,
-.graph-initialized .graph-link {
-  transition: 
-    transform 200ms ease-out, 
-    opacity 200ms ease-out, 
-    fill 200ms ease-out, 
-    stroke 200ms ease-out, 
-    stroke-width 200ms ease-out;
-}
-
-/*----------------------------------------
- * MEDIA QUERIES
- *----------------------------------------*/
-
-/* High-DPI optimizations */
-@media (min-resolution: 2dppx) {
-  .graph-node,
-  .graph-link {
-    image-rendering: optimizeSpeed;
-  }
-}
-
-/* Accessibility - respect reduced motion preference */
-@media (prefers-reduced-motion: reduce) {
-  .graph-node,
-  .graph-link {
-    transition: none !important;
-    animation: none !important;
-  }
-}
-
-/* Graph view container styles */
+/* 2. Base Container Styles
+/*----------------------------------------*/
 .graph-analysis-view-container {
   height: 100%;
   width: 100%;
@@ -121,7 +28,6 @@
   box-sizing: border-box;
 }
 
-/* Graph SVG styles */
 .graph-view-svg {
   width: 100%;
   height: 100%;
@@ -129,7 +35,27 @@
   flex: 1;
 }
 
-/* Graph HTML labels container */
+/* 3. Graph Elements
+/*----------------------------------------*/
+/* Node styles */
+.graph-node {
+  will-change: cx, cy, r, fill, opacity;
+  contain: strict;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  transform-origin: center;
+}
+
+/* Link styles */
+.graph-link {
+  will-change: x1, y1, x2, y2, stroke, stroke-width;
+  contain: paint;
+  transform: translateZ(0);
+}
+
+/* 4. Labels & Text
+/*----------------------------------------*/
+/* Labels container */
 .graph-labels-container {
   position: absolute;
   top: 0;
@@ -144,7 +70,7 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* Individual label style */
+/* Node label styles */
 .graph-node-label {
   position: absolute;
   transform-origin: center top;
@@ -164,26 +90,9 @@
   text-rendering: optimizeLegibility;
 }
 
-/* Label states */
-.graph-node-label.highlighted {
-  opacity: var(--graph-label-opacity-highlighted, 1);
-  color: var(--graph-label-color-highlighted, var(--text-normal));
-}
-
-.graph-node-label.dimmed {
-  opacity: var(--graph-label-opacity-dimmed, 0.3);
-}
-
-/* When zooming/dragging, disable transitions */
-.zooming .graph-node-label,
-.dragging .graph-node-label {
-  transition: none !important;
-}
-
-/* Graph label styles */
 .graph-label {
-  pointer-events: none; /* Make labels non-interactive */
-  user-select: none; /* Prevent text selection */
+  pointer-events: none;
+  user-select: none;
   font-family: var(--font-interface);
   font-size: var(--graph-label-font-size, 10px);
   fill: var(--graph-label-color, var(--text-normal));
@@ -194,22 +103,270 @@
 }
 
 /* Label states */
+.graph-node-label.highlighted,
 .graph-label.highlighted {
   opacity: var(--graph-label-opacity-highlighted, 1);
+  color: var(--graph-label-color-highlighted, var(--text-normal));
   fill: var(--graph-label-color-highlighted, var(--text-accent));
 }
 
+.graph-node-label.dimmed,
 .graph-label.dimmed {
   opacity: var(--graph-label-opacity-dimmed, 0.3);
 }
 
-/* When node is highlighted, make its label more visible */
 .graph-node.highlighted + .graph-label {
   opacity: 1;
   fill: var(--text-normal);
 }
 
-/* When nodes are dimmed, make their labels more subtle */
 .graph-node.dimmed + .graph-label {
   opacity: 0.3;
-} 
+}
+
+/* 5. Interaction States
+/*----------------------------------------*/
+/* Dragging state */
+.dragging {
+  cursor: grabbing !important;
+  touch-action: none;
+}
+
+.graph-view-dragging {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: none !important;
+  cursor: grabbing !important;
+}
+
+.graph-view-dragging .graph-container {
+  pointer-events: auto !important;
+  contain: strict !important;
+  will-change: transform !important;
+}
+
+/* Zooming state */
+.zooming {
+  cursor: grab;
+  touch-action: none;
+}
+
+/* Disable transitions during interactions */
+.dragging .graph-node,
+.dragging .graph-link,
+.zooming .graph-node,
+.zooming .graph-link,
+.zooming .graph-node-label,
+.dragging .graph-node-label {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Default animations */
+.graph-initialized .graph-node,
+.graph-initialized .graph-link {
+  transition: 
+    transform 200ms ease-out, 
+    opacity 200ms ease-out, 
+    fill 200ms ease-out, 
+    stroke 200ms ease-out, 
+    stroke-width 200ms ease-out;
+}
+
+/* 6. Tooltips & Popups
+/*----------------------------------------*/
+.graph-node-tooltip {
+  background-color: var(--background-primary);
+  border: 1px solid var(--graph-tooltip-border);
+  border-radius: var(--graph-tooltip-border-radius);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: var(--graph-tooltip-padding);
+  position: absolute;
+  z-index: 9999;
+  width: var(--graph-tooltip-width);
+  height: var(--graph-tooltip-height);
+  overflow-y: auto;
+  pointer-events: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-normal);
+  scrollbar-width: none;
+}
+
+.graph-node-tooltip::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tooltip components */
+.node-tooltip-title {
+  color: var(--graph-tooltip-title);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-medium);
+  margin: 0 0 8px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.metadata-container {
+  margin-top: 12px;
+  flex: 0 0 auto;
+}
+
+.metadata-field {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.metadata-label {
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-smaller);
+  min-width: 80px;
+}
+
+.metadata-value {
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  flex: 1;
+}
+
+.metadata-section-title {
+  color: var(--text-accent);
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-small);
+  margin: 12px 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* Tags */
+.metadata-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.metadata-tag {
+  display: inline-block;
+  background-color: var(--tag-background);
+  color: var(--tag-color);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: var(--font-ui-smaller);
+}
+
+/* Preview sections */
+.note-preview-section {
+  margin-top: 15px;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-section-title {
+  color: var(--text-accent);
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-small);
+  margin-bottom: 6px;
+}
+
+.preview-content {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  padding: 8px;
+  border-radius: 4px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none;
+}
+
+/* UI Elements */
+.open-note-button {
+  background-color: var(--graph-node-color-default) !important;
+  color: var(--text-on-accent) !important;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-small);
+  transition: background-color 0.2s ease;
+  display: inline-block;
+  width: 100%;
+}
+
+.open-note-button:hover {
+  background-color: var(--graph-node-color-highlighted) !important;
+}
+
+.metadata-error-text {
+  color: var(--text-error);
+  font-style: italic;
+  font-size: var(--font-ui-smaller);
+}
+
+.action-hint {
+  text-align: center;
+  margin: 10px 0;
+  width: 100%;
+}
+
+/* Loading state */
+.graph-analysis-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: var(--graph-loading-background);
+  color: var(--graph-loading-text);
+  padding: 8px 16px;
+  border-radius: 4px;
+  z-index: 1000;
+  box-shadow: 0 2px 8px var(--graph-tooltip-shadow);
+  font-size: var(--font-ui-small);
+}
+
+/* 7. Performance Optimizations
+/*----------------------------------------*/
+.graph-view-svg,
+.graph-container {
+  will-change: transform;
+  contain: strict;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* 8. Media Queries
+/*----------------------------------------*/
+/* High-DPI optimizations */
+@media (min-resolution: 2dppx) {
+  .graph-node,
+  .graph-link {
+    image-rendering: optimizeSpeed;
+  }
+}
+
+/* Accessibility - reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .graph-node,
+  .graph-link {
+    transition: none !important;
+    animation: none !important;
+  }
+}
