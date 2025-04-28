@@ -849,6 +849,17 @@ export class GraphView {
                 .style('stroke-width', isConnected ? 'var(--graph-link-width-highlighted)' : 'var(--graph-link-width-default)')
                 .style('stroke-opacity', isConnected ? 'var(--graph-link-opacity-default)' : 'var(--graph-link-opacity-dimmed)');
         });
+
+        // Update label styles based on node connection state
+        this.labelsSelection.each(function(d) {
+            const isSelected = d.id === nodeId;
+            const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
+            d3.select(this)
+                .transition()
+                .duration(animationDuration)
+                .style('fill', isSelected ? 'var(--graph-label-color-highlighted)' : 'var(--graph-label-color)')
+                .style('opacity', isConnected ? 'var(--graph-label-opacity-highlighted)' : 'var(--graph-label-opacity-dimmed)');
+        });
     }
     
     private resetHighlights() {
@@ -872,6 +883,13 @@ export class GraphView {
             .style('stroke-opacity', 'var(--graph-link-opacity-default)')
             .style('stroke-width', 'var(--graph-link-width-default)')
             .style('stroke', 'var(--graph-link-color-default)');
+
+        // Reset labels to default style
+        this.labelsSelection
+            .transition()
+            .duration(animationDuration)
+            .style('opacity', 'var(--graph-label-opacity)')
+            .style('fill', 'var(--graph-label-color)');
     }
     
     private setupDragBehavior() {

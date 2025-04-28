@@ -26,9 +26,9 @@
 
     /* Label states */
     --graph-label-color: var(--text-muted);
-    --graph-label-color-highlighted: var(--text-normal);
+    --graph-label-color-highlighted: var(--text-accent);
     --graph-label-font-size: 6px;
-    --graph-label-opacity: 0.8;
+    --graph-label-opacity: 0.9;
     --graph-label-opacity-highlighted: 1;
     --graph-label-opacity-dimmed: 0.3;
     --graph-label-margin: 3px;
