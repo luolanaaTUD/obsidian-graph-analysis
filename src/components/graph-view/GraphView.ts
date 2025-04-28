@@ -70,7 +70,8 @@ export class GraphView {
     // Zoom behavior constants
     private readonly ZOOM = {
         OUT_SCALE_FACTOR: 600,
-        IN_SCALE_FACTOR: 60
+        IN_SCALE_FACTOR: 60,
+        CONTAINER_SCALE: 0.6 // The graph should use 60% of the minimum dimension
     } as const;
 
     // D3 selections
@@ -387,41 +388,59 @@ export class GraphView {
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();
         }
-        
-        // Create a new ResizeObserver with debouncing
-        let resizeTimeout: number | null = null;
-        
+
         this.resizeObserver = new ResizeObserver((entries) => {
             const containerEntry = entries.find(entry => entry.target === this.container);
             if (!containerEntry) return;
-            
-            // Clear any existing timeout to debounce resize events
-            if (resizeTimeout) {
-                window.clearTimeout(resizeTimeout);
+
+            // Check if the graph is still active and has valid elements
+            if (!this.container || !this.svg || !this.svgGroup) {
+                // If graph is inactive, disconnect the observer
+                if (this.resizeObserver) {
+                    this.resizeObserver.disconnect();
+                    this.resizeObserver = null;
+                }
+                return;
             }
-            
-            // Set a new timeout to handle the resize after a brief delay
-            // This prevents too many recalculations during active resizing
-            resizeTimeout = window.setTimeout(() => {
-                // Update dimensions
-                this.updateDimensions();
-                
-                // Update SVG viewBox to keep it centered at origin and fill the container
-                this.svg.attr('viewBox', [-this.width / 2, -this.height / 2, this.width, this.height]);
-                
-                // Update zoom behavior with new limits
-                const transform = d3.zoomTransform(this.svg.node() as Element);
-                this.svg.call(this.zoom.transform, transform);
-                
-                // Recenter the graph with animation to ensure it fills the available space
-                this.recenterGraph();
-                
-                resizeTimeout = null;
-            }, 100); // Small delay to debounce rapid resize events
+
+            try {
+                // Get new container dimensions
+                const rect = this.container.getBoundingClientRect();
+                this.width = rect.width;
+                this.height = rect.height;
+
+                // Check if dimensions are valid numbers
+                if (!isFinite(this.width) || !isFinite(this.height) || this.width <= 0 || this.height <= 0) {
+                    return;
+                }
+
+                // Update the SVG viewBox to match new container size
+                this.svg.attr('viewBox', [
+                    -this.width / 2,
+                    -this.height / 2,
+                    this.width,
+                    this.height
+                ].join(' '));
+
+                // Use recenterGraph to maintain consistent scaling behavior
+                // Only proceed if we have valid nodes and the simulation is active
+                if (this.nodes.length > 0 && this.simulation) {
+                    this.recenterGraph(false); // false to skip animation during resize
+                }
+            } catch (error) {
+                console.warn('Error in resize observer:', error);
+                // If we encounter an error, it's safer to disconnect the observer
+                if (this.resizeObserver) {
+                    this.resizeObserver.disconnect();
+                    this.resizeObserver = null;
+                }
+            }
         });
-        
+
         // Start observing the container
-        this.resizeObserver.observe(this.container);
+        if (this.container) {
+            this.resizeObserver.observe(this.container);
+        }
     }
     
     private setupNodeEventHandlers() {
@@ -1213,7 +1232,7 @@ export class GraphView {
         this.recenterGraph();
     }
     
-    public recenterGraph(): void {
+    public recenterGraph(animate: boolean = true): void {
         // Find the bounds of all nodes
         if (this.nodes.length === 0) return;
         
@@ -1237,11 +1256,9 @@ export class GraphView {
         const graphWidth = maxX - minX;
         const graphHeight = maxY - minY;
         
-        // instead of using fixed margins
-        const containerScale = 0.6; // The graph should use 70% of the minimum dimension
         const minDimension = Math.min(this.width, this.height);
-        const scaleX = (containerScale * minDimension) / graphWidth;
-        const scaleY = (containerScale * minDimension) / graphHeight;
+        const scaleX = (this.ZOOM.CONTAINER_SCALE * minDimension) / graphWidth;
+        const scaleY = (this.ZOOM.CONTAINER_SCALE * minDimension) / graphHeight;
         
         // Use the smallest scale to ensure everything fits
         // Prevent scaling below 0.3 to avoid negative or too small values
@@ -1255,15 +1272,18 @@ export class GraphView {
         const centerX = minX + graphWidth / 2;
         const centerY = minY + graphHeight / 2;
         
-        // Apply the transform with transition
-        // With a centered viewBox, we need to transform to bring the graph center to the origin
+        // Apply the transform with or without transition based on animate parameter
         const transform = d3.zoomIdentity
             .translate(-centerX * scale, -centerY * scale)
             .scale(scale);
         
-        this.svg.transition()
-            .duration(this.ANIMATION.RECENTER_DURATION)
-            .call(this.zoom.transform, transform);
+        if (animate) {
+            this.svg.transition()
+                .duration(this.ANIMATION.RECENTER_DURATION)
+                .call(this.zoom.transform, transform);
+        } else {
+            this.svg.call(this.zoom.transform, transform);
+        }
     }
     
     public restartSimulationGently(): void {
