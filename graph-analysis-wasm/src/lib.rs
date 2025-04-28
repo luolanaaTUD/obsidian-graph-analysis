@@ -34,17 +34,73 @@ fn check_graph_initialized() -> Result<(), String> {
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
+/// BaseNode represents the fundamental properties shared by all node types in the graph.
+/// This follows the Object-Oriented principle of inheritance/composition where common
+/// properties are extracted into a base structure.
+///
+/// # Properties
+/// * `node_id` - Unique identifier for the node, corresponds to its index in the graph
+/// * `node_name` - Display name of the node, typically derived from the file name
+///
+/// # Usage
+/// This struct is used as a base for other node-related structures through composition.
+/// The `#[serde(flatten)]` attribute is used to maintain a flat JSON structure while
+/// allowing for better code organization.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct BaseNode {
+    node_id: usize,
+    node_name: String,
+}
+
+/// Represents the core graph data structure used for initialization.
+/// This structure is kept simple to allow for easy serialization/deserialization
+/// between JavaScript and Rust.
 #[derive(Serialize, Deserialize)]
 pub struct GraphData {
     nodes: Vec<String>,
     edges: Vec<(usize, usize)>,
 }
 
+/// Represents the result of centrality calculations for a node.
+/// Uses BaseNode for common properties and adds a score field.
+///
+/// # Properties
+/// * `base` - Common node properties (id and name)
+/// * `score` - The calculated centrality score for this node
 #[derive(Serialize, Deserialize)]
 pub struct CentralityResult {
-    node_id: usize,
-    node_name: String,
+    #[serde(flatten)]
+    base: BaseNode,
     score: f64,
+}
+
+/// Information about a neighboring node in the graph.
+/// Uses BaseNode to maintain consistency in node representation.
+#[derive(Serialize)]
+pub struct NeighborInfo {
+    #[serde(flatten)]
+    base: BaseNode,
+}
+
+/// Result structure for neighbor queries, containing both the queried node
+/// and its neighbors.
+///
+/// # Properties
+/// * `base` - Information about the node whose neighbors were queried
+/// * `neighbors` - List of neighboring nodes
+#[derive(Serialize)]
+pub struct GraphNeighborsResult {
+    #[serde(flatten)]
+    base: BaseNode,
+    neighbors: Vec<NeighborInfo>,
+}
+
+/// Represents a node in a path through the graph.
+/// Used in path-finding results to maintain consistent node representation.
+#[derive(Serialize)]
+pub struct PathNode {
+    #[serde(flatten)]
+    base: BaseNode,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -153,31 +209,12 @@ pub fn clear_graph() -> String {
 }
 
 #[derive(Serialize)]
-pub struct NeighborInfo {
-    node_id: usize,
-    node_name: String,
-}
-
-#[derive(Serialize)]
-pub struct GraphNeighborsResult {
-    node_id: usize,
-    node_name: String,
-    neighbors: Vec<NeighborInfo>,
-}
-
-#[derive(Serialize)]
 pub struct GraphMetadata {
     node_count: usize,
     edge_count: usize,
     max_degree: usize,
     avg_degree: f64,
     is_directed: bool,
-}
-
-#[derive(Serialize)]
-pub struct PathNode {
-    node_id: usize,
-    node_name: String,
 }
 
 // Function to get node neighbors from the cached graph
@@ -222,20 +259,25 @@ pub fn get_node_neighbors_cached(node_id: usize) -> String {
     neighbors.sort();
     neighbors.dedup();
     
-    // Create a result object with neighbor IDs and names
+    // Create base node for current node
+    let base = BaseNode {
+        node_id,
+        node_name: manager.node_names[node_id].clone(),
+    };
     
     // Convert neighbor indices to neighbor info objects
     let neighbor_infos: Vec<NeighborInfo> = neighbors.iter()
         .map(|&idx| NeighborInfo {
-            node_id: idx,
-            node_name: manager.node_names[idx].clone(),
+            base: BaseNode {
+                node_id: idx,
+                node_name: manager.node_names[idx].clone(),
+            }
         })
         .collect();
     
     // Create result
     let result = GraphNeighborsResult {
-        node_id,
-        node_name: manager.node_names[node_id].clone(),
+        base,
         neighbors: neighbor_infos,
     };
     
@@ -285,8 +327,10 @@ pub fn calculate_degree_centrality_cached() -> String {
         let normalized_degree = total_degree / normalization_factor;
         
         results.push(CentralityResult {
-            node_id: i,
-            node_name: node_name.clone(),
+            base: BaseNode {
+                node_id: i,
+                node_name: node_name.clone(),
+            },
             score: normalized_degree,
         });
     }
@@ -442,8 +486,10 @@ pub fn find_shortest_path_cached(source_id: usize, target_id: usize) -> String {
     // Create a more informative result with node names
     let path_with_names: Vec<PathNode> = path.iter()
         .map(|&id| PathNode {
-            node_id: id,
-            node_name: manager.node_names[id].clone(),
+            base: BaseNode {
+                node_id: id,
+                node_name: manager.node_names[id].clone(),
+            },
         })
         .collect();
     
@@ -501,8 +547,10 @@ pub fn calculate_degree_centrality(graph_data_json: &str) -> String {
         let normalized_degree = total_degree / normalization_factor;
         
         results.push(CentralityResult {
-            node_id: i,
-            node_name: node_name.clone(),
+            base: BaseNode {
+                node_id: i,
+                node_name: node_name.clone(),
+            },
             score: normalized_degree,
         });
     }

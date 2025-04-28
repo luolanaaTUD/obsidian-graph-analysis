@@ -1,6 +1,6 @@
 import { App, Notice, TFile } from 'obsidian';
 import * as d3 from 'd3';
-import { GraphNode, GraphLink, CentralityCalculator, SimulationGraphNode } from './types';
+import { CentralityCalculator } from './types';
 import { CentralityCalculator as CentralityCalculatorImpl } from './data/centrality';
 import { GraphDataBuilder } from './data/graph-builder';
 
@@ -8,15 +8,29 @@ import { GraphDataBuilder } from './data/graph-builder';
 interface SimulationGraphLink {
     source: string | SimulationGraphNode;
     target: string | SimulationGraphNode;
-    value?: number;
 }
 
 // Define the type for cached node neighbors
 interface NodeNeighborsCache {
-    nodeId: string; // ID of the node whose neighbors are cached
-    neighbors: Set<string>; // Set of neighbor node IDs
+    nodeId: number; // ID of the node whose neighbors are cached
+    neighbors: Set<number>; // Set of neighbor node IDs
+    timestamp?: number; // Optional: for future cache invalidation
 }
 
+interface SimulationGraphNode {
+    id: string;
+    name: string;
+    path: string;
+    degreeCentrality: number;
+    highlighted?: boolean;
+    dimmed?: boolean;
+    x?: number;
+    y?: number;
+    vx?: number;
+    vy?: number;
+    fx?: number | null;
+    fy?: number | null;
+}
 
 /**
  * A simplified graph view implementation based on the D3 example
@@ -30,13 +44,35 @@ export class GraphView {
     private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
     private nodes: SimulationGraphNode[] = [];
     private links: SimulationGraphLink[] = [];
-    private width: number = 800;
-    private height: number = 600;
+    private width: number;
+    private height: number;
     
     // Core components
     private graphDataBuilder: GraphDataBuilder;
     private centralityCalculator: CentralityCalculatorImpl;
     
+    // Animation and timing constants
+    private readonly ANIMATION = {
+        DURATION: 200,
+        RECENTER_DURATION: 300,
+        TOOLTIP_DELAY: 500
+    } as const;
+
+    // Node visualization constants
+    private readonly NODE = {
+        RADIUS: {
+            BASE: 4,
+            MAX: 12,
+            SCALE_FACTOR: 0.69
+        }
+    } as const;
+
+    // Zoom behavior constants
+    private readonly ZOOM = {
+        OUT_SCALE_FACTOR: 600,
+        IN_SCALE_FACTOR: 60
+    } as const;
+
     // D3 selections
     private nodesSelection: d3.Selection<SVGCircleElement, SimulationGraphNode, d3.BaseType, unknown>;
     private linksSelection: d3.Selection<SVGLineElement, SimulationGraphLink, d3.BaseType, unknown>;
@@ -61,29 +97,8 @@ export class GraphView {
     // Neighbors cache to avoid repeated WASM calls
     private nodeNeighborsCache: NodeNeighborsCache | null = null;
     
-    // Highlight state constants to ensure consistency
-    private readonly HIGHLIGHT_STATES = {
-        NONE: 'none',
-        HOVER: 'hover',
-        DRAG: 'drag'
-    } as const;
-    
-    // Animation constants
-    private readonly ANIMATION_DURATION = 200; // Base animation duration for all transitions
-    private readonly TOOLTIP_DELAY = 500; // Delay before showing tooltips
-    private readonly RECENTER_ANIMATION_DURATION = 300; // Duration for recentering animations
-
     // Add this property at the class level after the private readonly constants section
     private currentTooltip: HTMLElement | null = null;
-
-    // Radius sizing constants
-    private readonly BASE_NODE_RADIUS = 4; // Minimum size for nodes
-    private readonly MAX_NODE_RADIUS = 12; // Maximum size for nodes with highest centrality
-    private readonly NODE_RADIUS_SCALE_FACTOR = 0.69; // How much to scale by centrality (0-1)
-    
-    // Zoom behavior tuning constants
-    private readonly ZOOM_OUT_SCALE_FACTOR = 600; // Higher = allows zooming out further
-    private readonly ZOOM_IN_SCALE_FACTOR = 60;   // Lower = allows zooming in closer
 
     // New tooltip timeout
     private _hideTooltipTimeout: number | null = null;
@@ -105,6 +120,11 @@ export class GraphView {
 
     public async onload(container: HTMLElement) {
         this.container = container;
+        
+        // Get initial dimensions from container
+        const rect = container.getBoundingClientRect();
+        this.width = rect.width;
+        this.height = rect.height;
         
         // Set up the visualization
         this.initializeD3();
@@ -192,9 +212,9 @@ export class GraphView {
     private calculateZoomLimits(): [number, number] {
         if (!this.nodes || this.nodes.length === 0) {
             // Default values when no nodes are available
-            const defaultRadius = this.BASE_NODE_RADIUS;
-            const minZoom = this.width / (defaultRadius * this.ZOOM_OUT_SCALE_FACTOR);
-            const maxZoom = this.width / (defaultRadius * this.ZOOM_IN_SCALE_FACTOR);
+            const defaultRadius = this.NODE.RADIUS.BASE;
+            const minZoom = this.width / (defaultRadius * this.ZOOM.OUT_SCALE_FACTOR);
+            const maxZoom = this.width / (defaultRadius * this.ZOOM.IN_SCALE_FACTOR);
             return [minZoom, maxZoom];
         }
         
@@ -211,13 +231,13 @@ export class GraphView {
         });
         
         // Use average node radius for min zoom (to see entire graph)
-        const avgRadius = nodeCount > 0 ? totalRadius / nodeCount : this.BASE_NODE_RADIUS;
+        const avgRadius = nodeCount > 0 ? totalRadius / nodeCount : this.NODE.RADIUS.BASE;
         // Use max node radius for max zoom (to prevent largest nodes from getting too big)
-        const largestRadius = maxRadius > 0 ? maxRadius : this.BASE_NODE_RADIUS;
+        const largestRadius = maxRadius > 0 ? maxRadius : this.NODE.RADIUS.BASE;
         
         // Calculate zoom limits based on these statistics
-        const minZoom = this.width / (avgRadius * this.ZOOM_OUT_SCALE_FACTOR);
-        const maxZoom = this.width / (largestRadius * this.ZOOM_IN_SCALE_FACTOR);
+        const minZoom = this.width / (avgRadius * this.ZOOM.OUT_SCALE_FACTOR);
+        const maxZoom = this.width / (largestRadius * this.ZOOM.IN_SCALE_FACTOR);
         
         return [minZoom, maxZoom];
     }
@@ -260,6 +280,10 @@ export class GraphView {
         this.recenterGraph();
     }
 
+
+    /**
+     * Initialize the force simulation with modified forces to better fill the available space
+     */
     private initializeSimulation() {
         // Create a simulation with modified forces to better fill the available space
         const collisionRadius = this.getNodeRadius() + 2;
@@ -349,8 +373,8 @@ export class GraphView {
     
     private updateDimensions() {
         const rect = this.container.getBoundingClientRect();
-        this.width = rect.width || 800;
-        this.height = rect.height || 600;
+        this.width = rect.width;
+        this.height = rect.height;
         
         // Update zoom limits when dimensions change
         if (this.zoom) {
@@ -691,7 +715,6 @@ export class GraphView {
         const offsetY = this.getTooltipSetting('offset-y');
         
 
-        
         // Initial position (prefer showing below and to the right of cursor)
         let tooltipX = mouseX + offsetX;
         let tooltipY = mouseY + offsetY;
@@ -724,14 +747,15 @@ export class GraphView {
         }
         
         // Store animation duration in a local variable to use in callbacks
-        const animationDuration = this.ANIMATION_DURATION;
+        const animationDuration = this.ANIMATION.DURATION;
         
         // Find connected nodes
-        let connectedNodeIds = new Set<string>();
+        let connectedNodeIds = new Set<number>();
         
         // Check if we have a valid cache for this node
+        const nodeIdInt = parseInt(nodeId);
         const cacheValid = this.nodeNeighborsCache && 
-                           this.nodeNeighborsCache.nodeId === nodeId;
+                           this.nodeNeighborsCache.nodeId === nodeIdInt;
         
         // If we're in a drag operation or we have a valid cache, use the cached data
         if ((this.isDraggingNode && this.highlightedNodeId === nodeId) || cacheValid) {
@@ -741,7 +765,6 @@ export class GraphView {
         } else {
             // No cache hit, need to get data from WASM
             try {
-                const nodeIdInt = parseInt(nodeId);
                 const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
                 
                 if (!plugin || !plugin.getNodeNeighborsCached) {
@@ -755,12 +778,12 @@ export class GraphView {
                 // Extract neighbor IDs from the result
                 if (neighborResult && neighborResult.neighbors) {
                     neighborResult.neighbors.forEach((neighbor: { node_id: number }) => {
-                        connectedNodeIds.add(neighbor.node_id.toString());
+                        connectedNodeIds.add(neighbor.node_id);
                     });
                     
                     // Update the cache with the new data
                     this.nodeNeighborsCache = {
-                        nodeId: nodeId,
+                        nodeId: nodeIdInt,
                         neighbors: connectedNodeIds
                     };
                 } else if (neighborResult && neighborResult.error) {
@@ -806,7 +829,7 @@ export class GraphView {
         // Dim all nodes and links not connected
         this.nodesSelection.each(function(d) {
             const isSelected = d.id === nodeId;
-            const isConnected = isSelected || connectedNodeIds.has(d.id);
+            const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
             d3.select(this)
                 .transition()
                 .duration(animationDuration)
@@ -833,7 +856,7 @@ export class GraphView {
         this.nodeNeighborsCache = null;
         
         // Store animation duration in a local variable for consistency with other methods
-        const animationDuration = this.ANIMATION_DURATION;
+        const animationDuration = this.ANIMATION.DURATION;
         
         // Reset all nodes, links, and labels to default state
         this.nodesSelection
@@ -942,7 +965,7 @@ export class GraphView {
                                 this.highlightConnections(d.id, false);
                                 this.highlightedNodeId = null;
                             }
-                        }, this.ANIMATION_DURATION);
+                        }, this.ANIMATION.DURATION);
                     }
                 } catch (e) {
                     console.error("Error in drag end:", e);
@@ -958,8 +981,8 @@ export class GraphView {
         const nodeData = node.datum() as SimulationGraphNode;
         
         node.transition()
-            .duration(this.ANIMATION_DURATION)
-            .style('fill', highlight ? 'var(--graph-node-color-highlighted)' : this.getNodeColor(nodeData));
+            .duration(this.ANIMATION.DURATION)
+            .style('fill', highlight ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
     }
     
     /**
@@ -979,7 +1002,7 @@ export class GraphView {
                 this.createTooltip(node, event);
             }
             this._tooltipTimeout = null;
-        }, this.TOOLTIP_DELAY);
+        }, this.ANIMATION.TOOLTIP_DELAY);
     }
     
     /**
@@ -1005,8 +1028,13 @@ export class GraphView {
                     id: index.toString(),
                     name: displayName,
                     path: nodePath,
-                    centralityScore: 0, // Will be updated by centrality calculation
-                    degree: 0 // Will be updated by centrality calculation
+                    degreeCentrality: 0, // Will be updated by centrality calculation
+                    x: undefined,
+                    y: undefined,
+                    vx: undefined,
+                    vy: undefined,
+                    fx: undefined,
+                    fy: undefined
                 };
             });
             
@@ -1022,8 +1050,7 @@ export class GraphView {
             nodes.forEach(node => {
                 const centralityResult = centralityResults.find((r: { node_id: number; score: number }) => r.node_id === parseInt(node.id));
                 if (centralityResult) {
-                    node.centralityScore = centralityResult.score;
-                    node.degree = centralityResult.score; // Using centrality score as degree for now
+                    node.degreeCentrality = centralityResult.score;
                 }
             });
             
@@ -1098,7 +1125,6 @@ export class GraphView {
                         .style('stroke', 'var(--graph-node-color-default)')
                         .style('stroke-width', 'var(--graph-node-stroke-width)')
                         .style('opacity', 'var(--graph-node-opacity-default)')
-                        .attr('class', 'graph-node')
                         .call(this.setupDragBehavior());
                     
                     nodeEnter.style('fill', d => d.highlighted ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)')
@@ -1143,36 +1169,25 @@ export class GraphView {
      */
     private getNodeRadius(node?: SimulationGraphNode | null): number {
         if (!node) {
-            return this.BASE_NODE_RADIUS;
+            return this.NODE.RADIUS.BASE;
         }
         
         // Scale node size based on centrality or degree
-        if (node.centralityScore !== undefined && node.centralityScore > 0) {
+        if (node.degreeCentrality !== undefined && node.degreeCentrality > 0) {
             // Find a normalized value between 0 and 1 for the centrality score
             // We'd need to know the max centrality across all nodes for perfect normalization
             // As a simple approach, cap at 1.0 and ensure positive values
-            const normalizedScore = Math.min(1.0, Math.max(0, node.centralityScore));
+            const normalizedScore = Math.min(1.0, Math.max(0, node.degreeCentrality));
             
             // Scale the node radius between BASE_NODE_RADIUS and MAX_NODE_RADIUS
             // Linear scaling: radius = base + (max-base) * normalized * scale_factor
-            return this.BASE_NODE_RADIUS + 
-                   (this.MAX_NODE_RADIUS - this.BASE_NODE_RADIUS) * 
-                   normalizedScore * this.NODE_RADIUS_SCALE_FACTOR;
+            return this.NODE.RADIUS.BASE + 
+                   (this.NODE.RADIUS.MAX - this.NODE.RADIUS.BASE) * 
+                   normalizedScore * this.NODE.RADIUS.SCALE_FACTOR;
         }
         
         // Default size if no centrality data available
-        return this.BASE_NODE_RADIUS;
-    }
-    
-    private getNodeColor(node: SimulationGraphNode): string {
-        return 'var(--graph-node-color-default)';
-    }
-    
-    /**
-     * Get the color for links based on CSS variables for consistent theming
-     */
-    private getLinkColor(): string {
-        return 'var(--graph-link-color-default)';
+        return this.NODE.RADIUS.BASE;
     }
     
     public refreshGraphView(): void {
@@ -1229,7 +1244,7 @@ export class GraphView {
             .scale(scale);
         
         this.svg.transition()
-            .duration(this.RECENTER_ANIMATION_DURATION)
+            .duration(this.ANIMATION.RECENTER_DURATION)
             .call(this.zoom.transform, transform);
     }
     
