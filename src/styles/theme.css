@@ -6,227 +6,62 @@
  * in both light and dark modes.
  *----------------------------------------*/
 
-/*----------------------------------------
- * THEME VARIABLES
- *----------------------------------------*/
+.workspace {
+    /* Graph background */
+    --graph-background: var(--background-primary);
+    
+    /* Node states */
+    --graph-node-color-default: var(--interactive-accent);
+    --graph-node-color-highlighted: var(--interactive-accent-hover);
+    --graph-node-opacity-default: 1;
+    --graph-node-opacity-dimmed: 0.3;
+    
+    /* Link states */
+    --graph-link-color-default: var(--background-modifier-border);
+    --graph-link-color-highlighted: var(--interactive-accent);
+    --graph-link-opacity-default: 1;
+    --graph-link-opacity-dimmed: 0.3;
+    --graph-link-width-default: 1px;
+    --graph-link-width-highlighted: 1.2px;
 
-.theme-light, .theme-dark {
-  /* Node colors */
-  --graph-node-default: var(--interactive-accent);
-  --graph-node-highlight: var(--interactive-accent-hover);
-  --graph-node-faded: var(--text-muted);
-  --graph-node-hover: var(--interactive-accent-hover);
-  
-  /* Link colors */
-  --graph-link-default: var(--background-modifier-border);
-  --graph-link-highlight: var(--interactive-accent);
-  --graph-link-faded: var(--background-modifier-border-hover);
-  
-  /* Label colors */
-  --graph-label-color: var(--text-normal);
-  --graph-label-highlight: var(--text-accent);
-  --graph-label-faded: var(--text-muted);
-  
-  /* Background and borders */
-  --graph-background: var(--background-primary);
-  --graph-canvas-border: var(--background-modifier-border);
-  
-  /* Tooltip styling */
-  --graph-tooltip-background: var(--background-primary);
-  --graph-tooltip-border: var(--background-modifier-border);
-  --graph-tooltip-shadow: rgba(0, 0, 0, 0.1);
-  --graph-tooltip-text: var(--text-normal);
-  --graph-tooltip-title: var(--text-accent);
-  
-  /* UI elements */
-  --graph-handle-background: var(--background-secondary);
-  --graph-handle-text: var(--text-normal);
-  
-  /* Help icon */
-  --graph-help-icon-background: var(--background-modifier-border);
-  --graph-help-icon-text: var(--text-muted);
-  
-  /* Loading indicators */
-  --graph-loading-text: var(--text-muted);
-  --graph-loading-background: var(--background-secondary-alt);
+    /* Label states */
+    --graph-label-color: var(--text-muted);
+    --graph-label-color-highlighted: var(--text-accent);
+    --graph-label-font-size: 6px;
+    --graph-label-opacity: 0.9;
+    --graph-label-opacity-highlighted: 1;
+    --graph-label-opacity-dimmed: 0.3;
+    --graph-label-margin: 3px;
+
+    /* Tooltip styling */
+    --graph-tooltip-background: var(--background-primary);
+    --graph-tooltip-border: var(--background-modifier-border);
+    --graph-tooltip-shadow: var(--background-modifier-box-shadow);
+    --graph-tooltip-title: var(--text-accent);
+
+    --graph-tooltip-width: 300px;
+    --graph-tooltip-height: 450px;
+    --graph-tooltip-padding: 12px;
+    --graph-tooltip-border-radius: 6px;
+    --graph-tooltip-preview-height: 150px;
+    --graph-tooltip-offset-x: 20px;
+    --graph-tooltip-offset-y: 0px;
+    
+    /* Tooltip timing */
+    --graph-tooltip-show-delay: 300ms;
+    --graph-tooltip-hide-delay: 150ms;
+
+    /* Loading indicator */
+    --graph-loading-background: var(--background-primary);
+    --graph-loading-text: var(--text-normal);
 }
 
-/* Theme-specific overrides for dark mode */
-.theme-dark {
-  --graph-tooltip-shadow: rgba(0, 0, 0, 0.3);
-}
+/* Dark theme adjustments */
+/* .theme-dark .workspace {
+    --graph-link-color-default: var(--interactive-normal);
+} */
 
-/*----------------------------------------
- * CANVAS CONTAINER
- *----------------------------------------*/
-
-/* Main canvas container */
-.graph-analysis-canvas {
-  background-color: var(--graph-background);
-  border: 1px solid var(--graph-canvas-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 10px var(--graph-tooltip-shadow);
-  overflow: hidden;
-  position: absolute;
-  z-index: 1000;
-}
-
-/* Title/drag bar */
-.graph-analysis-drag-handle {
-  background-color: var(--graph-handle-background);
-  color: var(--graph-handle-text);
-  padding: 6px 12px;
-  cursor: grab;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--graph-canvas-border);
-  user-select: none;
-}
-
-/*----------------------------------------
- * CONTROLS AND UI ELEMENTS
- *----------------------------------------*/
-
-/* Close button */
-.graph-analysis-close-button {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s ease;
-  z-index: 10;
-  color: var(--graph-handle-text);
-}
-
-.graph-analysis-close-button:hover {
-  opacity: 1;
-}
-
-.graph-analysis-close-button::before {
-  content: "×";
-  font-size: 20px;
-  line-height: 1;
-}
-
-/* Resize handle */
-.graph-analysis-resize-handle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 16px;
-  height: 16px;
-  cursor: nwse-resize;
-  z-index: 10;
-}
-
-.graph-analysis-resize-handle::before {
-  content: "";
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--graph-canvas-border);
-  border-bottom: 2px solid var(--graph-canvas-border);
-}
-
-/* Help icon */
-.graph-analysis-help-icon-container {
-  background-color: var(--graph-help-icon-background);
-  color: var(--graph-help-icon-text);
-}
-
-/*----------------------------------------
- * TOOLTIPS AND POPUPS
- *----------------------------------------*/
-
-/* Node tooltip */
-.graph-node-tooltip {
-  background-color: var(--graph-tooltip-background);
-  border: 1px solid var(--graph-tooltip-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 14px var(--graph-tooltip-shadow);
-  padding: 12px;
-  position: absolute;
-  z-index: 9999;
-  max-width: 320px;
-  min-width: 200px;
-  pointer-events: auto;
-}
-
-/* Loading indicator */
-.graph-analysis-loading {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background-color: var(--graph-loading-background);
-  color: var(--graph-loading-text);
-  padding: 8px 16px;
-  border-radius: 4px;
-  z-index: 1000;
-  box-shadow: 0 2px 8px var(--graph-tooltip-shadow);
-  font-size: var(--font-ui-small);
-}
-
-/*----------------------------------------
- * BUTTONS AND INTERACTIVE ELEMENTS
- *----------------------------------------*/
-
-/* Open Note Button */
-.open-note-button {
-  background-color: var(--interactive-accent) !important;
-  color: var(--text-on-accent) !important;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-  font-weight: var(--font-medium);
-  font-size: var(--font-ui-small);
-  transition: background-color 0.1s ease;
-  outline: none;
-}
-
-.open-note-button:hover {
-  background-color: var(--interactive-accent-hover) !important;
-}
-
-/*----------------------------------------
- * METADATA AND CONTENT STYLING
- *----------------------------------------*/
-
-/* Metadata elements */
-.graph-analysis-canvas .metadata-label {
-  color: var(--text-muted);
-  font-weight: var(--font-medium);
-}
-
-.graph-analysis-canvas .metadata-section-title {
-  color: var(--text-accent);
-  font-weight: var(--font-medium);
-  font-size: var(--font-ui-small);
-}
-
-.graph-analysis-canvas .metadata-tag {
-  background-color: var(--tag-background);
-  color: var(--tag-color);
-}
-
-/* Preview elements */
-.graph-analysis-canvas .preview-section-title {
-  color: var(--text-accent);
-  font-weight: var(--font-medium);
-  font-size: var(--font-ui-small);
-}
-
-.graph-analysis-canvas .preview-content {
-  background-color: var(--background-secondary);
-  color: var(--text-normal);
-} 
+/* Light theme adjustments */
+/* .theme-light .workspace {
+    --graph-link-color-default: var(--background-modifier-border);
+} */
