@@ -34,3 +34,36 @@
 - Consider memory usage when dealing with large graphs
 - Implement fallback mechanisms for WebAssembly failures
 - Profile performance on vaults of different sizes
+
+
+# Project Rules and Patterns
+
+## Migration Guidelines
+1. Maintain exact calculation accuracy during migration
+2. Implement and test one centrality metric at a time
+3. Keep parallel implementations until verification is complete
+4. Remove petgraph only after all tests pass
+
+## Code Patterns
+1. Centrality calculations should be modular and independently testable
+2. Maintain clear separation between graph processing and plugin integration
+3. Use type-safe interfaces for all graph operations
+4. Include test cases for each centrality metric
+
+## Project Workflow
+1. Implement new functionality in parallel with existing code
+2. Verify results against current implementation
+3. Only remove old code after thorough testing
+4. Document all significant changes
+
+## Testing Requirements
+1. Each centrality metric must have unit tests
+2. Compare results between petgraph and rustnetworkx-core implementations
+3. Performance benchmarks must be maintained or improved
+4. Integration tests must pass before removing petgraph
+
+## Documentation Standards
+1. Clear comments for all centrality calculation functions
+2. Updated API documentation reflecting library changes
+3. Migration notes in changelog
+4. Performance comparison documentation

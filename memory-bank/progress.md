@@ -1,51 +1,36 @@
-# Progress: Obsidian Graph Analysis Plugin
-
-## Completed Work
-- [x] Basic plugin structure and setup
-- [x] Integration with Obsidian API
-- [x] Initial degree centrality algorithm implementation
-- [x] Settings panel for configuration
-- [x] Results modal for displaying analysis outcomes
-- [x] Rust WebAssembly module initialization
-- [x] Graph construction in Rust (refactor branch)
-- [x] Basic UI for displaying results
-
-## In Progress
-- [ ] Eigenvector centrality algorithm implementation
-- [ ] Optimizing data transfer between TypeScript and Rust
-- [ ] Improving the results display UI
-- [ ] Error handling and fallback mechanisms
-- [ ] Performance optimization for large vaults
-
-## To Do
-- [ ] Betweenness centrality algorithm implementation
-- [ ] Closeness centrality algorithm implementation
-- [ ] Additional visualization options
-- [ ] Documentation for users
-- [ ] Prepare for submission to Obsidian Community Plugins
-- [ ] Testing with various vault sizes and structures
+# Progress Tracking
 
 ## Current Status
-The plugin has a functional implementation of degree centrality analysis with a basic UI for displaying results. A significant refactoring effort is underway to move graph calculations to Rust/WebAssembly for better performance, especially with larger vaults.
+Planning phase of migration from petgraph to rustnetworkx-core
+
+## Completed Work
+- Identification of required centrality metrics
+- Decision to migrate to rustnetworkx-core
+- Initial planning of migration strategy
+
+## In Progress
+- Analysis of current petgraph implementation
+- Planning of rustnetworkx-core migration
+
+## Remaining Work
+1. Implementation Phase
+   - Implement degree centrality with rustnetworkx-core
+   - Implement eigenvector centrality with rustnetworkx-core
+   - Implement betweenness centrality with rustnetworkx-core
+   - Implement closeness centrality with rustnetworkx-core
+
+2. Testing Phase
+   - Verify accuracy of all calculations
+   - Performance testing
+   - Integration testing
+
+3. Migration Completion
+   - Remove petgraph dependency
+   - Final testing
+   - Documentation updates
 
 ## Known Issues
-1. Performance may degrade with very large vaults (1000+ notes)
-2. UI needs refinement for better user experience
-3. Some edge cases in graph construction may not be handled correctly
-4. WebAssembly integration may not be optimal
+- None identified yet (will be updated during implementation)
 
-## Recent Achievements
-- Successfully implemented graph construction in Rust
-- Improved performance for medium-sized vaults
-- Added proper eigenvector centrality algorithm in Rust
-
-## Next Milestone Goals
-1. Complete the refactoring to move all graph calculations to Rust
-2. Implement and test all planned centrality algorithms
-3. Refine the UI for better usability
-4. Prepare for initial release
-
-## Performance Metrics
-- Time to analyze a 500-note vault: TBD
-- Memory usage during analysis: TBD
-- WebAssembly initialization time: TBD
+## Next Milestone
+Complete migration to rustnetworkx-core with all centrality metrics functioning correctly

@@ -1,22 +1,24 @@
 mod utils;
 
 use wasm_bindgen::prelude::*;
-use petgraph::graph::DiGraph;
-use petgraph::visit::EdgeRef;
+use rustworkx_core::petgraph::graph::DiGraph;
+use rustworkx_core::petgraph::visit::EdgeRef;
+use rustworkx_core::petgraph::Direction;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 // Graph manager to store the graph in memory
-struct GraphManager {
-    graph: DiGraph<String, ()>,
-    node_names: Vec<String>,
+#[derive(Debug)]
+pub struct GraphManager {
+    pub graph: DiGraph<String, ()>,
+    pub node_names: Vec<String>,
 }
 
 // Static mutex to store the graph manager
 lazy_static! {
-    static ref GRAPH_MANAGER: Mutex<Option<GraphManager>> = Mutex::new(None);
+    pub static ref GRAPH_MANAGER: Mutex<Option<GraphManager>> = Mutex::new(None);
 }
 
 // Helper function to check if graph is initialized
@@ -46,19 +48,19 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 /// This struct is used as a base for other node-related structures through composition.
 /// The `#[serde(flatten)]` attribute is used to maintain a flat JSON structure while
 /// allowing for better code organization.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BaseNode {
-    node_id: usize,
-    node_name: String,
+    pub node_id: usize,
+    pub node_name: String,
 }
 
 /// Represents the core graph data structure used for initialization.
 /// This structure is kept simple to allow for easy serialization/deserialization
 /// between JavaScript and Rust.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct GraphData {
-    nodes: Vec<String>,
-    edges: Vec<(usize, usize)>,
+    pub nodes: Vec<String>,
+    pub edges: Vec<(usize, usize)>,
 }
 
 /// Represents the result of centrality calculations for a node.
@@ -67,19 +69,19 @@ pub struct GraphData {
 /// # Properties
 /// * `base` - Common node properties (id and name)
 /// * `score` - The calculated centrality score for this node
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CentralityResult {
     #[serde(flatten)]
-    base: BaseNode,
-    score: f64,
+    pub base: BaseNode,
+    pub score: f64,
 }
 
 /// Information about a neighboring node in the graph.
 /// Uses BaseNode to maintain consistency in node representation.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NeighborInfo {
     #[serde(flatten)]
-    base: BaseNode,
+    pub base: BaseNode,
 }
 
 /// Result structure for neighbor queries, containing both the queried node
@@ -88,36 +90,36 @@ pub struct NeighborInfo {
 /// # Properties
 /// * `base` - Information about the node whose neighbors were queried
 /// * `neighbors` - List of neighboring nodes
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct GraphNeighborsResult {
     #[serde(flatten)]
-    base: BaseNode,
-    neighbors: Vec<NeighborInfo>,
+    pub base: BaseNode,
+    pub neighbors: Vec<NeighborInfo>,
 }
 
 /// Represents a node in a path through the graph.
 /// Used in path-finding results to maintain consistent node representation.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PathNode {
     #[serde(flatten)]
-    base: BaseNode,
+    pub base: BaseNode,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct VaultFile {
-    path: String,
-    content: String,
+    pub path: String,
+    pub content: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct VaultData {
-    files: Vec<VaultFile>,
+    pub files: Vec<VaultFile>,
 }
 
 // Error type for graph analysis operations
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: String,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ErrorResponse {
+    pub error: String,
 }
 
 // Helper function to build the graph from input data
@@ -208,13 +210,13 @@ pub fn clear_graph() -> String {
     serde_json::to_string(&result).unwrap_or_else(|_| r#"{"status":"error","message":"Failed to serialize status"}"#.to_string())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct GraphMetadata {
-    node_count: usize,
-    edge_count: usize,
-    max_degree: usize,
-    avg_degree: f64,
-    is_directed: bool,
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub max_degree: usize,
+    pub avg_degree: f64,
+    pub is_directed: bool,
 }
 
 // Function to get node neighbors from the cached graph
@@ -244,48 +246,41 @@ pub fn get_node_neighbors_cached(node_id: usize) -> String {
     let mut neighbors = Vec::new();
     
     // Add outgoing neighbors
-    for edge in manager.graph.edges_directed(node_idx, petgraph::Direction::Outgoing) {
+    for edge in manager.graph.edges_directed(node_idx, Direction::Outgoing) {
         let target_idx = manager.graph.node_indices().position(|id| id == edge.target()).unwrap();
-        neighbors.push(target_idx);
+        neighbors.push(NeighborInfo {
+            base: BaseNode {
+                node_id: target_idx,
+                node_name: manager.node_names[target_idx].clone(),
+            },
+        });
     }
     
     // Add incoming neighbors
-    for edge in manager.graph.edges_directed(node_idx, petgraph::Direction::Incoming) {
+    for edge in manager.graph.edges_directed(node_idx, Direction::Incoming) {
         let source_idx = manager.graph.node_indices().position(|id| id == edge.source()).unwrap();
-        neighbors.push(source_idx);
+        neighbors.push(NeighborInfo {
+            base: BaseNode {
+                node_id: source_idx,
+                node_name: manager.node_names[source_idx].clone(),
+            },
+        });
     }
     
-    // Remove duplicates
-    neighbors.sort();
-    neighbors.dedup();
-    
-    // Create base node for current node
-    let base = BaseNode {
-        node_id,
-        node_name: manager.node_names[node_id].clone(),
-    };
-    
-    // Convert neighbor indices to neighbor info objects
-    let neighbor_infos: Vec<NeighborInfo> = neighbors.iter()
-        .map(|&idx| NeighborInfo {
-            base: BaseNode {
-                node_id: idx,
-                node_name: manager.node_names[idx].clone(),
-            }
-        })
-        .collect();
-    
-    // Create result
+    // Create the result structure
     let result = GraphNeighborsResult {
-        base,
-        neighbors: neighbor_infos,
+        base: BaseNode {
+            node_id,
+            node_name: manager.node_names[node_id].clone(),
+        },
+        neighbors,
     };
     
-    // Serialize
+    // Convert to JSON
     match serde_json::to_string(&result) {
         Ok(json) => json,
         Err(e) => {
-            let error = ErrorResponse { error: format!("Failed to serialize neighbors: {}", e) };
+            let error = ErrorResponse { error: format!("Failed to serialize results: {}", e) };
             serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
         }
     }
@@ -306,32 +301,32 @@ pub fn calculate_degree_centrality_cached() -> String {
     let graph_manager = GRAPH_MANAGER.lock().unwrap();
     let manager = graph_manager.as_ref().unwrap();
     
-    // Calculate degree centrality using the stored graph
-    let mut results = Vec::with_capacity(manager.node_names.len());
-    let node_count = manager.node_names.len();
-    let normalization_factor = if node_count > 1 { (node_count - 1) as f64 } else { 1.0 };
+    let mut results = Vec::new();
+    let node_count = manager.graph.node_count() as f64;
     
-    for (i, node_name) in manager.node_names.iter().enumerate() {
-        let node_idx = manager.graph.node_indices().nth(i).unwrap();
+    // Calculate degree centrality for each node
+    for (idx, node_name) in manager.node_names.iter().enumerate() {
+        let node_idx = manager.graph.node_indices().nth(idx).unwrap();
         
-        // Count outgoing edges (out-degree)
-        let out_degree = manager.graph.edges_directed(node_idx, petgraph::Direction::Outgoing).count() as f64;
+        // Calculate out-degree and in-degree
+        let out_degree = manager.graph.edges_directed(node_idx, Direction::Outgoing).count() as f64;
         
-        // Count incoming edges (in-degree)
-        let in_degree = manager.graph.edges_directed(node_idx, petgraph::Direction::Incoming).count() as f64;
+        // For directed graphs, we also consider in-degree
+        let in_degree = manager.graph.edges_directed(node_idx, Direction::Incoming).count() as f64;
         
-        // Total degree (sum of in-degree and out-degree)
-        let total_degree = out_degree + in_degree;
-        
-        // Normalize by the maximum possible degree
-        let normalized_degree = total_degree / normalization_factor;
+        // Calculate normalized degree centrality
+        let degree_centrality = if node_count > 1.0 {
+            (out_degree + in_degree) / (2.0 * (node_count - 1.0))
+        } else {
+            0.0
+        };
         
         results.push(CentralityResult {
             base: BaseNode {
-                node_id: i,
+                node_id: idx,
                 node_name: node_name.clone(),
             },
-            score: normalized_degree,
+            score: degree_centrality,
         });
     }
     
@@ -361,8 +356,8 @@ pub fn get_graph_metadata() -> String {
     let mut total_degree = 0;
     
     for node_idx in manager.graph.node_indices() {
-        let out_degree = manager.graph.edges_directed(node_idx, petgraph::Direction::Outgoing).count();
-        let in_degree = manager.graph.edges_directed(node_idx, petgraph::Direction::Incoming).count();
+        let out_degree = manager.graph.edges_directed(node_idx, Direction::Outgoing).count();
+        let in_degree = manager.graph.edges_directed(node_idx, Direction::Incoming).count();
         let degree = out_degree + in_degree;
         
         max_degree = std::cmp::max(max_degree, degree);
@@ -435,7 +430,7 @@ pub fn find_shortest_path_cached(source_id: usize, target_id: usize) -> String {
         }
         
         // Check all neighbors
-        for edge in manager.graph.edges_directed(current, petgraph::Direction::Outgoing) {
+        for edge in manager.graph.edges_directed(current, Direction::Outgoing) {
             let neighbor = edge.target();
             if !visited.contains_key(&neighbor) {
                 visited.insert(neighbor, Some(current));
@@ -444,7 +439,7 @@ pub fn find_shortest_path_cached(source_id: usize, target_id: usize) -> String {
         }
         
         // For incoming edges (treating the graph as undirected for path finding)
-        for edge in manager.graph.edges_directed(current, petgraph::Direction::Incoming) {
+        for edge in manager.graph.edges_directed(current, Direction::Incoming) {
             let neighbor = edge.source();
             if !visited.contains_key(&neighbor) {
                 visited.insert(neighbor, Some(current));
@@ -518,40 +513,35 @@ pub fn calculate_degree_centrality(graph_data_json: &str) -> String {
         }
     };
     
-    // Try to initialize the cached graph first
-    if initialize_graph(graph_data_json).contains("success") {
-        return calculate_degree_centrality_cached();
-    }
-    
-    // Fallback to old implementation if caching fails
+    // Build the graph
     let graph = build_graph(&graph_data);
+    let node_count = graph.node_count() as f64;
     
-    // Calculate degree centrality
-    let mut results = Vec::with_capacity(graph_data.nodes.len());
-    let node_count = graph_data.nodes.len();
-    let normalization_factor = if node_count > 1 { (node_count - 1) as f64 } else { 1.0 };
+    let mut results = Vec::new();
     
-    for (i, node_name) in graph_data.nodes.iter().enumerate() {
-        let node_idx = graph.node_indices().nth(i).unwrap();
+    // Calculate degree centrality for each node
+    for (idx, node_name) in graph_data.nodes.iter().enumerate() {
+        let node_idx = graph.node_indices().nth(idx).unwrap();
         
-        // Count outgoing edges (out-degree)
-        let out_degree = graph.edges_directed(node_idx, petgraph::Direction::Outgoing).count() as f64;
+        // Calculate out-degree and in-degree
+        let out_degree = graph.edges_directed(node_idx, Direction::Outgoing).count() as f64;
         
-        // Count incoming edges (in-degree)
-        let in_degree = graph.edges_directed(node_idx, petgraph::Direction::Incoming).count() as f64;
+        // For directed graphs, we also consider in-degree
+        let in_degree = graph.edges_directed(node_idx, Direction::Incoming).count() as f64;
         
-        // Total degree (sum of in-degree and out-degree)
-        let total_degree = out_degree + in_degree;
-        
-        // Normalize by the maximum possible degree (n-1 where n is the number of nodes)
-        let normalized_degree = total_degree / normalization_factor;
+        // Calculate normalized degree centrality
+        let degree_centrality = if node_count > 1.0 {
+            (out_degree + in_degree) / (2.0 * (node_count - 1.0))
+        } else {
+            0.0
+        };
         
         results.push(CentralityResult {
             base: BaseNode {
-                node_id: i,
+                node_id: idx,
                 node_name: node_name.clone(),
             },
-            score: normalized_degree,
+            score: degree_centrality,
         });
     }
     

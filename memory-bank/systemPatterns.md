@@ -1,78 +1,39 @@
-# System Patterns: Obsidian Graph Analysis Plugin
+# System Patterns
 
 ## Architecture Overview
-The Obsidian Graph Analysis Plugin follows a hybrid architecture that combines TypeScript for the Obsidian plugin interface and Rust/WebAssembly for performance-critical graph operations.
+The system follows a modular architecture with clear separation between graph processing and plugin integration.
 
-```mermaid
-flowchart TD
-    A[Obsidian API] --> B[TypeScript Plugin Layer]
-    B --> C[UI Components]
-    B --> D[Settings Management]
-    B --> E[WebAssembly Interface]
-    E <--> F[Rust Graph Analysis Engine]
-    F --> G[Graph Theory Algorithms]
-```
+## Core Components
+1. Graph Processing Module
+   - Handles all network analysis calculations
+   - Currently using petgraph, migrating to rustnetworkx-core
+   - Maintains centrality calculation interfaces
 
-## Key Components
-
-### TypeScript Plugin Layer
-- **Main Plugin Class**: Entry point and initialization
-- **Command Registration**: Registers commands in Obsidian
-- **Settings Management**: Handles user configuration
-- **UI Components**: Results display and interaction
-- **WebAssembly Interface**: Communication with Rust code
-
-### Rust/WebAssembly Layer
-- **Graph Construction**: Builds graph representation from vault data
-- **Centrality Algorithms**: Implements various graph analysis algorithms
-- **Result Processing**: Formats and returns analysis results
+2. Metric Calculation Patterns
+   - Each centrality metric (degree, eigenvector, betweenness, closeness) is handled separately
+   - Results are passed back to the Obsidian plugin layer
 
 ## Design Patterns
+1. Adapter Pattern
+   - Used to interface between Obsidian's data structure and graph processing
+   - Will need updating during rustnetworkx-core migration
 
-### Observer Pattern
-- The plugin observes changes in the Obsidian vault to trigger reanalysis when necessary
-
-### Strategy Pattern
-- Different centrality algorithms are implemented as strategies that can be selected at runtime
-
-### Factory Pattern
-- Graph construction utilizes factory methods to create appropriate data structures
-
-### Bridge Pattern
-- The WebAssembly interface acts as a bridge between TypeScript and Rust code
-
-## Data Flow
-
-```mermaid
-flowchart LR
-    A[Vault Data] --> B[TypeScript]
-    B --> C[Data Transformation]
-    C --> D[Rust/WASM]
-    D --> E[Graph Construction]
-    E --> F[Algorithm Execution]
-    F --> G[Results]
-    G --> H[TypeScript UI]
-```
+2. Strategy Pattern
+   - Different centrality calculations implemented as separate strategies
+   - Allows for easy testing and maintenance
 
 ## Component Relationships
+```mermaid
+graph TD
+    A[Obsidian Plugin] --> B[Graph Adapter]
+    B --> C[Graph Processing]
+    C --> D[Centrality Calculations]
+    D --> E[Metric Results]
+    E --> A
+```
 
-### Core Dependencies
-- The Plugin depends on the Obsidian API
-- The TypeScript layer depends on the WebAssembly module
-- The WebAssembly module depends on the Rust implementation
-
-### Extension Points
-- New centrality algorithms can be added to the Rust implementation
-- Additional visualization options can be added to the UI layer
-- Settings can be extended to accommodate new features
-
-## Performance Considerations
-- Graph construction is done in Rust for performance
-- Data transfer between TypeScript and Rust is minimized
-- Algorithms are implemented with large graphs in mind
-- Fallback mechanisms exist if WebAssembly execution fails
-
-## Error Handling Strategy
-- Errors in WebAssembly execution fall back to simpler TypeScript implementations
-- User-facing errors are presented with clear explanations
-- Console logging provides detailed error information for debugging
+## Migration Strategy
+1. Implement parallel rustnetworkx-core solutions
+2. Verify results against current petgraph implementation
+3. Switch to new implementation
+4. Remove petgraph dependency

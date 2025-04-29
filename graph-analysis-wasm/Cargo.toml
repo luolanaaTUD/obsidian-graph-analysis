@@ -12,12 +12,13 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 wasm-bindgen = "0.2.84"
-petgraph = "0.7.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 wee_alloc = { version = "0.4.5", optional = true }
 regex = "1.7.3"
 lazy_static = "1.4.0"
+rustworkx-core = "0.16.0"
+getrandom = { version = "0.2", features = ["js"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
@@ -27,6 +28,7 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
+approx = "0.5.1"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
