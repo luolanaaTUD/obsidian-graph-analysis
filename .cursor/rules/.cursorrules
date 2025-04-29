@@ -1,0 +1,36 @@
+# Obsidian Graph Analysis Plugin - Project Rules
+
+## Code Organization
+- TypeScript code for the plugin interface lives in `/src`
+- Rust code for WebAssembly compilation lives in `/graph-analysis-wasm`
+- Built files are generated in `/dist`
+
+## Coding Standards
+- Use TypeScript interfaces for data structures shared between components
+- Document complex graph theory algorithms with comments explaining their purpose
+- Follow Obsidian plugin conventions for UI components
+- Use meaningful variable names that reflect graph theory concepts
+
+## Architecture Patterns
+- The main plugin class should handle initialization and command registration
+- UI components should be separated from analysis logic
+- WebAssembly interfaces should minimize data transfer between TypeScript and Rust
+- Settings should validate and sanitize user input
+
+## Feature Implementation Guide
+- New centrality algorithms should be implemented in Rust when possible
+- Each algorithm needs both an implementation and a UI component to display results
+- All user-facing text should be clear and explain graph theory concepts simply
+- Performance testing is required for algorithms on large graphs
+
+## Workflow
+- Build both TypeScript and Rust components before testing
+- Run `npm run build` to build the full plugin
+- Test in a development vault with varied note structures
+- Branch naming should follow pattern: `feature/`, `fix/`, or `refactor/`
+
+## Performance Considerations
+- Minimize data transfer between TypeScript and Rust
+- Consider memory usage when dealing with large graphs
+- Implement fallback mechanisms for WebAssembly failures
+- Profile performance on vaults of different sizes
