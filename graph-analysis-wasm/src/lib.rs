@@ -504,48 +504,14 @@ pub fn find_shortest_path_cached(source_id: usize, target_id: usize) -> String {
 pub fn calculate_degree_centrality(graph_data_json: &str) -> String {
     utils::set_panic_hook();
     
-    // Parse the input JSON
-    let graph_data: GraphData = match serde_json::from_str(graph_data_json) {
-        Ok(data) => data,
-        Err(e) => {
-            let error = ErrorResponse { error: format!("Failed to parse graph data: {}", e) };
-            return serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string());
-        }
-    };
-    
-    // Build the graph
-    let graph = build_graph(&graph_data);
-    let node_count = graph.node_count() as f64;
-    
-    let mut results = Vec::new();
-    
-    // Calculate degree centrality for each node
-    for (idx, node_name) in graph_data.nodes.iter().enumerate() {
-        let node_idx = graph.node_indices().nth(idx).unwrap();
-        
-        // Calculate out-degree and in-degree
-        let out_degree = graph.edges_directed(node_idx, Direction::Outgoing).count() as f64;
-        
-        // For directed graphs, we also consider in-degree
-        let in_degree = graph.edges_directed(node_idx, Direction::Incoming).count() as f64;
-        
-        // Calculate normalized degree centrality
-        let degree_centrality = if node_count > 1.0 {
-            (out_degree + in_degree) / (2.0 * (node_count - 1.0))
-        } else {
-            0.0
-        };
-        
-        results.push(CentralityResult {
-            base: BaseNode {
-                node_id: idx,
-                node_name: node_name.clone(),
-            },
-            score: degree_centrality,
-        });
+    // Try to initialize the cached graph with the provided data
+    let init_result = initialize_graph(graph_data_json);
+    if !init_result.contains("success") {
+        return init_result; // Return the error from initialization
     }
     
-    format_results(results)
+    // Use the cached version
+    calculate_degree_centrality_cached()
 }
 
 // Build a graph from vault data (files and their content)
