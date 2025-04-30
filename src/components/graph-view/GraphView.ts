@@ -1,6 +1,6 @@
 import { App, Notice, TFile } from 'obsidian';
 import * as d3 from 'd3';
-import { CentralityCalculator } from './types';
+import { CentralityCalculator } from '../../types/types';
 import { CentralityCalculator as CentralityCalculatorImpl } from './data/centrality';
 import { GraphDataBuilder } from './data/graph-builder';
 
@@ -115,8 +115,8 @@ export class GraphView {
         this.app = app;
         
         // Initialize core modules
-        this.centralityCalculator = new CentralityCalculatorImpl(calculateDegreeCentrality);
         this.graphDataBuilder = new GraphDataBuilder(app);
+        this.centralityCalculator = new CentralityCalculatorImpl(calculateDegreeCentrality);
     }
 
     public async onload(container: HTMLElement) {

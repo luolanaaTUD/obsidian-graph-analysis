@@ -1,4 +1,4 @@
-import { GraphData, CentralityResult } from '../types';
+import { GraphData, CentralityResult } from '../../../types/types';
 
 export class CentralityCalculator {
     private calculateDegreeCentrality?: (graphDataJson: string) => string;
