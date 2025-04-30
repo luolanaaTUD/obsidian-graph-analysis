@@ -1,6 +1,20 @@
 import { App, TFile } from 'obsidian';
 import * as d3 from 'd3';
 
+// Plugin Settings
+export interface GraphAnalysisSettings {
+    excludeFolders: string[];
+    excludeTags: string[];
+    resultLimit: number;
+}
+
+export const DEFAULT_SETTINGS: GraphAnalysisSettings = {
+    excludeFolders: [],
+    excludeTags: [],
+    resultLimit: 10
+};
+
+// Graph Types
 export interface GraphNode extends d3.SimulationNodeDatum {
     id: string;
     name: string;
