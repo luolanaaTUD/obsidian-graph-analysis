@@ -42,14 +42,30 @@ export interface CentralityResult {
 // Type for centrality calculation function
 export type CentralityCalculator = (graphDataJson: string) => string;
 
+// Extended Graph Types for D3 Simulation
 export interface SimulationGraphNode extends d3.SimulationNodeDatum {
     id: string;
     name: string;
-    path?: string;
-    centralityScore?: number;
-    degree?: number;
-    x?: number;
-    y?: number;
+    path: string;
+    degreeCentrality: number;
     highlighted?: boolean;
     dimmed?: boolean;
+    x?: number;
+    y?: number;
+    vx?: number;
+    vy?: number;
+    fx?: number | null;
+    fy?: number | null;
+}
+
+export interface SimulationGraphLink {
+    source: string | SimulationGraphNode;
+    target: string | SimulationGraphNode;
+}
+
+// Cache Types
+export interface NodeNeighborsCache {
+    nodeId: number;
+    neighbors: Set<number>;
+    timestamp?: number;
 }

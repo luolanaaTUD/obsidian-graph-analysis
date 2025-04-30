@@ -110,7 +110,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                 const wasmAbsPath = adapter.getResourcePath(wasmBinaryPath);
                 
                 const wasmCache = await this.loadData();
-                const wasmHash = wasmCache?.wasmHash;
+                // const wasmHash = wasmCache?.wasmHash;
                 
                 const timeoutPromise = new Promise<ArrayBuffer>((_, reject) => {
                     setTimeout(() => reject(new Error('WASM loading timed out')), 10000);
@@ -296,7 +296,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         try {
             const loadingNotice = new Notice('Analyzing vault graph...', 0);
             
-            const graphData = await this.buildGraphData();
+            // const graphData = await this.buildGraphData();
             
             let resultsJson: string;
             let algorithmName: string;
@@ -362,7 +362,7 @@ export default class GraphAnalysisPlugin extends Plugin {
             throw new Error(graphData.error);
         }
         
-        return graphData;
+        return graphData; // TODO: Return nothing since we use cached graph data
     }
     
     isFileExcluded(file: TFile): boolean {

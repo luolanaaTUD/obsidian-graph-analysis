@@ -1,37 +1,47 @@
 # Active Context
 
 ## Current Focus
-Migration from petgraph to rustnetworkx-core for graph calculations
+Performance optimization of graph operations and WASM integration
 
 ## Active Tasks
-1. Implementation of centrality metrics using rustnetworkx-core:
-   - Degree centrality
-   - Eigenvector centrality
-   - Betweenness centrality
-   - Closeness centrality
+1. TypeScript-side Optimization (Phase 1):
+   - Optimize WASM function calls
+   - Improve cache utilization
+   - Enhance error handling
+   - Reduce unnecessary graph rebuilding
 
-2. Verification of calculation accuracy
-3. Performance testing with new implementation
-4. Removal of petgraph dependency
+2. Future Rust-side Optimization (Phase 2):
+   - Improve cache management
+   - Optimize graph algorithms
+   - Enhance error handling
+   - Better memory management
 
-## Recent Changes
-- Decision to migrate from petgraph to rustnetworkx-core
-- Identification of core metrics to maintain
+## Recent Decisions
+1. Start optimization with TypeScript side first:
+   - Lower risk approach
+   - Immediate user benefits
+   - Better understanding of usage patterns
+   - Faster feedback loop
+
+2. Maintain backward compatibility during changes
+3. Focus on reducing unnecessary WASM calls
+4. Improve error handling and user feedback
 
 ## Next Steps
-1. Analyze current petgraph implementation
-2. Create parallel implementations using rustnetworkx-core
-3. Verify calculation accuracy
-4. Performance testing
-5. Remove petgraph dependency
+1. TypeScript Optimization:
+   - Audit current WASM function calls
+   - Implement better caching strategy
+   - Enhance error handling
+   - Optimize graph data flow
 
-## Active Decisions
-1. Focus on core centrality metrics only
-2. Complete migration before adding new features
-3. Maintain existing API interfaces where possible
+2. Preparation for Rust Changes:
+   - Document required API improvements
+   - Identify performance bottlenecks
+   - Plan cache system enhancements
 
 ## Considerations
-1. Ensure no regression in calculation accuracy
-2. Maintain or improve performance
-3. Clean removal of petgraph dependency
-4. Minimal disruption to existing functionality
+1. Maintain stability during optimization
+2. Ensure smooth user experience
+3. Keep performance metrics
+4. Document all changes thoroughly
+5. Consider backward compatibility

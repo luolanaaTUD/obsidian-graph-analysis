@@ -1,36 +1,14 @@
 import { App, Notice, TFile } from 'obsidian';
 import * as d3 from 'd3';
-import { CentralityCalculator } from '../../types/types';
+import { 
+    CentralityCalculator, 
+    SimulationGraphLink, 
+    SimulationGraphNode, 
+    NodeNeighborsCache,
+    GraphData
+} from '../../types/types';
 import { CentralityCalculator as CentralityCalculatorImpl } from './data/centrality';
 import { GraphDataBuilder } from './data/graph-builder';
-
-// Define the link type for D3 simulation
-interface SimulationGraphLink {
-    source: string | SimulationGraphNode;
-    target: string | SimulationGraphNode;
-}
-
-// Define the type for cached node neighbors
-interface NodeNeighborsCache {
-    nodeId: number; // ID of the node whose neighbors are cached
-    neighbors: Set<number>; // Set of neighbor node IDs
-    timestamp?: number; // Optional: for future cache invalidation
-}
-
-interface SimulationGraphNode {
-    id: string;
-    name: string;
-    path: string;
-    degreeCentrality: number;
-    highlighted?: boolean;
-    dimmed?: boolean;
-    x?: number;
-    y?: number;
-    vx?: number;
-    vy?: number;
-    fx?: number | null;
-    fy?: number | null;
-}
 
 /**
  * A simplified graph view implementation based on the D3 example
@@ -139,6 +117,12 @@ export class GraphView {
         // Load vault data
         this.showLoadingIndicator();
         try {
+            // Ensure WASM is initialized first
+            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
+            if (plugin && typeof plugin.ensureWasmLoaded === 'function') {
+                await plugin.ensureWasmLoaded();
+            }
+            
             await this.loadVaultData();
         } catch (error) {
             console.error('Error loading vault data:', error);
