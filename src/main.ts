@@ -232,14 +232,19 @@ export default class GraphAnalysisPlugin extends Plugin {
     private wasmLoadingPromise: Promise<void> | null = null;
     private wasmLoadingNotice: Notice | null = null;
 
+    private pluginIsLoaded = false;
+
     async onload() {
         await this.loadSettings();
 
         // Initialize WASM module with improved async handling
         this.initializeWasmModule();
         
-        // Register event handlers for vault changes
-        this.registerVaultEventListeners();
+        // Register event handlers for vault changes after plugin is fully loaded
+        this.app.workspace.onLayoutReady(() => {
+            this.pluginIsLoaded = true;
+            this.registerVaultEventListeners();
+        });
         
         // Register the graph analysis view
         this.registerView(
@@ -421,6 +426,9 @@ export default class GraphAnalysisPlugin extends Plugin {
     private registerVaultEventListeners() {
         // Handler for file creation
         this.fileCreatedHandler = (file: TFile) => {
+            // Only process events after plugin is fully loaded
+            if (!this.pluginIsLoaded) return;
+            
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
                 this.scheduleGraphDataRefresh('File created');
@@ -429,6 +437,9 @@ export default class GraphAnalysisPlugin extends Plugin {
         
         // Handler for file deletion
         this.fileDeletedHandler = (file: TFile) => {
+            // Only process events after plugin is fully loaded
+            if (!this.pluginIsLoaded) return;
+            
             // Only consider markdown files
             if (file.extension === 'md') {
                 this.scheduleGraphDataRefresh('File deleted');
@@ -437,6 +448,9 @@ export default class GraphAnalysisPlugin extends Plugin {
         
         // Handler for file modification
         this.fileModifiedHandler = (file: TFile) => {
+            // Only process events after plugin is fully loaded
+            if (!this.pluginIsLoaded) return;
+            
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
                 this.scheduleGraphDataRefresh('File modified');
@@ -445,6 +459,9 @@ export default class GraphAnalysisPlugin extends Plugin {
         
         // Handler for metadata changes (this captures link changes)
         this.metadataChangedHandler = (file: TFile) => {
+            // Only process events after plugin is fully loaded
+            if (!this.pluginIsLoaded) return;
+            
             // Only consider markdown files
             if (file.extension === 'md' && !this.isFileExcluded(file)) {
                 this.scheduleGraphDataRefresh('Metadata changed');
