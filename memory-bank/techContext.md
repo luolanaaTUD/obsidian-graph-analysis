@@ -4,75 +4,90 @@
 - TypeScript (Frontend/Plugin)
 - Rust/WASM (Backend)
 - Obsidian Plugin API
+- D3.js for visualization
 
 ## Current Technical Stack
+### Service Layer (New)
+- PluginService pattern
+- IGraphAnalysisPlugin interface
+- Type-safe operations
+- Centralized error handling
+
 ### Frontend (TypeScript)
-- Current Focus Area
-- Graph visualization
-- WASM integration
-- Cache management
-- Error handling
+- GraphView component
+- GraphDataBuilder utility
+- D3.js visualization
+- Service integration
 
 ### Backend (Rust/WASM)
-- Future Optimization Target
 - Graph processing
-- Cache system
-- Memory management
-- Algorithm optimization
+- Centrality calculations
+- Cache management
+- Memory optimization
 
-## Optimization Strategy
-1. Phase 1: TypeScript
-   - WASM call optimization
-   - Cache utilization
-   - Error handling
-   - User feedback
+## Architecture Patterns
+1. Service Layer:
+   ```typescript
+   class PluginService {
+       private plugin: IGraphAnalysisPlugin;
+       
+       // Type-safe plugin access
+       // Centralized error handling
+       // Unified WASM integration
+   }
+   ```
 
-2. Phase 2: Rust
-   - Cache management
-   - Algorithm efficiency
-   - Memory usage
-   - Error types
+2. Plugin Interface:
+   ```typescript
+   interface IGraphAnalysisPlugin {
+       ensureWasmLoaded(): Promise<void>;
+       initializeGraphAndCalculateCentrality(): Promise<GraphInitializationResult>;
+       // Other plugin operations
+   }
+   ```
 
-3. Phase 3: Integration
-   - Combined optimizations
-   - Performance testing
-   - Documentation
-   - User experience
+3. Graph Operations:
+   ```typescript
+   interface GraphInitializationResult {
+       graphData: GraphData;
+       degreeCentrality: CentralityResult[];
+   }
+   ```
 
 ## Technical Constraints
-1. TypeScript Side:
-   - Maintain backward compatibility
-   - Optimize WASM calls
-   - Improve error handling
-   - Better cache management
+1. Service Layer:
+   - Type safety requirements
+   - Error handling standards
+   - Performance considerations
+   - Cache management
 
-2. Rust Side:
+2. Graph Operations:
+   - Combined initialization
+   - On-demand calculations
    - Memory efficiency
-   - Algorithm optimization
-   - Cache system improvement
-   - Error type enhancement
+   - Performance optimization
 
 3. Integration:
-   - Smooth transition
-   - Performance validation
-   - Documentation
-   - Testing coverage
+   - Service pattern adoption
+   - Component updates
+   - Cache coordination
+   - Error propagation
 
 ## Development Standards
 1. Code Organization:
-   - Clear separation of concerns
-   - Proper error handling
-   - Efficient cache management
-   - Performance monitoring
+   - Service-based architecture
+   - Clear interfaces
+   - Type safety
+   - Error handling
 
 2. Testing:
-   - Unit tests
-   - Integration tests
+   - Service layer tests
+   - Component integration
    - Performance metrics
-   - User experience validation
+   - Error scenarios
 
 3. Documentation:
-   - API documentation
+   - Service documentation
+   - Interface definitions
    - Architecture updates
-   - Change tracking
-   - Performance notes
+   - Pattern guidelines

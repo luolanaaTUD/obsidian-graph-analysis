@@ -243,7 +243,7 @@ export default class GraphAnalysisPlugin extends Plugin {
             try {
                 await this.ensureWasmLoaded();
                 
-                const graphData = await this.buildGraphData();
+                const { graphData } = await this.initializeGraphAndCalculateCentrality();
                 
                 await this.graphView.updateData(graphData);
                 
@@ -296,19 +296,20 @@ export default class GraphAnalysisPlugin extends Plugin {
         try {
             const loadingNotice = new Notice('Analyzing vault graph...', 0);
             
-            // const graphData = await this.buildGraphData();
-            
             let resultsJson: string;
             let algorithmName: string;
             
+            // For degree centrality, we can use the cached result since it's calculated at initialization
             if (algorithm === 'degree') {
                 resultsJson = calculate_degree_centrality_cached();
                 algorithmName = 'Degree Centrality';
             } else if (algorithm === 'eigenvector') {
+                // TODO: Implement eigenvector centrality
                 new Notice('Eigenvector centrality analysis is not implemented yet');
                 loadingNotice.hide();
                 return;
             } else if (algorithm === 'betweenness') {
+                // TODO: Implement betweenness centrality
                 new Notice('Betweenness centrality analysis is not implemented yet');
                 loadingNotice.hide();
                 return;
@@ -351,18 +352,56 @@ export default class GraphAnalysisPlugin extends Plugin {
         }));
         
         const filteredVaultFiles = vaultFiles.filter(file => file !== null);
-        
         const vaultDataJson = JSON.stringify({ files: filteredVaultFiles });
-        const graphDataJson = build_graph_from_vault(vaultDataJson);
         
-        const graphData = JSON.parse(graphDataJson);
-        
-        if (graphData.error) {
-            console.error('Error building graph in Rust:', graphData.error);
-            throw new Error(graphData.error);
+        try {
+            // Build graph and initialize cache
+            const graphDataJson = build_graph_from_vault(vaultDataJson);
+            const graphData = JSON.parse(graphDataJson);
+            
+            if (graphData.error) {
+                console.error('Error building graph in Rust:', graphData.error);
+                throw new Error(graphData.error);
+            }
+            
+            // Initialize graph cache and calculate degree centrality immediately
+            const cacheResult = this.initializeGraphCache(graphDataJson);
+            if (cacheResult.error) {
+                throw new Error(cacheResult.error);
+            }
+            
+            // Calculate degree centrality right after graph initialization
+            const degreeCentrality = this.calculateDegreeCentralityCached();
+            if ('error' in degreeCentrality) {
+                throw new Error(degreeCentrality.error);
+            }
+            
+            // Combine graph data with degree centrality
+            return {
+                ...graphData,
+                degreeCentrality
+            };
+        } catch (error) {
+            console.error('Error in graph initialization:', error);
+            throw new Error(`Failed to initialize graph: ${(error as Error).message}`);
+        }
+    }
+    
+    public async initializeGraphAndCalculateCentrality(): Promise<{ graphData: any, degreeCentrality: any }> {
+        if (!this.wasmInitialized) {
+            throw new Error('WASM module not initialized');
         }
         
-        return graphData; // TODO: Return nothing since we use cached graph data
+        try {
+            const graphData = await this.buildGraphData();
+            return {
+                graphData: graphData,
+                degreeCentrality: graphData.degreeCentrality
+            };
+        } catch (error) {
+            console.error('Error initializing graph and calculating centrality:', error);
+            throw new Error(`Failed to initialize graph and calculate centrality: ${(error as Error).message}`);
+        }
     }
     
     isFileExcluded(file: TFile): boolean {
@@ -405,18 +444,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         console.log(`Graph Analysis Results (${algorithmName}):`, results);
     }
 
-    public calculateDegreeCentrality(graphDataJson: string): string {
-        if (!this.wasmInitialized) {
-            throw new Error('WASM module not initialized');
-        }
-        
-        try {
-            return calculate_degree_centrality_cached();
-        } catch (error) {
-            console.error('Error in WASM degree centrality calculation:', error);
-            throw new Error('Failed to calculate degree centrality');
-        }
-    }
+
     
     public initializeGraphCache(graphDataJson: string): any {
         if (!this.wasmInitialized) {

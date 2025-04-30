@@ -1,81 +1,82 @@
 # System Patterns
 
 ## Architecture Overview
-The system is being optimized for better performance and resource utilization, focusing on efficient WASM integration and graph operations.
+The system now follows a service-oriented architecture with the Plugin Service pattern at its core, providing centralized access to plugin functionality and optimized graph operations.
 
 ## Core Components
-1. TypeScript Layer (Current Focus)
-   - Graph View Management
-   - WASM Integration
-   - Cache Coordination
-   - User Interface
+1. Service Layer
+   - PluginService: Central access point for plugin functionality
+   - Type-safe plugin interactions
+   - Centralized error handling
+   - Unified WASM integration
 
-2. Rust/WASM Layer (Future Focus)
-   - Graph Processing
-   - Cache Management
-   - Algorithm Optimization
-   - Memory Management
+2. Graph Components
+   - GraphView: UI and visualization
+   - GraphDataBuilder: Data preparation
+   - Combined initialization process
+   - Optimized centrality calculations
 
-## Optimization Strategy
+## Service Pattern Implementation
 ```mermaid
 graph TD
-    A[Phase 1: TypeScript] --> B[Optimize WASM Calls]
-    A --> C[Improve Caching]
-    A --> D[Error Handling]
+    A[Components] --> B[PluginService]
+    B --> C[Plugin Interface]
+    C --> D[WASM Module]
     
-    B --> E[Phase 2: Rust]
-    C --> E
-    D --> E
+    E[GraphView] --> A
+    F[GraphDataBuilder] --> A
     
-    E --> F[Cache System]
-    E --> G[Algorithm Optimization]
-    E --> H[Memory Management]
-    
-    F --> I[Final Integration]
-    G --> I
-    H --> I
+    B --> G[Graph Operations]
+    B --> H[Centrality Calc]
+    B --> I[Cache Management]
 ```
 
 ## Design Patterns
-1. Cache Management Pattern
-   - Efficient data storage
-   - Smart invalidation
-   - Optimized retrieval
+1. Plugin Service Pattern
+   - Single point of access
+   - Type-safe operations
+   - Centralized error handling
+   - Clean abstraction layer
 
-2. Error Handling Pattern
-   - Comprehensive error types
-   - User-friendly messages
-   - Proper propagation
+2. Graph Initialization Pattern
+   - Combined operations
+   - Optimized calculations
+   - Smart caching
+   - On-demand processing
 
-3. Resource Management Pattern
-   - Optimized WASM calls
-   - Memory efficiency
-   - Performance monitoring
+3. Component Communication
+   - Service-based interaction
+   - Clear dependencies
+   - Type-safe interfaces
+   - Consistent error handling
 
 ## Component Relationships
 ```mermaid
 graph TD
-    A[TypeScript UI] --> B[Cache Coordinator]
-    B --> C[WASM Interface]
-    C --> D[Rust Graph Engine]
-    D --> E[Memory Cache]
-    E --> F[Algorithm Engine]
+    A[GraphView] --> B[PluginService]
+    C[GraphDataBuilder] --> B
+    B --> D[IGraphAnalysisPlugin]
+    D --> E[WASM Module]
+    E --> F[Graph Processing]
+    E --> G[Centrality Calc]
+    E --> H[Cache System]
 ```
 
 ## Implementation Strategy
-1. TypeScript Layer:
-   - Optimize existing WASM calls
-   - Implement smarter caching
-   - Enhance error handling
-   - Improve user feedback
+1. Service Layer:
+   - Centralized plugin access
+   - Type-safe operations
+   - Error handling
+   - Cache management
 
-2. Rust Layer (Future):
-   - Enhanced cache system
-   - Optimized algorithms
-   - Better memory management
-   - Improved error types
+2. Graph Operations:
+   - Combined initialization
+   - Optimized calculations
+   - Smart caching
+   - On-demand processing
 
-3. Integration:
-   - Smooth transition
-   - Performance validation
-   - User experience testing
+3. Future Enhancements:
+   - Extended metrics
+   - Better caching
+   - More analysis tools
+   - Enhanced visualization

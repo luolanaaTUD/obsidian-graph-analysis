@@ -1,6 +1,15 @@
 import { App, TFile } from 'obsidian';
 import * as d3 from 'd3';
 
+// Plugin interface
+export interface IGraphAnalysisPlugin {
+    ensureWasmLoaded(): Promise<void>;
+    initializeGraphAndCalculateCentrality(): Promise<GraphInitializationResult>;
+    getNodeNeighborsCached(nodeId: number): any;
+    initializeGraphCache(graphData: string): any;
+    clearGraphCache(): void;
+}
+
 // Plugin Settings
 export interface GraphAnalysisSettings {
     excludeFolders: string[];
@@ -39,8 +48,10 @@ export interface CentralityResult {
     score: number;
 }
 
-// Type for centrality calculation function
-export type CentralityCalculator = (graphDataJson: string) => string;
+export interface GraphInitializationResult {
+    graphData: GraphData;
+    degreeCentrality: CentralityResult[];
+}
 
 // Extended Graph Types for D3 Simulation
 export interface SimulationGraphNode extends d3.SimulationNodeDatum {

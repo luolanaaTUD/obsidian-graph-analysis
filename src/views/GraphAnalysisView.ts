@@ -9,10 +9,7 @@ export class GraphAnalysisView extends ItemView {
     
     constructor(leaf: WorkspaceLeaf, private plugin: GraphAnalysisPlugin) {
         super(leaf);
-        this.graphView = new GraphView(
-            this.app,
-            this.plugin.calculateDegreeCentrality.bind(this.plugin)
-        );
+        this.graphView = new GraphView(this.app);
     }
 
     getViewType(): string {

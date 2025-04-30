@@ -1,14 +1,13 @@
 import { App, Notice, TFile } from 'obsidian';
 import * as d3 from 'd3';
 import { 
-    CentralityCalculator, 
     SimulationGraphLink, 
     SimulationGraphNode, 
     NodeNeighborsCache,
     GraphData
 } from '../../types/types';
-import { CentralityCalculator as CentralityCalculatorImpl } from './data/centrality';
 import { GraphDataBuilder } from './data/graph-builder';
+import { PluginService } from '../../services/PluginService';
 
 /**
  * A simplified graph view implementation based on the D3 example
@@ -27,7 +26,7 @@ export class GraphView {
     
     // Core components
     private graphDataBuilder: GraphDataBuilder;
-    private centralityCalculator: CentralityCalculatorImpl;
+    private pluginService: PluginService;
     
     // Animation and timing constants
     private readonly ANIMATION = {
@@ -89,12 +88,12 @@ export class GraphView {
     private vaultRenameHandler: (file: TFile, oldPath: string) => void;
     private debounceTimeout: number | null = null;
 
-    constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
+    constructor(app: App) {
         this.app = app;
         
         // Initialize core modules
+        this.pluginService = new PluginService(app);
         this.graphDataBuilder = new GraphDataBuilder(app);
-        this.centralityCalculator = new CentralityCalculatorImpl(calculateDegreeCentrality);
     }
 
     public async onload(container: HTMLElement) {
@@ -118,10 +117,7 @@ export class GraphView {
         this.showLoadingIndicator();
         try {
             // Ensure WASM is initialized first
-            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            if (plugin && typeof plugin.ensureWasmLoaded === 'function') {
-                await plugin.ensureWasmLoaded();
-            }
+            await this.pluginService.ensureWasmLoaded();
             
             await this.loadVaultData();
         } catch (error) {
@@ -768,15 +764,8 @@ export class GraphView {
         } else {
             // No cache hit, need to get data from WASM
             try {
-                const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-                
-                if (!plugin || !plugin.getNodeNeighborsCached) {
-                    console.error('WASM functions are not available. Make sure the plugin is properly initialized.');
-                    throw new Error('WASM functions not available');
-                }
-                
                 // Use the WASM cached implementation
-                const neighborResult = plugin.getNodeNeighborsCached(nodeIdInt);
+                const neighborResult = this.pluginService.getNodeNeighbors(nodeIdInt);
                 
                 // Extract neighbor IDs from the result
                 if (neighborResult && neighborResult.neighbors) {
@@ -799,32 +788,6 @@ export class GraphView {
             } catch (error) {
                 console.error('Error in highlightConnections with WASM:', error);
                 this.nodeNeighborsCache = null;
-                
-                try {
-                    const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-                    if (plugin && plugin.initializeGraphCache) {
-                        const wasmGraphData = {
-                            nodes: this.nodes.map(node => node.name),
-                            edges: this.links.map(link => {
-                                const source = typeof link.source === 'string' ? parseInt(link.source) : parseInt((link.source as unknown as SimulationGraphNode).id);
-                                const target = typeof link.target === 'string' ? parseInt(link.target) : parseInt((link.target as unknown as SimulationGraphNode).id);
-                                return [source, target];
-                            })
-                        };
-                        
-                        plugin.initializeGraphCache(JSON.stringify(wasmGraphData))
-                            .then(() => {
-                                console.log('Graph cache reinitialized after error');
-                                this.highlightConnections(nodeId, highlight);
-                                return;
-                            })
-                            .catch((reinitError: any) => {
-                                console.error('Failed to reinitialize graph cache:', reinitError);
-                            });
-                    }
-                } catch (reinitError) {
-                    console.error('Error attempting to reinitialize graph cache:', reinitError);
-                }
                 return;
             }
         }
@@ -1038,18 +1001,22 @@ export class GraphView {
     
     private async loadVaultData() {
         try {
-            // Get graph data from builder
-            const graphData = await this.graphDataBuilder.buildGraphData();
+            // Get graph data and degree centrality from builder
+            const { graphData, degreeCentrality } = await this.graphDataBuilder.buildGraphData();
             
             // Convert edges to links format
             const nodes: SimulationGraphNode[] = graphData.nodes.map((nodePath: string, index: number) => {
                 const fileName = nodePath.split('/').pop() || nodePath;
                 const displayName = fileName.replace('.md', '');
+                
+                // Find degree centrality for this node
+                const centralityResult = degreeCentrality.find(r => r.node_id === index);
+                
                 return {
                     id: index.toString(),
                     name: displayName,
                     path: nodePath,
-                    degreeCentrality: 0, // Will be updated by centrality calculation
+                    degreeCentrality: centralityResult ? centralityResult.score : 0,
                     x: undefined,
                     y: undefined,
                     vx: undefined,
@@ -1063,17 +1030,6 @@ export class GraphView {
                 source: sourceIdx.toString(),
                 target: targetIdx.toString()
             }));
-            
-            // Calculate centrality scores
-            const centralityResults = this.centralityCalculator.calculate({ nodes: graphData.nodes, edges: graphData.edges });
-            
-            // Update node centrality scores
-            nodes.forEach(node => {
-                const centralityResult = centralityResults.find((r: { node_id: number; score: number }) => r.node_id === parseInt(node.id));
-                if (centralityResult) {
-                    node.degreeCentrality = centralityResult.score;
-                }
-            });
             
             // Update the graph with the processed data
             await this.updateData({ nodes, links });
@@ -1103,13 +1059,7 @@ export class GraphView {
                 })
             };
             
-            // Initialize the graph in WASM
-            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            if (!plugin || !plugin.initializeGraphCache) {
-                throw new Error('WASM functions are not available. Make sure the plugin is properly initialized.');
-            }
-            
-            const result = await plugin.initializeGraphCache(JSON.stringify(wasmGraphData));
+            const result = await this.pluginService.initializeGraphCache(JSON.stringify(wasmGraphData));
             
             if (result && result.error) {
                 console.error(`Error initializing graph cache in WASM: ${result.error}`);
@@ -1391,11 +1341,8 @@ export class GraphView {
         
         // Clear the graph cache in WASM
         try {
-            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            if (plugin && plugin.clearGraphCache) {
-                plugin.clearGraphCache();
-                console.log('Graph cache cleared from WASM');
-            }
+            this.pluginService.clearGraphCache();
+            console.log('Graph cache cleared from WASM');
         } catch (error) {
             console.error('Error clearing graph cache:', error);
         }
@@ -1432,7 +1379,7 @@ export class GraphView {
         // @ts-ignore - explicitly break circular references
         this.graphDataBuilder = null;
         // @ts-ignore - explicitly break circular references
-        this.centralityCalculator = null;
+        this.pluginService = null;
         // @ts-ignore - explicitly break circular references
         this.app = null;
     }
