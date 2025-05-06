@@ -1,39 +1,49 @@
 use wasm_bindgen::prelude::*;
 use rustworkx_core::petgraph::Direction;
 use rustworkx_core::petgraph::visit::EdgeRef;
+use rustworkx_core::centrality;
 
 use crate::models::*;
 use crate::graph_manager::{GRAPH_MANAGER, check_graph_initialized, initialize_from_vault};
 use crate::utils;
 
 // Helper function to sort and format results
-fn format_results(results: Vec<Node>) -> String {
-    // Sort results by centrality score in descending order
-    // We need to find the non-null centrality score to use for sorting
-    let mut sorted_results = results;
-    sorted_results.sort_by(|a, b| {
-        let a_score = a.centrality.degree
-            .or(a.centrality.eigenvector)
-            .or(a.centrality.betweenness)
-            .or(a.centrality.closeness)
-            .unwrap_or(0.0);
-        let b_score = b.centrality.degree
-            .or(b.centrality.eigenvector)
-            .or(b.centrality.betweenness)
-            .or(b.centrality.closeness)
-            .unwrap_or(0.0);
-        
-        b_score.partial_cmp(&a_score).unwrap_or(std::cmp::Ordering::Equal)
-    });
+fn format_results(mut results: Vec<Node>, is_sorting: bool, centrality_type: Option<&str>) -> String {
+    if is_sorting {
+        // Sort results by the specified centrality score in descending order
+        results.sort_by(|a, b| {
+            let (a_score, b_score) = match centrality_type {
+                Some("degree") => (a.centrality.degree, b.centrality.degree),
+                Some("eigenvector") => (a.centrality.eigenvector, b.centrality.eigenvector),
+                Some("betweenness") => (a.centrality.betweenness, b.centrality.betweenness),
+                Some("closeness") => (a.centrality.closeness, b.centrality.closeness),
+                _ => {
+                    // If no specific type is provided, use the first non-null score as before
+                    (
+                        a.centrality.degree
+                            .or(a.centrality.eigenvector)
+                            .or(a.centrality.betweenness)
+                            .or(a.centrality.closeness),
+                        b.centrality.degree
+                            .or(b.centrality.eigenvector)
+                            .or(b.centrality.betweenness)
+                            .or(b.centrality.closeness)
+                    )
+                }
+            };
+            
+            // Compare scores, defaulting to 0.0 if None
+            let a_val = a_score.unwrap_or(0.0);
+            let b_val = b_score.unwrap_or(0.0);
+            b_val.partial_cmp(&a_val).unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
     
     // Convert results to JSON
-    match serde_json::to_string(&sorted_results) {
-        Ok(json) => json,
-        Err(e) => {
-            let error = ErrorResponse { error: format!("Failed to serialize results: {}", e) };
-            serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
-        }
-    }
+    serde_json::to_string(&results).unwrap_or_else(|e| {
+        let error = ErrorResponse { error: format!("Failed to serialize results: {}", e) };
+        serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
+    })
 }
 
 #[wasm_bindgen]
@@ -221,27 +231,16 @@ pub fn calculate_degree_centrality_cached() -> String {
     let graph_manager = GRAPH_MANAGER.lock().unwrap();
     let manager = graph_manager.as_ref().unwrap();
     
-    let mut results = Vec::new();
-    let node_count = manager.graph.node_count() as f64;
+    // Calculate degree centrality using rustworkx-core
+    let centrality_scores = centrality::degree_centrality(&manager.graph,None);
     
-    // Calculate degree centrality for each node
+    let mut results = Vec::new();
+    
+    // Create nodes with degree centrality scores
     for (idx, node_name) in manager.node_names.iter().enumerate() {
         let node_idx = manager.graph.node_indices().nth(idx).unwrap();
+        let degree_centrality = centrality_scores[node_idx.index()];
         
-        // Calculate out-degree and in-degree
-        let out_degree = manager.graph.edges_directed(node_idx, Direction::Outgoing).count() as f64;
-        
-        // For directed graphs, we also consider in-degree
-        let in_degree = manager.graph.edges_directed(node_idx, Direction::Incoming).count() as f64;
-        
-        // Calculate normalized degree centrality
-        let degree_centrality = if node_count > 1.0 {
-            (out_degree + in_degree) / (2.0 * (node_count - 1.0))
-        } else {
-            0.0
-        };
-        
-        // Create centrality scores with degree value
         let mut centrality = CentralityScores::default();
         centrality.degree = Some(degree_centrality);
         
@@ -252,14 +251,7 @@ pub fn calculate_degree_centrality_cached() -> String {
         });
     }
     
-    // Return the results directly without sorting to avoid potential issues
-    match serde_json::to_string(&results) {
-        Ok(json) => json,
-        Err(e) => {
-            let error = ErrorResponse { error: format!("Failed to serialize results: {}", e) };
-            serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
-        }
-    }
+    format_results(results, true, Some("degree"))
 }
 
 #[wasm_bindgen]
@@ -278,18 +270,24 @@ pub fn calculate_eigenvector_centrality_cached() -> String {
     
     let mut results = Vec::new();
     
-    // This is a simplified implementation of eigenvector centrality
-    // A full implementation would use power iteration
-    // But for now we'll use a simplified calculation for demonstration
-    let node_count = manager.graph.node_count();
-    
-    // Default score for each node (will be refined in a real implementation)
-    let default_score = 1.0 / node_count as f64;
-    
+    // Calculate eigenvector centrality using rustworkx-core
+    // Use unit weights (1.0) for all edges, max_iter=100, tol=1e-6
+    let centrality_result = centrality::eigenvector_centrality(
+        &manager.graph,
+        |_| Ok::<f64, String>(1.0),
+        Some(100),
+        Some(1e-6)
+    );
+
     // Create nodes with eigenvector centrality scores
     for (idx, node_name) in manager.node_names.iter().enumerate() {
         let mut centrality = CentralityScores::default();
-        centrality.eigenvector = Some(default_score);
+        
+        // Get the centrality score if available
+        if let Ok(Some(centrality_scores)) = &centrality_result {
+            let node_idx = manager.graph.node_indices().nth(idx).unwrap();
+            centrality.eigenvector = Some(centrality_scores[node_idx.index()]);
+        }
         
         results.push(Node {
             node_id: idx,
@@ -298,14 +296,7 @@ pub fn calculate_eigenvector_centrality_cached() -> String {
         });
     }
     
-    // Return the results directly without sorting to avoid potential issues
-    match serde_json::to_string(&results) {
-        Ok(json) => json,
-        Err(e) => {
-            let error = ErrorResponse { error: format!("Failed to serialize results: {}", e) };
-            serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
-        }
-    }
+    format_results(results, true, Some("eigenvector"))
 }
 
 #[wasm_bindgen]
@@ -324,18 +315,24 @@ pub fn calculate_betweenness_centrality_cached() -> String {
     
     let mut results = Vec::new();
     
-    // This is a simplified implementation of betweenness centrality
-    // A full implementation would compute all shortest paths
-    // But for now we'll use a simplified calculation for demonstration
-    let node_count = manager.graph.node_count();
-    
-    // Default score for each node (will be refined in a real implementation)
-    let default_score = 1.0 / node_count as f64;
+    // Calculate betweenness centrality using rustworkx-core
+    // include_endpoints: true (count paths ending at each vertex)
+    // normalized: true (normalize by (n-1)(n-2) for directed graphs)
+    // parallel_threshold: 1000 (default)
+    let centrality_scores = centrality::betweenness_centrality(
+        &manager.graph,
+        true,   // include endpoints
+        true,   // normalize the results
+        1000    // default parallel threshold
+    );
     
     // Create nodes with betweenness centrality scores
     for (idx, node_name) in manager.node_names.iter().enumerate() {
         let mut centrality = CentralityScores::default();
-        centrality.betweenness = Some(default_score);
+        
+        // Get the centrality score if available
+        let node_idx = manager.graph.node_indices().nth(idx).unwrap();
+        centrality.betweenness = centrality_scores[node_idx.index()];
         
         results.push(Node {
             node_id: idx,
@@ -344,14 +341,7 @@ pub fn calculate_betweenness_centrality_cached() -> String {
         });
     }
     
-    // Return the results directly without sorting to avoid potential issues
-    match serde_json::to_string(&results) {
-        Ok(json) => json,
-        Err(e) => {
-            let error = ErrorResponse { error: format!("Failed to serialize results: {}", e) };
-            serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
-        }
-    }
+    format_results(results, true, Some("betweenness"))
 }
 
 #[wasm_bindgen]
@@ -370,18 +360,21 @@ pub fn calculate_closeness_centrality_cached() -> String {
     
     let mut results = Vec::new();
     
-    // This is a simplified implementation of closeness centrality
-    // A full implementation would compute shortest path distances
-    // But for now we'll use a simplified calculation for demonstration
-    let node_count = manager.graph.node_count();
-    
-    // Default score for each node (will be refined in a real implementation)
-    let default_score = 1.0 / node_count as f64;
+    // Calculate closeness centrality using rustworkx-core
+    // wf_improved: true for Wasserman and Faust's improved formula
+    // This handles disconnected components and directed graphs better
+    let centrality_scores = centrality::closeness_centrality(
+        &manager.graph,
+        true  // use improved formula for better handling of directed graphs
+    );
     
     // Create nodes with closeness centrality scores
     for (idx, node_name) in manager.node_names.iter().enumerate() {
         let mut centrality = CentralityScores::default();
-        centrality.closeness = Some(default_score);
+        
+        // Get the centrality score if available
+        let node_idx = manager.graph.node_indices().nth(idx).unwrap();
+        centrality.closeness = centrality_scores[node_idx.index()];
         
         results.push(Node {
             node_id: idx,
@@ -390,14 +383,7 @@ pub fn calculate_closeness_centrality_cached() -> String {
         });
     }
     
-    // Return the results directly without sorting to avoid potential issues
-    match serde_json::to_string(&results) {
-        Ok(json) => json,
-        Err(e) => {
-            let error = ErrorResponse { error: format!("Failed to serialize results: {}", e) };
-            serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
-        }
-    }
+    format_results(results, true, Some("closeness"))
 }
 
 #[wasm_bindgen]

@@ -70,7 +70,7 @@ impl GraphManager {
         }
         
         // Extract links and add edges
-        match regex::Regex::new(r"\[\[([^\]]+?)\]\]") {
+        match regex::Regex::new(r"\[\[([^]]+?)]]") {
             Ok(link_regex) => {
                 for file in files {
                     if let Some(&source_id) = node_map.get(&file.path) {
