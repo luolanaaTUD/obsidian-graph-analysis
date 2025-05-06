@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import { GraphInitializationResult, IGraphAnalysisPlugin } from '../types/types';
+import { GraphData, Node, IGraphAnalysisPlugin, GraphNeighborsResult, GraphMetadata } from '../types/types';
 
 export class PluginService {
     private plugin: IGraphAnalysisPlugin;
@@ -16,20 +16,36 @@ export class PluginService {
         return this.plugin.ensureWasmLoaded();
     }
 
-    async getGraphData(): Promise<GraphInitializationResult> {
+    async buildGraphFromVault(): Promise<GraphData> {
         await this.ensureWasmLoaded();
-        return this.plugin.initializeGraphAndCalculateCentrality();
+        return this.plugin.buildGraphFromVault();
     }
 
-    getNodeNeighbors(nodeId: number): any {
+    calculateDegreeCentrality(): Node[] {
+        return this.plugin.calculateDegreeCentralityCached();
+    }
+
+    calculateEigenvectorCentrality(): Node[] {
+        return this.plugin.calculateEigenvectorCentralityCached();
+    }
+
+    calculateBetweennessCentrality(): Node[] {
+        return this.plugin.calculateBetweennessCentralityCached();
+    }
+
+    calculateClosenessCentrality(): Node[] {
+        return this.plugin.calculateClosenessCentralityCached();
+    }
+
+    getNodeNeighbors(nodeId: number): GraphNeighborsResult {
         return this.plugin.getNodeNeighborsCached(nodeId);
-    }
-
-    initializeGraphCache(graphData: string): any {
-        return this.plugin.initializeGraphCache(graphData);
     }
 
     clearGraphCache(): void {
         this.plugin.clearGraphCache();
+    }
+
+    getGraphMetadata(): GraphMetadata {
+        return this.plugin.getGraphMetadata();
     }
 } 

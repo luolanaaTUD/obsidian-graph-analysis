@@ -2,8 +2,7 @@ import { App, Notice, TFile } from 'obsidian';
 import * as d3 from 'd3';
 import { 
     SimulationGraphLink, 
-    SimulationGraphNode, 
-    NodeNeighborsCache,
+    SimulationGraphNode,
     GraphData
 } from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
@@ -73,7 +72,8 @@ export class GraphView {
     private isDraggingNode: boolean = false;
     
     // Neighbors cache to avoid repeated WASM calls
-    private nodeNeighborsCache: NodeNeighborsCache | null = null;
+    private cachedNeighbors: Set<number> | null = null;
+    private cachedNodeId: number | null = null;
     
     // Add this property at the class level after the private readonly constants section
     private currentTooltip: HTMLElement | null = null;
@@ -753,13 +753,12 @@ export class GraphView {
         
         // Check if we have a valid cache for this node
         const nodeIdInt = parseInt(nodeId);
-        const cacheValid = this.nodeNeighborsCache && 
-                           this.nodeNeighborsCache.nodeId === nodeIdInt;
+        const cacheValid = this.cachedNodeId === nodeIdInt && this.cachedNeighbors !== null;
         
         // If we're in a drag operation or we have a valid cache, use the cached data
         if ((this.isDraggingNode && this.highlightedNodeId === nodeId) || cacheValid) {
-            if (this.nodeNeighborsCache) {
-                connectedNodeIds = this.nodeNeighborsCache.neighbors;
+            if (this.cachedNeighbors) {
+                connectedNodeIds = this.cachedNeighbors;
             }
         } else {
             // No cache hit, need to get data from WASM
@@ -774,20 +773,16 @@ export class GraphView {
                     });
                     
                     // Update the cache with the new data
-                    this.nodeNeighborsCache = {
-                        nodeId: nodeIdInt,
-                        neighbors: connectedNodeIds
-                    };
-                } else if (neighborResult && neighborResult.error) {
-                    console.error(`Error from WASM neighbor function: ${neighborResult.error}`);
-                    throw new Error(neighborResult.error);
+                    this.cachedNodeId = nodeIdInt;
+                    this.cachedNeighbors = connectedNodeIds;
                 } else {
                     console.error('Unexpected result format from WASM neighbor function', neighborResult);
                     throw new Error('Unexpected result format from WASM');
                 }
             } catch (error) {
                 console.error('Error in highlightConnections with WASM:', error);
-                this.nodeNeighborsCache = null;
+                this.cachedNodeId = null;
+                this.cachedNeighbors = null;
                 return;
             }
         }
@@ -830,7 +825,8 @@ export class GraphView {
     
     private resetHighlights() {
         // Clear the neighbors cache when resetting highlights
-        this.nodeNeighborsCache = null;
+        this.cachedNodeId = null;
+        this.cachedNeighbors = null;
         
         // Store animation duration in a local variable for consistency with other methods
         const animationDuration = this.ANIMATION.DURATION;
@@ -1010,13 +1006,17 @@ export class GraphView {
                 const displayName = fileName.replace('.md', '');
                 
                 // Find degree centrality for this node
-                const centralityResult = degreeCentrality.find(r => r.node_id === index);
+                const nodeData = degreeCentrality?.find(r => r?.node_id === index);
+                // Safely access centrality.degree with multiple null checks
+                const degreeCentralityScore = nodeData && nodeData.centrality && nodeData.centrality.degree !== undefined
+                    ? nodeData.centrality.degree 
+                    : 0;
                 
                 return {
                     id: index.toString(),
                     name: displayName,
                     path: nodePath,
-                    degreeCentrality: centralityResult ? centralityResult.score : 0,
+                    degreeCentrality: degreeCentralityScore,
                     x: undefined,
                     y: undefined,
                     vx: undefined,
@@ -1045,30 +1045,8 @@ export class GraphView {
         this.links = graphData.links || [];
         
         // Clear any existing neighbors cache as the graph data has changed
-        this.nodeNeighborsCache = null;
-        
-        // Initialize the graph cache in WASM with current graph data
-        try {
-            // Format the graph data for WASM
-            const wasmGraphData = {
-                nodes: this.nodes.map(node => node.name),
-                edges: this.links.map(link => {
-                    const source = typeof link.source === 'string' ? parseInt(link.source) : parseInt((link.source as unknown as SimulationGraphNode).id);
-                    const target = typeof link.target === 'string' ? parseInt(link.target) : parseInt((link.target as unknown as SimulationGraphNode).id);
-                    return [source, target];
-                })
-            };
-            
-            const result = await this.pluginService.initializeGraphCache(JSON.stringify(wasmGraphData));
-            
-            if (result && result.error) {
-                console.error(`Error initializing graph cache in WASM: ${result.error}`);
-                throw new Error(`Failed to initialize graph cache: ${result.error}`);
-            }
-        } catch (error) {
-            console.error('Failed to initialize graph cache:', error);
-            new Notice(`Graph initialization failed: ${(error as Error).message || 'Unknown error'}`);
-        }
+        this.cachedNodeId = null;
+        this.cachedNeighbors = null;
         
         // Create D3 selections for the graph elements
         this.linksSelection = this.svgGroup.select('.links-group')
@@ -1311,7 +1289,8 @@ export class GraphView {
         }
         
         // Clear data caches
-        this.nodeNeighborsCache = null;
+        this.cachedNodeId = null;
+        this.cachedNeighbors = null;
         this.nodes = [];
         this.links = [];
         
@@ -1337,14 +1316,6 @@ export class GraphView {
         if (this.visibilityObserver) {
             this.visibilityObserver.disconnect();
             this.visibilityObserver = null;
-        }
-        
-        // Clear the graph cache in WASM
-        try {
-            this.pluginService.clearGraphCache();
-            console.log('Graph cache cleared from WASM');
-        } catch (error) {
-            console.error('Error clearing graph cache:', error);
         }
         
         // Clean up D3 selections and SVG

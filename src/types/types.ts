@@ -1,12 +1,15 @@
-import { App, TFile } from 'obsidian';
 import * as d3 from 'd3';
 
 // Plugin interface
 export interface IGraphAnalysisPlugin {
     ensureWasmLoaded(): Promise<void>;
-    initializeGraphAndCalculateCentrality(): Promise<GraphInitializationResult>;
-    getNodeNeighborsCached(nodeId: number): any;
-    initializeGraphCache(graphData: string): any;
+    buildGraphFromVault(): Promise<GraphData>;
+    getNodeNeighborsCached(nodeId: number): GraphNeighborsResult;
+    calculateDegreeCentralityCached(): Node[];
+    calculateEigenvectorCentralityCached(): Node[];
+    calculateBetweennessCentralityCached(): Node[];
+    calculateClosenessCentralityCached(): Node[];
+    getGraphMetadata(): GraphMetadata;
     clearGraphCache(): void;
 }
 
@@ -20,44 +23,63 @@ export interface GraphAnalysisSettings {
 export const DEFAULT_SETTINGS: GraphAnalysisSettings = {
     excludeFolders: [],
     excludeTags: [],
-    resultLimit: 10
+    resultLimit: 30
 };
 
-// Graph Types
-export interface GraphNode extends d3.SimulationNodeDatum {
-    id: string;
-    name: string;
-    path?: string;
-    centralityScore?: number;
-    degree?: number;
-}
-
-export interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
-    source: string;
-    target: string;
-}
-
+// Core Graph Data structure (matches Rust GraphData)
 export interface GraphData {
     nodes: string[];
     edges: [number, number][];
 }
 
-export interface CentralityResult {
+// Centrality scores for a node (matches Rust CentralityScores)
+export interface CentralityScores {
+    degree?: number;
+    eigenvector?: number;
+    betweenness?: number;
+    closeness?: number;
+}
+
+// Node with all properties (matches Rust Node)
+export interface Node {
     node_id: number;
     node_name: string;
-    score: number;
+    centrality: CentralityScores;
 }
 
-export interface GraphInitializationResult {
-    graphData: GraphData;
-    degreeCentrality: CentralityResult[];
+// Neighbor query result (matches Rust GraphNeighborsResult)
+export interface GraphNeighborsResult {
+    node_id: number;
+    node_name: string;
+    neighbors: Node[];
 }
 
-// Extended Graph Types for D3 Simulation
-export interface SimulationGraphNode extends d3.SimulationNodeDatum {
+// Graph metadata (matches Rust GraphMetadata)
+export interface GraphMetadata {
+    node_count: number;
+    edge_count: number;
+    max_degree: number;
+    avg_degree: number;
+    is_directed: boolean;
+}
+
+// D3 graph node (for visualization components)
+export interface GraphNode extends d3.SimulationNodeDatum {
     id: string;
     name: string;
-    path: string;
+    path?: string;
+    centralityScore?: number;
+}
+
+// D3 graph link (for visualization components)
+export interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
+    source: string;
+    target: string;
+}
+
+// Extended D3 Node for simulation with additional visualization properties
+export interface SimulationGraphNode extends GraphNode {
+    path: string; // Required in simulation (optional in base GraphNode)
     degreeCentrality: number;
     highlighted?: boolean;
     dimmed?: boolean;
@@ -74,9 +96,3 @@ export interface SimulationGraphLink {
     target: string | SimulationGraphNode;
 }
 
-// Cache Types
-export interface NodeNeighborsCache {
-    nodeId: number;
-    neighbors: Set<number>;
-    timestamp?: number;
-}
