@@ -1,23 +1,23 @@
-import { App, Plugin, TFile, Notice } from 'obsidian';
-import { GraphAnalysisSettings, DEFAULT_SETTINGS, CentralityResult } from './types/types';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, TFile } from 'obsidian';
+import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata } from './types/types';
 import { ResultsModal } from './views/ResultsModal';
+import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
 import { GraphAnalysisSettingTab } from './settings/GraphAnalysisSettingTab';
-import { GraphView } from './components';
 
 // Import our styles 
 import './styles.css';
 
 // The WASM module code will be injected at the top of this file during build
 declare function build_graph_from_vault(vault_data_json: string): string;
-declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<any>;
-
-// New cached graph functions
-declare function initialize_graph(graph_data_json: string): string;
+declare function calculate_degree_centrality_cached(): string;
+declare function calculate_eigenvector_centrality_cached(): string;
+declare function calculate_betweenness_centrality_cached(): string;
+declare function calculate_closeness_centrality_cached(): string;
 declare function clear_graph(): string;
 declare function get_node_neighbors_cached(node_id: number): string;
-declare function calculate_degree_centrality_cached(): string;
 declare function get_graph_metadata(): string;
+declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<any>;
 
 export default class GraphAnalysisPlugin extends Plugin {
     settings: GraphAnalysisSettings;
@@ -62,6 +62,27 @@ export default class GraphAnalysisPlugin extends Plugin {
             id: 'analyze-vault-degree-centrality',
             name: 'Analyze Vault (Degree Centrality)',
             callback: () => this.analyzeCentrality('degree')
+        });
+
+        // Add command for eigenvector centrality
+        this.addCommand({
+            id: 'analyze-vault-eigenvector-centrality',
+            name: 'Analyze Vault (Eigenvector Centrality)',
+            callback: () => this.analyzeCentrality('eigenvector')
+        });
+
+        // Add command for betweenness centrality
+        this.addCommand({
+            id: 'analyze-vault-betweenness-centrality',
+            name: 'Analyze Vault (Betweenness Centrality)',
+            callback: () => this.analyzeCentrality('betweenness')
+        });
+
+        // Add command for closeness centrality
+        this.addCommand({
+            id: 'analyze-vault-closeness-centrality',
+            name: 'Analyze Vault (Closeness Centrality)',
+            callback: () => this.analyzeCentrality('closeness')
         });
 
         // Add settings tab
@@ -243,9 +264,32 @@ export default class GraphAnalysisPlugin extends Plugin {
             try {
                 await this.ensureWasmLoaded();
                 
-                const { graphData } = await this.initializeGraphAndCalculateCentrality();
+                const { graphData, degreeCentrality } = await this.initializeGraphAndCalculateCentrality();
                 
-                await this.graphView.updateData(graphData);
+                // Convert the raw graph data to the format expected by updateData
+                const nodes = graphData.nodes.map((nodePath: string, index: number) => {
+                    const fileName = nodePath.split('/').pop() || nodePath;
+                    const displayName = fileName.replace('.md', '');
+                    
+                    const nodeData = degreeCentrality?.find(r => r?.node_id === index);
+                    const degreeCentralityScore = nodeData && nodeData.centrality && nodeData.centrality.degree !== undefined
+                        ? nodeData.centrality.degree 
+                        : 0;
+                    
+                    return {
+                        id: index.toString(),
+                        name: displayName,
+                        path: nodePath,
+                        degreeCentrality: degreeCentralityScore,
+                    };
+                });
+                
+                const links = graphData.edges.map(([sourceIdx, targetIdx]) => ({
+                    source: sourceIdx.toString(),
+                    target: targetIdx.toString()
+                }));
+                
+                await this.graphView.updateData({ nodes, links });
                 
                 this.graphDataNeedsRefresh = false;
                 this.lastRefreshTime = Date.now();
@@ -285,118 +329,248 @@ export default class GraphAnalysisPlugin extends Plugin {
         document.body.classList.remove('graph-analysis-active');
     }
 
-    async analyzeCentrality(algorithm: 'degree' | 'eigenvector' | 'betweenness') {
+    async analyzeCentrality(algorithm: 'degree' | 'eigenvector' | 'betweenness' | 'closeness') {
+        await this.ensureWasmLoaded();
+        
         try {
-            await this.ensureWasmLoaded();
-        } catch (error) {
-            new Notice('WASM module not initialized. Please try again later.');
-            return;
-        }
-
-        try {
-            const loadingNotice = new Notice('Analyzing vault graph...', 0);
+            // Build graph if not already built
+            await this.buildGraphFromVault();
             
-            let resultsJson: string;
-            let algorithmName: string;
-            
-            // For degree centrality, we can use the cached result since it's calculated at initialization
-            if (algorithm === 'degree') {
-                resultsJson = calculate_degree_centrality_cached();
-                algorithmName = 'Degree Centrality';
-            } else if (algorithm === 'eigenvector') {
-                // TODO: Implement eigenvector centrality
-                new Notice('Eigenvector centrality analysis is not implemented yet');
-                loadingNotice.hide();
-                return;
-            } else if (algorithm === 'betweenness') {
-                // TODO: Implement betweenness centrality
-                new Notice('Betweenness centrality analysis is not implemented yet');
-                loadingNotice.hide();
-                return;
-            } else {
-                throw new Error(`Unknown algorithm: ${algorithm}`);
+            // Calculate the requested centrality
+            let results: Node[];
+            switch (algorithm) {
+                case 'degree':
+                    results = this.calculateDegreeCentralityCached();
+                    break;
+                case 'eigenvector':
+                    results = this.calculateEigenvectorCentralityCached();
+                    break;
+                case 'betweenness':
+                    results = this.calculateBetweennessCentralityCached();
+                    break;
+                case 'closeness':
+                    results = this.calculateClosenessCentralityCached();
+                    break;
             }
             
-            const results = JSON.parse(resultsJson) as CentralityResult[];
-            
-            if (results.length === 1 && 'error' in results[0]) {
-                throw new Error((results[0] as any).error as string);
-            }
-            
-            loadingNotice.hide();
-            
-            this.displayResults(results, algorithmName);
+            // Display the results
+            this.displayResults(results, `${algorithm.charAt(0).toUpperCase() + algorithm.slice(1)} Centrality`);
         } catch (error) {
-            console.error(`Error analyzing vault with ${algorithm} centrality:`, error);
-            new Notice(`Error analyzing vault: ${(error as Error).message}`);
+            console.error(`Failed to analyze ${algorithm} centrality:`, error);
+            new Notice(`Failed to analyze ${algorithm} centrality: ${(error as Error).message}`);
         }
     }
 
-    public async buildGraphData() {
-        if (!this.wasmInitialized) {
-            throw new Error('WASM module not initialized');
-        }
-
-        const files = this.app.vault.getMarkdownFiles();
-        
-        const vaultFiles = await Promise.all(files.map(async (file) => {
-            if (this.isFileExcluded(file)) {
-                return null;
-            }
-            
-            const content = await this.app.vault.read(file);
-            return {
-                path: file.path,
-                content: content
-            };
-        }));
-        
-        const filteredVaultFiles = vaultFiles.filter(file => file !== null);
-        const vaultDataJson = JSON.stringify({ files: filteredVaultFiles });
+    public async buildGraphFromVault(): Promise<GraphData> {
+        await this.ensureWasmLoaded();
         
         try {
-            // Build graph and initialize cache
-            const graphDataJson = build_graph_from_vault(vaultDataJson);
-            const graphData = JSON.parse(graphDataJson);
+            // Build the vault files data
+            const vaultFiles = await this.getVaultFiles();
+            const vaultData = { files: vaultFiles };
             
-            if (graphData.error) {
-                console.error('Error building graph in Rust:', graphData.error);
-                throw new Error(graphData.error);
+            // Call Rust function to build graph
+            const result = build_graph_from_vault(JSON.stringify(vaultData));
+            const parsedResult = JSON.parse(result);
+            
+            if (parsedResult.error) {
+                console.error('Graph Analysis Error:', parsedResult.error);
+                throw new Error(parsedResult.error);
             }
             
-            // Initialize graph cache and calculate degree centrality immediately
-            const cacheResult = this.initializeGraphCache(graphDataJson);
-            if (cacheResult.error) {
-                throw new Error(cacheResult.error);
-            }
-            
-            // Calculate degree centrality right after graph initialization
-            const degreeCentrality = this.calculateDegreeCentralityCached();
-            if ('error' in degreeCentrality) {
-                throw new Error(degreeCentrality.error);
-            }
-            
-            // Combine graph data with degree centrality
-            return {
-                ...graphData,
-                degreeCentrality
-            };
+            return parsedResult as GraphData;
         } catch (error) {
-            console.error('Error in graph initialization:', error);
-            throw new Error(`Failed to initialize graph: ${(error as Error).message}`);
+            console.error('Failed to build graph from vault:', error);
+            throw error;
         }
     }
     
-    public async initializeGraphAndCalculateCentrality(): Promise<{ graphData: any, degreeCentrality: any }> {
+    private async getVaultFiles() {
+        const files = this.app.vault.getMarkdownFiles();
+        const vaultFiles = [];
+        
+        for (const file of files) {
+            // Skip excluded files
+            if (this.isFileExcluded(file)) {
+                continue;
+            }
+            
+            try {
+                const content = await this.app.vault.read(file);
+                vaultFiles.push({ path: file.path, content });
+            } catch (error) {
+                console.error(`Failed to read file ${file.path}:`, error);
+            }
+        }
+        
+        return vaultFiles;
+    }
+
+    public calculateDegreeCentralityCached(): Node[] {
+        const result = calculate_degree_centrality_cached();
+        const parsedResult = JSON.parse(result);
+        
+        if (parsedResult.error) {
+            console.error('Degree Centrality Error:', parsedResult.error);
+            throw new Error(parsedResult.error);
+        }
+        
+        // Verify that the parsed result is an array of nodes
+        if (!Array.isArray(parsedResult)) {
+            console.error('Unexpected result format:', parsedResult);
+            throw new Error('Degree centrality result is not an array');
+        }
+        
+        // Validate and normalize each node to ensure it has the expected structure
+        return parsedResult.map((node: any) => ({
+            node_id: node.node_id,
+            node_name: node.node_name,
+            centrality: {
+                degree: node.centrality?.degree ?? 0,
+                eigenvector: node.centrality?.eigenvector ?? null,
+                betweenness: node.centrality?.betweenness ?? null,
+                closeness: node.centrality?.closeness ?? null
+            }
+        }));
+    }
+    
+    public calculateEigenvectorCentralityCached(): Node[] {
+        const result = calculate_eigenvector_centrality_cached();
+        const parsedResult = JSON.parse(result);
+        
+        if (parsedResult.error) {
+            console.error('Eigenvector Centrality Error:', parsedResult.error);
+            throw new Error(parsedResult.error);
+        }
+        
+        // Verify that the parsed result is an array of nodes
+        if (!Array.isArray(parsedResult)) {
+            console.error('Unexpected result format:', parsedResult);
+            throw new Error('Eigenvector centrality result is not an array');
+        }
+        
+        // Validate and normalize each node to ensure it has the expected structure
+        return parsedResult.map((node: any) => {
+            // Create a normalized Node object
+            return {
+                node_id: node.node_id,
+                node_name: node.node_name,
+                centrality: {
+                    degree: node.centrality?.degree,
+                    eigenvector: node.centrality?.eigenvector !== undefined ? node.centrality.eigenvector : 0,
+                    betweenness: node.centrality?.betweenness,
+                    closeness: node.centrality?.closeness
+                }
+            };
+        });
+    }
+    
+    public calculateBetweennessCentralityCached(): Node[] {
+        const result = calculate_betweenness_centrality_cached();
+        const parsedResult = JSON.parse(result);
+        
+        if (parsedResult.error) {
+            console.error('Betweenness Centrality Error:', parsedResult.error);
+            throw new Error(parsedResult.error);
+        }
+        
+        // Verify that the parsed result is an array of nodes
+        if (!Array.isArray(parsedResult)) {
+            console.error('Unexpected result format:', parsedResult);
+            throw new Error('Betweenness centrality result is not an array');
+        }
+        
+        // Validate and normalize each node to ensure it has the expected structure
+        return parsedResult.map((node: any) => {
+            // Create a normalized Node object
+            return {
+                node_id: node.node_id,
+                node_name: node.node_name,
+                centrality: {
+                    degree: node.centrality?.degree,
+                    eigenvector: node.centrality?.eigenvector,
+                    betweenness: node.centrality?.betweenness !== undefined ? node.centrality.betweenness : 0,
+                    closeness: node.centrality?.closeness
+                }
+            };
+        });
+    }
+    
+    public calculateClosenessCentralityCached(): Node[] {
+        const result = calculate_closeness_centrality_cached();
+        const parsedResult = JSON.parse(result);
+        
+        if (parsedResult.error) {
+            console.error('Closeness Centrality Error:', parsedResult.error);
+            throw new Error(parsedResult.error);
+        }
+        
+        // Verify that the parsed result is an array of nodes
+        if (!Array.isArray(parsedResult)) {
+            console.error('Unexpected result format:', parsedResult);
+            throw new Error('Closeness centrality result is not an array');
+        }
+        
+        // Validate and normalize each node to ensure it has the expected structure
+        return parsedResult.map((node: any) => {
+            // Create a normalized Node object
+            return {
+                node_id: node.node_id,
+                node_name: node.node_name,
+                centrality: {
+                    degree: node.centrality?.degree,
+                    eigenvector: node.centrality?.eigenvector,
+                    betweenness: node.centrality?.betweenness,
+                    closeness: node.centrality?.closeness !== undefined ? node.centrality.closeness : 0
+                }
+            };
+        });
+    }
+    
+    public getNodeNeighborsCached(nodeId: number): GraphNeighborsResult {
+        const result = get_node_neighbors_cached(nodeId);
+        const parsedResult = JSON.parse(result);
+        
+        if (parsedResult.error) {
+            console.error('Get Node Neighbors Error:', parsedResult.error);
+            throw new Error(parsedResult.error);
+        }
+        
+        return parsedResult as GraphNeighborsResult;
+    }
+    
+    public clearGraphCache(): void {
+        const result = clear_graph();
+        const parsedResult = JSON.parse(result);
+        
+        if (parsedResult.error) {
+            console.error('Clear Graph Error:', parsedResult.error);
+            throw new Error(parsedResult.error);
+        }
+    }
+    
+    public getGraphMetadata(): GraphMetadata {
+        const result = get_graph_metadata();
+        const parsedResult = JSON.parse(result);
+        
+        if (parsedResult.error) {
+            console.error('Get Graph Metadata Error:', parsedResult.error);
+            throw new Error(parsedResult.error);
+        }
+        
+        return parsedResult as GraphMetadata;
+    }
+
+    public async initializeGraphAndCalculateCentrality(): Promise<{ graphData: GraphData, degreeCentrality: Node[] }> {
         if (!this.wasmInitialized) {
             throw new Error('WASM module not initialized');
         }
         
         try {
-            const graphData = await this.buildGraphData();
+            const graphData = await this.buildGraphFromVault();
             return {
                 graphData: graphData,
-                degreeCentrality: graphData.degreeCentrality
+                degreeCentrality: this.calculateDegreeCentralityCached()
             };
         } catch (error) {
             console.error('Error initializing graph and calculating centrality:', error);
@@ -427,7 +601,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         return false;
     }
     
-    displayResults(results: CentralityResult[], algorithmName: string) {
+    displayResults(results: Node[], algorithmName: string) {
         const limitedResults = results.slice(0, this.settings.resultLimit);
         
         new ResultsModal(this.app, limitedResults, algorithmName).open();
@@ -436,83 +610,24 @@ export default class GraphAnalysisPlugin extends Plugin {
         let message = `Top 3 central notes (${algorithmName}):\n`;
         
         topResults.forEach((result, index) => {
-            message += `${index + 1}. ${result.node_name} (${result.score.toFixed(3)})\n`;
+            // Check if centrality exists
+            if (!result || !result.centrality) {
+                message += `${index + 1}. ${result?.node_name || 'Unknown'} (0.000)\n`;
+                return;
+            }
+            
+            // Get the score from the appropriate centrality property based on the algorithm
+            const score = result.centrality.degree ?? 
+                         result.centrality.eigenvector ?? 
+                         result.centrality.betweenness ?? 
+                         result.centrality.closeness ?? 
+                         0;
+            
+            message += `${index + 1}. ${result.node_name} (${score.toFixed(3)})\n`;
         });
         
         new Notice(message);
         
         console.log(`Graph Analysis Results (${algorithmName}):`, results);
-    }
-
-
-    
-    public initializeGraphCache(graphDataJson: string): any {
-        if (!this.wasmInitialized) {
-            throw new Error('WASM module not initialized');
-        }
-        
-        try {
-            const result = initialize_graph(graphDataJson);
-            return JSON.parse(result);
-        } catch (error) {
-            console.error('Error initializing graph cache:', error);
-            throw new Error('Failed to initialize graph cache');
-        }
-    }
-    
-    public clearGraphCache(): any {
-        if (!this.wasmInitialized) {
-            throw new Error('WASM module not initialized');
-        }
-        
-        try {
-            const result = clear_graph();
-            return JSON.parse(result);
-        } catch (error) {
-            console.error('Error clearing graph cache:', error);
-            throw new Error('Failed to clear graph cache');
-        }
-    }
-    
-    public getNodeNeighborsCached(nodeId: number): any {
-        if (!this.wasmInitialized) {
-            throw new Error('WASM module not initialized');
-        }
-        
-        try {
-            const result = get_node_neighbors_cached(nodeId);
-            return JSON.parse(result);
-        } catch (error) {
-            console.error('Error getting node neighbors from cache:', error);
-            throw new Error('Failed to get node neighbors');
-        }
-    }
-    
-    public calculateDegreeCentralityCached(): any {
-        if (!this.wasmInitialized) {
-            throw new Error('WASM module not initialized');
-        }
-        
-        try {
-            const result = calculate_degree_centrality_cached();
-            return JSON.parse(result);
-        } catch (error) {
-            console.error('Error calculating degree centrality from cache:', error);
-            throw new Error('Failed to calculate degree centrality');
-        }
-    }
-    
-    public getGraphMetadata(): any {
-        if (!this.wasmInitialized) {
-            throw new Error('WASM module not initialized');
-        }
-        
-        try {
-            const result = get_graph_metadata();
-            return JSON.parse(result);
-        } catch (error) {
-            console.error('Error getting graph metadata:', error);
-            throw new Error('Failed to get graph metadata');
-        }
     }
 }
