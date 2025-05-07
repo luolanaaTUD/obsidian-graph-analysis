@@ -8,6 +8,7 @@ import {
 } from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
+import { CENTRALITY_RESULTS_VIEW_TYPE } from '../../views/CentralityResultsView';
 
 /**
  * A simplified graph view implementation based on the D3 example
@@ -27,6 +28,15 @@ export class GraphView {
     // Core components
     private graphDataBuilder: GraphDataBuilder;
     private pluginService: PluginService;
+    
+    // Centrality state tracking
+    private readonly centralityTypes = ['betweenness', 'closeness', 'eigenvector'] as const;
+    private centralityState: Record<typeof this.centralityTypes[number], boolean> = {
+        betweenness: false,
+        closeness: false,
+        eigenvector: false
+    };
+    private lastCentralityScores: { [nodeId: string]: number } = {};
     
     // Animation and timing constants
     private readonly ANIMATION = {
@@ -1450,7 +1460,7 @@ export class GraphView {
         this.eigenvectorButton = this.createCentralityButton('E', 'Eigenvector Centrality', 'eigenvector');
     }
 
-    private createCentralityButton(label: string, tooltip: string, type: 'betweenness' | 'closeness' | 'eigenvector'): HTMLElement {
+    private createCentralityButton(label: string, tooltip: string, type: typeof this.centralityTypes[number]): HTMLElement {
         const button = this.controlPanel.createDiv({ cls: 'centrality-button' });
         button.setText(label);
         
@@ -1479,20 +1489,45 @@ export class GraphView {
         
         // Add click handler
         button.addEventListener('click', async () => {
-            if (this.activeButton === button) {
-                // If clicking the active button, deactivate it
+            const isActive = this.centralityState[type];
+            const plugin = this.pluginService.getPlugin();
+
+            if (isActive) {
+                // If already active, deactivate it
                 button.removeClass('active');
+                this.centralityState[type] = false;
                 this.activeButton = null;
-                // Reset node colors to degree centrality
-                await this.resetToDegree();
-            } else {
-                // Deactivate previous button if any
-                if (this.activeButton) {
-                    this.activeButton.removeClass('active');
+                
+                // Reset node colors to default
+                this.nodesSelection
+                    .transition()
+                    .duration(this.ANIMATION.DURATION)
+                    .style('fill', 'var(--graph-node-color-default)')
+                    .style('opacity', 'var(--graph-node-opacity-default)');
+                
+                // Clear the last centrality scores
+                this.lastCentralityScores = {};
+
+                // Hide the centrality results view
+                const leaf = this.app.workspace.getLeavesOfType(CENTRALITY_RESULTS_VIEW_TYPE)[0];
+                if (leaf) {
+                    leaf.detach();
                 }
-                // Activate this button
+            } else {
+                // Deactivate other buttons and states
+                this.centralityTypes.forEach(t => {
+                    this.centralityState[t] = false;
+                    const otherButton = this[`${t}Button` as keyof this];
+                    if (t !== type && otherButton instanceof HTMLElement) {
+                        otherButton.removeClass('active');
+                    }
+                });
+                
+                // Activate this button and state
                 button.addClass('active');
+                this.centralityState[type] = true;
                 this.activeButton = button;
+                
                 // Calculate and display the selected centrality
                 await this.calculateAndDisplayCentrality(type);
             }
@@ -1501,8 +1536,9 @@ export class GraphView {
         return button;
     }
 
-    private async calculateAndDisplayCentrality(type: 'betweenness' | 'closeness' | 'eigenvector') {
+    private async calculateAndDisplayCentrality(type: typeof this.centralityTypes[number]) {
         try {
+            // Get centrality scores based on type
             let results: GraphNode[];
             const plugin = this.pluginService.getPlugin();
             
@@ -1517,13 +1553,36 @@ export class GraphView {
                     results = plugin.calculateEigenvectorCentralityCached();
                     break;
             }
-            
-            // Update node colors based on the calculated centrality
-            this.updateNodeColors(results, type);
-            
+
+            // Store the scores for later use
+            this.lastCentralityScores = {};
+            results.forEach(node => {
+                this.lastCentralityScores[node.node_id] = node.centrality[type] || 0;
+            });
+
+            // Find min and max scores for normalization
+            const scores = Object.values(this.lastCentralityScores);
+            const minScore = Math.min(...scores);
+            const maxScore = Math.max(...scores);
+
+            // Create color scale
+            const colorScale = d3.scaleLinear<string>()
+                .domain([minScore, maxScore])
+                .range(['var(--graph-node-color-default)', 'var(--graph-node-color-highlighted)']);
+
+            // Apply gradient colors to nodes
+            this.nodesSelection
+                .transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('fill', d => {
+                    const score = this.lastCentralityScores[parseInt(d.id)];
+                    return colorScale(score);
+                })
+                .style('opacity', 'var(--graph-node-opacity-default)');
+
             // Display results in the right sidebar
             plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
-            
+
         } catch (error) {
             console.error(`Failed to calculate ${type} centrality:`, error);
             new Notice(`Failed to calculate ${type} centrality: ${(error as Error).message}`);

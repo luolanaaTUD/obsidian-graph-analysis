@@ -20,7 +20,7 @@ export class CentralityResultsView extends ItemView {
     }
 
     getIcon(): string {
-        return 'network';
+        return 'waypoints';
     }
 
     async setResults(results: Node[], algorithm: string): Promise<void> {
