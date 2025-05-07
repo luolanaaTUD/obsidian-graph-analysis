@@ -3,7 +3,8 @@ import * as d3 from 'd3';
 import { 
     SimulationGraphLink, 
     SimulationGraphNode,
-    GraphData
+    GraphData,
+    Node as GraphNode
 } from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
@@ -88,6 +89,13 @@ export class GraphView {
     private vaultRenameHandler: (file: TFile, oldPath: string) => void;
     private debounceTimeout: number | null = null;
 
+    // Control panel elements
+    private controlPanel: HTMLElement;
+    private betweennessButton: HTMLElement;
+    private closenessButton: HTMLElement;
+    private eigenvectorButton: HTMLElement;
+    private activeButton: HTMLElement | null = null;
+
     constructor(app: App) {
         this.app = app;
         
@@ -99,19 +107,23 @@ export class GraphView {
     public async onload(container: HTMLElement) {
         this.container = container;
         
-        // Get initial dimensions from container
-        const rect = container.getBoundingClientRect();
-        this.width = rect.width;
-        this.height = rect.height;
-        
-        // Set up the visualization
+        // Initialize D3 components
         this.initializeD3();
+        
+        // Setup zoom behavior
+        this.setupZoomBehavior();
+        
+        // Create control panel
+        this.createControlPanel();
         
         // Setup visibility detection
         this.setupVisibilityObserver();
-
+        
         // Setup vault event handlers
         this.setupVaultEventHandlers();
+        
+        // Mark container as initialized
+        this.container.addClass('graph-initialized');
         
         // Load vault data
         this.showLoadingIndicator();
@@ -1422,5 +1434,130 @@ export class GraphView {
             }
             this.debounceTimeout = null;
         }, 2000); // 2 second debounce delay
+    }
+
+    private createControlPanel() {
+        // Create control panel container
+        this.controlPanel = this.container.createDiv({ cls: 'centrality-control-panel' });
+        
+        // Create betweenness centrality button
+        this.betweennessButton = this.createCentralityButton('B', 'Betweenness Centrality', 'betweenness');
+        
+        // Create closeness centrality button
+        this.closenessButton = this.createCentralityButton('C', 'Closeness Centrality', 'closeness');
+        
+        // Create eigenvector centrality button
+        this.eigenvectorButton = this.createCentralityButton('E', 'Eigenvector Centrality', 'eigenvector');
+    }
+
+    private createCentralityButton(label: string, tooltip: string, type: 'betweenness' | 'closeness' | 'eigenvector'): HTMLElement {
+        const button = this.controlPanel.createDiv({ cls: 'centrality-button' });
+        button.setText(label);
+        
+        // Create tooltip with title and description
+        const tooltipEl = button.createDiv({ cls: 'centrality-button-tooltip' });
+        
+        // Add title
+        tooltipEl.createDiv({ 
+            cls: 'tooltip-title',
+            text: tooltip
+        });
+        
+        // Add description based on centrality type
+        const description = tooltipEl.createDiv({ cls: 'tooltip-description' });
+        switch (type) {
+            case 'betweenness':
+                description.setText('Measures how often a node acts as a bridge along the shortest path between two other nodes. Higher values indicate more important bridge nodes.');
+                break;
+            case 'closeness':
+                description.setText('Measures how close a node is to all other nodes in the network. Higher values indicate nodes that can quickly reach or communicate with other nodes.');
+                break;
+            case 'eigenvector':
+                description.setText('Measures node importance based on the importance of its neighbors. Higher values indicate nodes connected to other important nodes.');
+                break;
+        }
+        
+        // Add click handler
+        button.addEventListener('click', async () => {
+            if (this.activeButton === button) {
+                // If clicking the active button, deactivate it
+                button.removeClass('active');
+                this.activeButton = null;
+                // Reset node colors to degree centrality
+                await this.resetToDegree();
+            } else {
+                // Deactivate previous button if any
+                if (this.activeButton) {
+                    this.activeButton.removeClass('active');
+                }
+                // Activate this button
+                button.addClass('active');
+                this.activeButton = button;
+                // Calculate and display the selected centrality
+                await this.calculateAndDisplayCentrality(type);
+            }
+        });
+        
+        return button;
+    }
+
+    private async calculateAndDisplayCentrality(type: 'betweenness' | 'closeness' | 'eigenvector') {
+        try {
+            let results: GraphNode[];
+            const plugin = this.pluginService.getPlugin();
+            
+            switch (type) {
+                case 'betweenness':
+                    results = plugin.calculateBetweennessCentralityCached();
+                    break;
+                case 'closeness':
+                    results = plugin.calculateClosenessCentralityCached();
+                    break;
+                case 'eigenvector':
+                    results = plugin.calculateEigenvectorCentralityCached();
+                    break;
+            }
+            
+            // Update node colors based on the calculated centrality
+            this.updateNodeColors(results, type);
+            
+            // Display results in the right sidebar
+            plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
+            
+        } catch (error) {
+            console.error(`Failed to calculate ${type} centrality:`, error);
+            new Notice(`Failed to calculate ${type} centrality: ${(error as Error).message}`);
+        }
+    }
+
+    private async resetToDegree() {
+        try {
+            const plugin = this.pluginService.getPlugin();
+            const results = plugin.calculateDegreeCentralityCached();
+            this.updateNodeColors(results, 'degree');
+        } catch (error) {
+            console.error('Failed to reset to degree centrality:', error);
+            new Notice('Failed to reset to degree centrality');
+        }
+    }
+
+    private updateNodeColors(results: GraphNode[], type: 'betweenness' | 'closeness' | 'eigenvector' | 'degree') {
+        // Find min and max values for normalization
+        const values = results.map(r => r.centrality[type] || 0);
+        const minValue = Math.min(...values);
+        const maxValue = Math.max(...values);
+        
+        // Update node colors based on normalized centrality values
+        this.nodesSelection.each(function(d: SimulationGraphNode) {
+            const node = results.find(r => r.node_id.toString() === d.id);
+            if (node && node.centrality[type] !== undefined) {
+                const normalizedValue = (node.centrality[type]! - minValue) / (maxValue - minValue);
+                const color = d3.interpolateRdYlBu(1 - normalizedValue); // Using a color scale that works well for both light and dark themes
+                d3.select(this)
+                    .transition()
+                    .duration(200)
+                    .style('fill', color);
+            }
+        });
     }
 } 

@@ -1,8 +1,8 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, TFile } from 'obsidian';
+import { Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata } from './types/types';
-import { ResultsModal } from './views/ResultsModal';
 import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
+import { CentralityResultsView, CENTRALITY_RESULTS_VIEW_TYPE } from './views/CentralityResultsView';
 import { GraphAnalysisSettingTab } from './settings/GraphAnalysisSettingTab';
 
 // Import our styles 
@@ -23,6 +23,7 @@ export default class GraphAnalysisPlugin extends Plugin {
     settings: GraphAnalysisSettings;
     wasmInitialized: boolean = false;
     graphView: GraphView | null = null;
+    centralityView: CentralityResultsView | null = null;
     
     private fileCreatedHandler: ((file: TFile) => void) | null = null;
     private fileDeletedHandler: ((file: TFile) => void) | null = null;
@@ -55,6 +56,15 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.registerView(
             GRAPH_ANALYSIS_VIEW_TYPE,
             (leaf) => new GraphAnalysisView(leaf, this)
+        );
+
+        // Register the centrality results view
+        this.registerView(
+            CENTRALITY_RESULTS_VIEW_TYPE,
+            (leaf: WorkspaceLeaf) => {
+                this.centralityView = new CentralityResultsView(leaf);
+                return this.centralityView;
+            }
         );
 
         // Add command for degree centrality
@@ -187,7 +197,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         return hash.toString(16);
     }
 
-    private async ensureWasmLoaded(): Promise<void> {
+    public async ensureWasmLoaded(): Promise<void> {
         if (this.wasmInitialized) {
             return Promise.resolve();
         }
@@ -457,7 +467,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                 node_name: node.node_name,
                 centrality: {
                     degree: node.centrality?.degree,
-                    eigenvector: node.centrality?.eigenvector !== undefined ? node.centrality.eigenvector : 0,
+                    eigenvector: node.centrality?.eigenvector ?? 0,
                     betweenness: node.centrality?.betweenness,
                     closeness: node.centrality?.closeness
                 }
@@ -489,7 +499,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                 centrality: {
                     degree: node.centrality?.degree,
                     eigenvector: node.centrality?.eigenvector,
-                    betweenness: node.centrality?.betweenness !== undefined ? node.centrality.betweenness : 0,
+                    betweenness: node.centrality?.betweenness ?? 0,
                     closeness: node.centrality?.closeness
                 }
             };
@@ -521,7 +531,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                     degree: node.centrality?.degree,
                     eigenvector: node.centrality?.eigenvector,
                     betweenness: node.centrality?.betweenness,
-                    closeness: node.centrality?.closeness !== undefined ? node.centrality.closeness : 0
+                    closeness: node.centrality?.closeness ?? 0
                 }
             };
         });
@@ -604,30 +614,36 @@ export default class GraphAnalysisPlugin extends Plugin {
     displayResults(results: Node[], algorithmName: string) {
         const limitedResults = results.slice(0, this.settings.resultLimit);
         
-        new ResultsModal(this.app, limitedResults, algorithmName).open();
-        
-        const topResults = results.slice(0, 3);
-        let message = `Top 3 central notes (${algorithmName}):\n`;
-        
-        topResults.forEach((result, index) => {
-            // Check if centrality exists
-            if (!result || !result.centrality) {
-                message += `${index + 1}. ${result?.node_name || 'Unknown'} (0.000)\n`;
-                return;
-            }
-            
-            // Get the score from the appropriate centrality property based on the algorithm
-            const score = result.centrality.degree ?? 
-                         result.centrality.eigenvector ?? 
-                         result.centrality.betweenness ?? 
-                         result.centrality.closeness ?? 
-                         0;
-            
-            message += `${index + 1}. ${result.node_name} (${score.toFixed(3)})\n`;
-        });
-        
-        new Notice(message);
+        // Show results in the right sidebar
+        this.activateCentralityView(limitedResults, algorithmName);
         
         console.log(`Graph Analysis Results (${algorithmName}):`, results);
+    }
+
+    private async activateCentralityView(results: Node[], algorithmName: string) {
+        let leaf = this.app.workspace.getLeavesOfType(CENTRALITY_RESULTS_VIEW_TYPE)[0];
+        
+        if (!leaf) {
+            // Create a new leaf in the right sidebar
+            const rightSplit = this.app.workspace.getRightLeaf(false);
+            if (rightSplit) {
+                await rightSplit.setViewState({
+                    type: CENTRALITY_RESULTS_VIEW_TYPE,
+                    active: true
+                });
+                leaf = rightSplit;
+            } else {
+                console.error('Failed to create right sidebar leaf');
+                return;
+            }
+        }
+
+        // Reveal the leaf in case it was hidden
+        this.app.workspace.revealLeaf(leaf);
+
+        // Update the view with new results
+        if (this.centralityView) {
+            await this.centralityView.setResults(results, algorithmName);
+        }
     }
 }

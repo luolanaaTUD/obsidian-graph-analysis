@@ -1,15 +1,28 @@
 import { App } from 'obsidian';
 import { GraphData, Node, IGraphAnalysisPlugin, GraphNeighborsResult, GraphMetadata } from '../types/types';
+import GraphAnalysisPlugin from '../main';
+
+interface ExtendedApp extends App {
+    plugins: {
+        plugins: {
+            [key: string]: any;
+        };
+    };
+}
 
 export class PluginService {
-    private plugin: IGraphAnalysisPlugin;
+    private plugin: GraphAnalysisPlugin;
 
     constructor(app: App) {
-        const plugin = (app as any).plugins.plugins['obsidian-graph-analysis'];
-        if (!plugin) {
-            throw new Error('Graph analysis plugin not available');
+        const extendedApp = app as ExtendedApp;
+        this.plugin = extendedApp.plugins.plugins['obsidian-graph-analysis'] as GraphAnalysisPlugin;
+        if (!this.plugin) {
+            throw new Error('Graph Analysis plugin not found');
         }
-        this.plugin = plugin as IGraphAnalysisPlugin;
+    }
+
+    public getPlugin(): GraphAnalysisPlugin {
+        return this.plugin;
     }
 
     async ensureWasmLoaded(): Promise<void> {
