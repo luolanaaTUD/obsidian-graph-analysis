@@ -1486,10 +1486,6 @@ export class GraphView {
         const dropdown = this.container.createDiv({ cls: 'color-settings-dropdown' });
         dropdown.style.display = 'none';
 
-        // Create gradient options panel (initially hidden)
-        const optionsPanel = this.container.createDiv({ cls: 'gradient-options' });
-        optionsPanel.style.display = 'none';
-
         // Create gradient selectors for each centrality type
         this.centralityTypes.forEach(type => {
             const section = dropdown.createDiv({ cls: 'gradient-section' });
@@ -1504,55 +1500,58 @@ export class GraphView {
             const preview = section.createDiv({ cls: 'gradient-preview' });
             this.updateGradientPreview(preview, this.selectedPalettes[type]);
 
-            // Handle preview click
+            // Create options container for this section
+            const optionsContainer = section.createDiv({ cls: 'gradient-options' });
+
+            // Add all available sequential palettes as options
+            this.colorPalettes
+                .filter(palette => palette.type !== 'qualitative')
+                .forEach(palette => {
+                    const option = optionsContainer.createDiv({
+                        cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
+                    });
+
+                    // Create gradient preview with colors
+                    this.updateGradientPreview(option, palette.name);
+
+                    // Add click handler
+                    option.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        // Update selected palette
+                        this.selectedPalettes[type] = palette.name;
+                        
+                        // Update preview
+                        this.updateGradientPreview(preview, palette.name);
+
+                        // Update visual selection
+                        optionsContainer.querySelectorAll('.gradient-option').forEach(opt => 
+                            opt.classList.remove('selected')
+                        );
+                        option.classList.add('selected');
+
+                        // Update colors if this centrality is active
+                        if (this.centralityState[type]) {
+                            this.calculateAndDisplayCentrality(type);
+                        }
+
+                        // Collapse options
+                        optionsContainer.classList.remove('expanded');
+                    });
+                });
+
+            // Handle preview click to toggle options
             preview.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const previewRect = preview.getBoundingClientRect();
-                const containerRect = this.container.getBoundingClientRect();
+                
+                // Close other expanded sections
+                dropdown.querySelectorAll('.gradient-options.expanded').forEach(opt => {
+                    if (opt !== optionsContainer) {
+                        opt.classList.remove('expanded');
+                    }
+                });
 
-                // Show options panel next to the clicked preview
-                optionsPanel.style.display = 'grid';
-                optionsPanel.style.top = `${previewRect.top - containerRect.top}px`;
-                optionsPanel.style.left = `${previewRect.right - containerRect.left + 8}px`;
-
-                // Clear existing options
-                optionsPanel.empty();
-
-                // Add all available sequential palettes as options
-                this.colorPalettes
-                    .filter(palette => palette.type !== 'qualitative')
-                    .forEach(palette => {
-                        const option = optionsPanel.createDiv({
-                            cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
-                        });
-
-                        // Create gradient preview
-                        this.updateGradientPreview(option, palette.name);
-
-                        // Add click handler
-                        option.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            // Update selected palette
-                            this.selectedPalettes[type] = palette.name;
-                            
-                            // Update preview
-                            this.updateGradientPreview(preview, palette.name);
-
-                            // Update visual selection
-                            optionsPanel.querySelectorAll('.gradient-option').forEach(opt => 
-                                opt.classList.remove('selected')
-                            );
-                            option.classList.add('selected');
-
-                            // Update colors if this centrality is active
-                            if (this.centralityState[type]) {
-                                this.calculateAndDisplayCentrality(type);
-                            }
-
-                            // Hide options panel
-                            optionsPanel.style.display = 'none';
-                        });
-                    });
+                // Toggle this section's options
+                optionsContainer.classList.toggle('expanded');
             });
         });
 
@@ -1560,33 +1559,22 @@ export class GraphView {
         settingsButton.addEventListener('click', (e) => {
             e.stopPropagation();
             const isVisible = dropdown.style.display !== 'none';
-            
+            dropdown.style.display = isVisible ? 'none' : 'block';
+
+            // Close all expanded options when closing the dropdown
             if (!isVisible) {
-                // Show dropdown
-                dropdown.style.display = 'block';
-                optionsPanel.style.display = 'none';
-                
-                // Position dropdown above the button
-                const buttonRect = settingsButton.getBoundingClientRect();
-                const dropdownRect = dropdown.getBoundingClientRect();
-                const containerRect = this.container.getBoundingClientRect();
-                
-                dropdown.style.bottom = `${containerRect.bottom - buttonRect.top + 8}px`;
-                dropdown.style.right = `${containerRect.right - buttonRect.right}px`;
-            } else {
-                dropdown.style.display = 'none';
-                optionsPanel.style.display = 'none';
+                dropdown.querySelectorAll('.gradient-options.expanded').forEach(opt => {
+                    opt.classList.remove('expanded');
+                });
             }
         });
 
         // Close panels when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!dropdown.contains(e.target as Node) && 
-                !settingsButton.contains(e.target as Node) && 
-                !optionsPanel.contains(e.target as Node)) {
-                dropdown.style.display = 'none';
-                optionsPanel.style.display = 'none';
-            }
+        document.addEventListener('click', () => {
+            dropdown.style.display = 'none';
+            dropdown.querySelectorAll('.gradient-options.expanded').forEach(opt => {
+                opt.classList.remove('expanded');
+            });
         });
     }
 
@@ -1594,10 +1582,11 @@ export class GraphView {
         element.empty();
         const palette = this.colorPalettes.find(p => p.name === paletteName);
         if (palette) {
-            const colors = palette.colors(5); // Get 5 colors from the palette
+            const colors = palette.colors(6); // Get 6 colors for smoother gradient
             colors.forEach(color => {
                 const colorBox = element.createDiv({ cls: 'color-box' });
                 colorBox.style.backgroundColor = color;
+                colorBox.style.flex = '1';
             });
         }
     }
