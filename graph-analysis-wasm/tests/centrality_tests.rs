@@ -5,6 +5,8 @@ use graph_analysis_wasm::*;
 use graph_analysis_wasm::models::Node;
 use serde_json;
 
+const EPSILON: f64 = 0.001;
+
 #[test]
 fn test_degree_centrality_basic() {
     common::create_test_graph_manager();
@@ -19,7 +21,7 @@ fn test_degree_centrality_basic() {
     // D: out=1, in=1, total=2 -> 2/(4-1) = 0.667
     
     for result in result_value {
-        assert_relative_eq!(result.centrality.degree.unwrap_or(0.0), 0.667, epsilon = 0.001);
+        assert_relative_eq!(result.centrality.degree.unwrap_or(0.0), 0.667, epsilon = EPSILON);
     }
 }
 
@@ -151,7 +153,7 @@ fn test_betweenness_centrality_basic() {
         assert!(c_score > d_score);
         
         // B and D should have similar betweenness (each on 2 paths)
-        assert_relative_eq!(b_score, d_score, epsilon = 0.001);
+        assert_relative_eq!(b_score, d_score, epsilon = EPSILON);
         
         // A should have non-zero betweenness (source of paths)
         assert!(a_score > 0.0);
@@ -196,14 +198,14 @@ fn test_closeness_centrality_basic() {
         d.centrality.closeness,
     ) {
         // A should have highest closeness (≈0.75)
-        assert_relative_eq!(a_score, 0.0, epsilon = 0.01);
+        assert_relative_eq!(a_score, 0.0, epsilon = EPSILON);
         
         // B and D should have equal closeness (=0.33)
-        assert_relative_eq!(b_score, 0.33333, epsilon = 0.01);
-        assert_relative_eq!(d_score, 0.33333, epsilon = 0.01);
+        assert_relative_eq!(b_score, 0.33333, epsilon = EPSILON);
+        assert_relative_eq!(d_score, 0.33333, epsilon = EPSILON);
         
         // C should have zero closeness (no outgoing paths)
-        assert_relative_eq!(c_score, 0.75, epsilon = 0.01);
+        assert_relative_eq!(c_score, 0.75, epsilon = EPSILON);
         
         
         // All values should be between 0 and 1
