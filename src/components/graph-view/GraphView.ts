@@ -1,4 +1,4 @@
-import { App, Notice, TFile } from 'obsidian';
+import { App, Notice, TFile, setIcon } from 'obsidian';
 import * as d3 from 'd3';
 import { 
     SimulationGraphLink, 
@@ -9,6 +9,12 @@ import {
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
 import { CENTRALITY_RESULTS_VIEW_TYPE } from '../../views/CentralityResultsView';
+import {
+    KEPLER_COLOR_PALETTES,
+    colorPaletteToColorRange,
+    // buildCustomPalette,
+    // CATEGORIES
+} from '../../utils/color-palette';
 
 /**
  * A simplified graph view implementation based on the D3 example
@@ -51,6 +57,10 @@ export class GraphView {
             BASE: 4,
             MAX: 12,
             SCALE_FACTOR: 0.69
+        },
+        COLORS: {
+            DEFAULT: 'var(--graph-node-color-default)',
+            HIGHLIGHTED: 'var(--graph-node-color-highlighted)'
         }
     } as const;
 
@@ -105,6 +115,16 @@ export class GraphView {
     private closenessButton: HTMLElement;
     private eigenvectorButton: HTMLElement;
     private activeButton: HTMLElement | null = null;
+
+    // Track selected gradients for each centrality type
+    private selectedPalettes: Record<typeof this.centralityTypes[number], string> = {
+        betweenness: 'Viridis',
+        closeness: 'Magma',
+        eigenvector: 'Plasma'
+    };
+
+    // Add color palette state
+    private colorPalettes = KEPLER_COLOR_PALETTES;
 
     constructor(app: App) {
         this.app = app;
@@ -1450,14 +1470,136 @@ export class GraphView {
         // Create control panel container
         this.controlPanel = this.container.createDiv({ cls: 'centrality-control-panel' });
         
-        // Create betweenness centrality button
+        // Create color settings button
+        this.createColorSettingsButton();
+        
+        // Create centrality buttons
         this.betweennessButton = this.createCentralityButton('B', 'Betweenness Centrality', 'betweenness');
-        
-        // Create closeness centrality button
         this.closenessButton = this.createCentralityButton('C', 'Closeness Centrality', 'closeness');
-        
-        // Create eigenvector centrality button
         this.eigenvectorButton = this.createCentralityButton('E', 'Eigenvector Centrality', 'eigenvector');
+    }
+
+    private createColorSettingsButton() {
+        const settingsButton = this.container.createDiv({ cls: 'color-settings-button' });
+        setIcon(settingsButton, 'settings-2');
+
+        const dropdown = this.container.createDiv({ cls: 'color-settings-dropdown' });
+        dropdown.style.display = 'none';
+
+        // Create gradient options panel (initially hidden)
+        const optionsPanel = this.container.createDiv({ cls: 'gradient-options' });
+        optionsPanel.style.display = 'none';
+
+        // Create gradient selectors for each centrality type
+        this.centralityTypes.forEach(type => {
+            const section = dropdown.createDiv({ cls: 'gradient-section' });
+            
+            // Add section title
+            section.createDiv({
+                cls: 'gradient-section-title',
+                text: type
+            });
+
+            // Create current gradient preview
+            const preview = section.createDiv({ cls: 'gradient-preview' });
+            this.updateGradientPreview(preview, this.selectedPalettes[type]);
+
+            // Handle preview click
+            preview.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const previewRect = preview.getBoundingClientRect();
+                const containerRect = this.container.getBoundingClientRect();
+
+                // Show options panel next to the clicked preview
+                optionsPanel.style.display = 'grid';
+                optionsPanel.style.top = `${previewRect.top - containerRect.top}px`;
+                optionsPanel.style.left = `${previewRect.right - containerRect.left + 8}px`;
+
+                // Clear existing options
+                optionsPanel.empty();
+
+                // Add all available sequential palettes as options
+                this.colorPalettes
+                    .filter(palette => palette.type !== 'qualitative')
+                    .forEach(palette => {
+                        const option = optionsPanel.createDiv({
+                            cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
+                        });
+
+                        // Create gradient preview
+                        this.updateGradientPreview(option, palette.name);
+
+                        // Add click handler
+                        option.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            // Update selected palette
+                            this.selectedPalettes[type] = palette.name;
+                            
+                            // Update preview
+                            this.updateGradientPreview(preview, palette.name);
+
+                            // Update visual selection
+                            optionsPanel.querySelectorAll('.gradient-option').forEach(opt => 
+                                opt.classList.remove('selected')
+                            );
+                            option.classList.add('selected');
+
+                            // Update colors if this centrality is active
+                            if (this.centralityState[type]) {
+                                this.calculateAndDisplayCentrality(type);
+                            }
+
+                            // Hide options panel
+                            optionsPanel.style.display = 'none';
+                        });
+                    });
+            });
+        });
+
+        // Toggle dropdown on button click
+        settingsButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = dropdown.style.display !== 'none';
+            
+            if (!isVisible) {
+                // Show dropdown
+                dropdown.style.display = 'block';
+                optionsPanel.style.display = 'none';
+                
+                // Position dropdown above the button
+                const buttonRect = settingsButton.getBoundingClientRect();
+                const dropdownRect = dropdown.getBoundingClientRect();
+                const containerRect = this.container.getBoundingClientRect();
+                
+                dropdown.style.bottom = `${containerRect.bottom - buttonRect.top + 8}px`;
+                dropdown.style.right = `${containerRect.right - buttonRect.right}px`;
+            } else {
+                dropdown.style.display = 'none';
+                optionsPanel.style.display = 'none';
+            }
+        });
+
+        // Close panels when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target as Node) && 
+                !settingsButton.contains(e.target as Node) && 
+                !optionsPanel.contains(e.target as Node)) {
+                dropdown.style.display = 'none';
+                optionsPanel.style.display = 'none';
+            }
+        });
+    }
+
+    private updateGradientPreview(element: HTMLElement, paletteName: string) {
+        element.empty();
+        const palette = this.colorPalettes.find(p => p.name === paletteName);
+        if (palette) {
+            const colors = palette.colors(5); // Get 5 colors from the palette
+            colors.forEach(color => {
+                const colorBox = element.createDiv({ cls: 'color-box' });
+                colorBox.style.backgroundColor = color;
+            });
+        }
     }
 
     private createCentralityButton(label: string, tooltip: string, type: typeof this.centralityTypes[number]): HTMLElement {
@@ -1564,21 +1706,43 @@ export class GraphView {
             const scores = Object.values(this.lastCentralityScores);
             const minScore = Math.min(...scores);
             const maxScore = Math.max(...scores);
+            
+            // Get color palette
+            const palette = this.colorPalettes.find(p => p.name === this.selectedPalettes[type]);
+            if (!palette) return;
 
-            // Create color scale
-            const colorScale = d3.scaleLinear<string>()
-                .domain([minScore, maxScore])
-                .range(['var(--graph-node-color-default)', 'var(--graph-node-color-highlighted)']);
+            // Create color range
+            const colorRange = colorPaletteToColorRange(palette, {
+                steps: 5,
+                reversed: false
+            });
 
-            // Apply gradient colors to nodes
+            // Create color scale with quantile breaks for better distribution
+            const colorScale = d3.scaleQuantile<string>()
+                .domain(scores)
+                .range(colorRange.colors);
+
+            // Apply gradient colors to nodes with enhanced transition
             this.nodesSelection
                 .transition()
                 .duration(this.ANIMATION.DURATION)
                 .style('fill', d => {
                     const score = this.lastCentralityScores[parseInt(d.id)];
+                    // Handle edge cases
+                    if (score === undefined || score === null) {
+                        return this.NODE.COLORS.DEFAULT;
+                    }
+                    if (score === maxScore) {
+                        return colorRange.colors[colorRange.colors.length - 1];
+                    }
                     return colorScale(score);
                 })
-                .style('opacity', 'var(--graph-node-opacity-default)');
+                .style('opacity', d => {
+                    const score = this.lastCentralityScores[parseInt(d.id)];
+                    // Increase opacity for higher scores
+                    return score === undefined ? 'var(--graph-node-opacity-default)' : 
+                           0.4 + (0.6 * (score - minScore) / (maxScore - minScore));
+                });
 
             // Display results in the right sidebar
             plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);

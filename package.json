@@ -31,6 +31,10 @@
   },
   "homepage": "https://github.com/wluo/obsidian-graph-analysis#readme",
   "devDependencies": {
+    "@types/chroma-js": "^3.1.1",
+    "@types/d3-array": "^3.2.1",
+    "@types/d3-color": "^3.1.3",
+    "@types/d3-scale-chromatic": "^3.1.0",
     "@types/node": "^16.11.6",
     "@typescript-eslint/eslint-plugin": "^5.2.0",
     "@typescript-eslint/parser": "^5.2.0",
@@ -42,6 +46,10 @@
   },
   "dependencies": {
     "@types/d3": "^7.4.3",
-    "d3": "^7.9.0"
+    "chroma-js": "^3.1.2",
+    "d3": "^7.9.0",
+    "d3-array": "^3.2.4",
+    "d3-color": "^3.1.0",
+    "d3-scale-chromatic": "^3.1.0"
   }
 }
