@@ -839,15 +839,33 @@ export class GraphView {
             }
         }
         
+        // Check if any centrality analysis is active
+        const isCentralityActive = Object.values(this.centralityState).some(state => state);
+        
         // Dim all nodes and links not connected
         this.nodesSelection.each(function(d) {
             const isSelected = d.id === nodeId;
             const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
-            d3.select(this)
-                .transition()
+            const selection = d3.select(this);
+            
+            selection.transition()
                 .duration(animationDuration)
-                .style('fill', isSelected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)')
                 .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)');
+            
+            // Only change the fill color if centrality analysis is not active
+            if (!isCentralityActive) {
+                selection.transition()
+                    .duration(animationDuration)
+                    .style('fill', isSelected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
+            }
+            
+            // For highlighted nodes in centrality mode, add a stroke for visual feedback
+            if (isCentralityActive && isSelected) {
+                selection.transition()
+                    .duration(animationDuration)
+                    .style('stroke', 'var(--graph-node-color-highlighted)')
+                    .style('stroke-width', '2px');
+            }
         });
         
         this.linksSelection.each(function(d) {
@@ -883,12 +901,24 @@ export class GraphView {
         // Store animation duration in a local variable for consistency with other methods
         const animationDuration = this.ANIMATION.DURATION;
         
+        // Check if any centrality analysis is active
+        const isCentralityActive = Object.values(this.centralityState).some(state => state);
+        
         // Reset all nodes, links, and labels to default state
         this.nodesSelection
             .transition()
             .duration(animationDuration)
             .style('opacity', 'var(--graph-node-opacity-default)')
-            .style('fill', 'var(--graph-node-color-default)');
+            .style('stroke', 'var(--graph-node-color-default)')
+            .style('stroke-width', 'var(--graph-node-stroke-width)');
+        
+        // Only reset fill color if no centrality analysis is active
+        if (!isCentralityActive) {
+            this.nodesSelection
+                .transition()
+                .duration(animationDuration)
+                .style('fill', 'var(--graph-node-color-default)');
+        }
             
         // Reset links to default style
         this.linksSelection
@@ -1012,9 +1042,32 @@ export class GraphView {
         const node = d3.select(element);
         const nodeData = node.datum() as SimulationGraphNode;
         
-        node.transition()
-            .duration(this.ANIMATION.DURATION)
-            .style('fill', highlight ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
+        // Get the current node fill color, which could be a gradient if centrality analysis is active
+        const currentFill = node.style('fill');
+        
+        // Check if any centrality analysis is active
+        const isCentralityActive = Object.values(this.centralityState).some(state => state);
+        
+        // If highlighting and a centrality is active, we need to preserve the gradient color
+        if (highlight && isCentralityActive) {
+            // For highlighted nodes, we still want to show some visual feedback
+            // We can slightly increase opacity or add a stroke instead of changing the fill color
+            node.transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('stroke', 'var(--graph-node-color-highlighted)')
+                .style('stroke-width', '2px');
+        } else if (!highlight && isCentralityActive) {
+            // When un-highlighting with centrality active, just remove the stroke
+            node.transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('stroke', 'var(--graph-node-color-default)')
+                .style('stroke-width', 'var(--graph-node-stroke-width)');
+        } else {
+            // Default behavior when no centrality is active
+            node.transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('fill', highlight ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
+        }
     }
     
     /**
@@ -1883,6 +1936,9 @@ export class GraphView {
                         .range([colors[0], colors[colors.length - 1]]);
             }
 
+            // Save current highlighted node ID before applying colors
+            const currentHighlightedNodeId = this.highlightedNodeId;
+            
             // Apply gradient colors to nodes with enhanced transition
             this.nodesSelection
                 .transition()
@@ -1896,6 +1952,19 @@ export class GraphView {
                     return colorScale(score);
                 })
                 .style('opacity', 'var(--graph-node-opacity-default)');
+
+            // If a node was highlighted, restore highlighting
+            if (currentHighlightedNodeId) {
+                // Find the node element by ID
+                const highlightedNode = this.nodesSelection.filter(d => d.id === currentHighlightedNodeId).node();
+                if (highlightedNode) {
+                    // Re-apply highlighting
+                    setTimeout(() => {
+                        this.highlightNode(highlightedNode, true);
+                        this.highlightConnections(currentHighlightedNodeId, true);
+                    }, this.ANIMATION.DURATION);
+                }
+            }
 
             // Display results in the right sidebar
             plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
