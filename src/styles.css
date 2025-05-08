@@ -622,13 +622,11 @@
 }
 
 .gradient-options.expanded {
-    max-height: 30vh;
+    max-height: 60vh;
     opacity: 1;
     margin-top: 9px;
     pointer-events: auto;
     overflow-y: auto;
-    /* scrollbar-width: thin; */
-    /* scrollbar-color: var(--background-modifier-border) transparent; */
 }
 
 /* Webkit scrollbar styles */
@@ -675,4 +673,71 @@
 .gradient-option.selected {
     border-color: var(--interactive-accent);
     box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+.gradient-controls {
+    margin-top: 12px;
+    padding: 8px;
+    background: var(--background-secondary);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.gradient-control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gradient-control-label {
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+    min-width: 60px;
+}
+
+.gradient-control-input {
+    flex: 1;
+}
+
+.gradient-control-input select {
+    width: 100%;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: var(--font-ui-smaller);
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-align-last: center;
+    -webkit-text-align-last: center;
+}
+
+.gradient-control-button {
+    width: 100%;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    border-radius: 4px;
+    padding: 2px;
+    font-size: var(--font-ui-smaller);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gradient-control-button:hover {
+    background: var(--background-modifier-border-hover);
+}
+
+.gradient-control-button.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
 }

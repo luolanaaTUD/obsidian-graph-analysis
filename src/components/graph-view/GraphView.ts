@@ -123,6 +123,17 @@ export class GraphView {
         eigenvector: 'Plasma'
     };
 
+    // Track gradient settings for each centrality type
+    private gradientSettings: Record<typeof this.centralityTypes[number], {
+        type: 'sequential' | 'diverging' | 'cyclical' | 'qualitative';
+        reversed: boolean;
+        steps: number;
+    }> = {
+        betweenness: { type: 'sequential', reversed: false, steps: 6 },
+        closeness: { type: 'sequential', reversed: false, steps: 6 },
+        eigenvector: { type: 'sequential', reversed: true, steps: 6 }
+    };
+
     // Add color palette state
     private colorPalettes = KEPLER_COLOR_PALETTES;
 
@@ -1498,44 +1509,150 @@ export class GraphView {
 
             // Create current gradient preview
             const preview = section.createDiv({ cls: 'gradient-preview' });
-            this.updateGradientPreview(preview, this.selectedPalettes[type]);
+            this.updateGradientPreview(preview, this.selectedPalettes[type], type);
 
             // Create options container for this section
             const optionsContainer = section.createDiv({ cls: 'gradient-options' });
 
-            // Add all available sequential palettes as options
+            // Create gradient controls inside options container
+            const controls = optionsContainer.createDiv({ cls: 'gradient-controls' });
+
+            // Type selector
+            const typeRow = controls.createDiv({ cls: 'gradient-control-row' });
+            typeRow.createDiv({ cls: 'gradient-control-label', text: 'Type' });
+            const typeSelect = typeRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
+            ['sequential', 'diverging', 'cyclical', 'qualitative'].forEach(t => {
+                const option = typeSelect.createEl('option', { value: t, text: t });
+                if (t === this.gradientSettings[type].type) {
+                    option.selected = true;
+                }
+            });
+            typeSelect.addEventListener('change', (e) => {
+                e.stopPropagation(); // Prevent event from bubbling up
+                const target = e.target as HTMLSelectElement;
+                this.gradientSettings[type].type = target.value as any;
+                
+                // Clear existing options
+                optionsContainer.querySelectorAll('.gradient-option').forEach(opt => opt.remove());
+                
+                // Add filtered palettes based on selected type
+                this.colorPalettes
+                    .filter(palette => {
+                        if (target.value === 'qualitative') {
+                            return palette.type === 'qualitative';
+                        } else if (target.value === 'sequential') {
+                            return palette.type === 'sequential';
+                        } else if (target.value === 'diverging') {
+                            return palette.type === 'diverging';
+                        } else if (target.value === 'cyclical') {
+                            return palette.type === 'cyclical';
+                        }
+                        return false;
+                    })
+                    .forEach(palette => {
+                        const option = optionsContainer.createDiv({
+                            cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
+                        });
+
+                        // Create gradient preview with colors
+                        this.updateGradientPreview(option, palette.name, type);
+
+                        // Add click handler
+                        option.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.selectedPalettes[type] = palette.name;
+                            this.updateGradientPreview(preview, palette.name, type);
+                            optionsContainer.querySelectorAll('.gradient-option').forEach(opt => 
+                                opt.classList.remove('selected')
+                            );
+                            option.classList.add('selected');
+                            if (this.centralityState[type]) {
+                                this.calculateAndDisplayCentrality(type);
+                            }
+                        });
+                    });
+
+                this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
+            // Steps input
+            const stepsRow = controls.createDiv({ cls: 'gradient-control-row' });
+            stepsRow.createDiv({ cls: 'gradient-control-label', text: 'Steps' });
+            const stepsSelect = stepsRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
+            // Add options from 2 to 20
+            for (let i = 2; i <= 20; i++) {
+                const option = stepsSelect.createEl('option', { value: String(i), text: String(i) });
+                if (i === this.gradientSettings[type].steps) {
+                    option.selected = true;
+                }
+            }
+            stepsSelect.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const value = parseInt((e.target as HTMLSelectElement).value);
+                this.gradientSettings[type].steps = value;
+                this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
+            // Reversed button
+            const reversedRow = controls.createDiv({ cls: 'gradient-control-row' });
+            reversedRow.createDiv({ cls: 'gradient-control-label', text: 'Reversed' });
+            const reversedButton = reversedRow.createDiv({ cls: 'gradient-control-input' })
+                .createEl('button', { 
+                    cls: `gradient-control-button ${this.gradientSettings[type].reversed ? 'active' : ''}`,
+                    text: this.gradientSettings[type].reversed ? 'on' : 'off'
+                });
+            reversedButton.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent event from bubbling up
+                this.gradientSettings[type].reversed = !this.gradientSettings[type].reversed;
+                reversedButton.classList.toggle('active', this.gradientSettings[type].reversed);
+                reversedButton.setText(this.gradientSettings[type].reversed ? 'on' : 'off');
+                this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
+            // Add all available palettes as options, filtered by current type
             this.colorPalettes
-                .filter(palette => palette.type !== 'qualitative')
+                .filter(palette => {
+                    const currentType = this.gradientSettings[type].type;
+                    if (currentType === 'qualitative') {
+                        return palette.type === 'qualitative';
+                    } else if (currentType === 'sequential') {
+                        return palette.type === 'sequential';
+                    } else if (currentType === 'diverging') {
+                        return palette.type === 'diverging';
+                    } else if (currentType === 'cyclical') {
+                        return palette.type === 'cyclical';
+                    }
+                    return false;
+                })
                 .forEach(palette => {
                     const option = optionsContainer.createDiv({
                         cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
                     });
 
                     // Create gradient preview with colors
-                    this.updateGradientPreview(option, palette.name);
+                    this.updateGradientPreview(option, palette.name, type);
 
                     // Add click handler
                     option.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        // Update selected palette
                         this.selectedPalettes[type] = palette.name;
-                        
-                        // Update preview
-                        this.updateGradientPreview(preview, palette.name);
-
-                        // Update visual selection
+                        this.updateGradientPreview(preview, palette.name, type);
                         optionsContainer.querySelectorAll('.gradient-option').forEach(opt => 
                             opt.classList.remove('selected')
                         );
                         option.classList.add('selected');
-
-                        // Update colors if this centrality is active
                         if (this.centralityState[type]) {
                             this.calculateAndDisplayCentrality(type);
                         }
-
-                        // Collapse options
-                        optionsContainer.classList.remove('expanded');
                     });
                 });
 
@@ -1553,6 +1670,11 @@ export class GraphView {
                 // Toggle this section's options
                 optionsContainer.classList.toggle('expanded');
             });
+
+            // Prevent clicks inside the options container from closing it
+            optionsContainer.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
         });
 
         // Toggle dropdown on button click
@@ -1560,30 +1682,29 @@ export class GraphView {
             e.stopPropagation();
             const isVisible = dropdown.style.display !== 'none';
             dropdown.style.display = isVisible ? 'none' : 'block';
-
-            // Close all expanded options when closing the dropdown
-            if (!isVisible) {
-                dropdown.querySelectorAll('.gradient-options.expanded').forEach(opt => {
-                    opt.classList.remove('expanded');
-                });
-            }
         });
 
-        // Close panels when clicking outside
+        // Prevent clicks inside the dropdown from closing it
+        dropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Close dropdown only when clicking outside
         document.addEventListener('click', () => {
             dropdown.style.display = 'none';
-            dropdown.querySelectorAll('.gradient-options.expanded').forEach(opt => {
-                opt.classList.remove('expanded');
-            });
         });
     }
 
-    private updateGradientPreview(element: HTMLElement, paletteName: string) {
+    private updateGradientPreview(element: HTMLElement, paletteName: string, type?: typeof this.centralityTypes[number]) {
         element.empty();
         const palette = this.colorPalettes.find(p => p.name === paletteName);
         if (palette) {
-            const colors = palette.colors(6); // Get 6 colors for smoother gradient
-            colors.forEach(color => {
+            const settings = type ? this.gradientSettings[type] : { steps: 6, reversed: false };
+            const colorRange = colorPaletteToColorRange(palette, {
+                steps: settings.steps,
+                reversed: settings.reversed
+            });
+            colorRange.colors.forEach(color => {
                 const colorBox = element.createDiv({ cls: 'color-box' });
                 colorBox.style.backgroundColor = color;
                 colorBox.style.flex = '1';
@@ -1696,14 +1817,14 @@ export class GraphView {
             const minScore = Math.min(...scores);
             const maxScore = Math.max(...scores);
             
-            // Get color palette
+            // Get the color palette
             const palette = this.colorPalettes.find(p => p.name === this.selectedPalettes[type]);
             if (!palette) return;
 
-            // Create color range
+            // Create color range with current settings
             const colorRange = colorPaletteToColorRange(palette, {
-                steps: 5,
-                reversed: false
+                steps: this.gradientSettings[type].steps,
+                reversed: this.gradientSettings[type].reversed
             });
 
             // Create color scale with quantile breaks for better distribution
