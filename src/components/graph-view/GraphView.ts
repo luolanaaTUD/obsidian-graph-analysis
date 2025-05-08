@@ -1,5 +1,6 @@
 import { App, Notice, TFile, setIcon } from 'obsidian';
 import * as d3 from 'd3';
+import * as ss from 'simple-statistics';
 import { 
     SimulationGraphLink, 
     SimulationGraphNode,
@@ -111,9 +112,6 @@ export class GraphView {
 
     // Control panel elements
     private controlPanel: HTMLElement;
-    private betweennessButton: HTMLElement;
-    private closenessButton: HTMLElement;
-    private eigenvectorButton: HTMLElement;
     private activeButton: HTMLElement | null = null;
 
     // Track selected gradients for each centrality type
@@ -128,10 +126,11 @@ export class GraphView {
         type: 'sequential' | 'diverging' | 'cyclical' | 'qualitative';
         reversed: boolean;
         steps: number;
+        distribution: 'linear' | 'quantize' | 'jenks';
     }> = {
-        betweenness: { type: 'sequential', reversed: false, steps: 6 },
-        closeness: { type: 'sequential', reversed: false, steps: 6 },
-        eigenvector: { type: 'sequential', reversed: true, steps: 6 }
+        betweenness: { type: 'sequential', reversed: false, steps: 6, distribution: 'jenks' },
+        closeness: { type: 'sequential', reversed: false, steps: 6, distribution: 'jenks' },
+        eigenvector: { type: 'sequential', reversed: false, steps: 6, distribution: 'jenks' }
     };
 
     // Add color palette state
@@ -1485,9 +1484,9 @@ export class GraphView {
         this.createColorSettingsButton();
         
         // Create centrality buttons
-        this.betweennessButton = this.createCentralityButton('B', 'Betweenness Centrality', 'betweenness');
-        this.closenessButton = this.createCentralityButton('C', 'Closeness Centrality', 'closeness');
-        this.eigenvectorButton = this.createCentralityButton('E', 'Eigenvector Centrality', 'eigenvector');
+        this.centralityTypes.forEach(type => {
+            this.createCentralityButton(type);
+        });
     }
 
     private createColorSettingsButton() {
@@ -1527,6 +1526,26 @@ export class GraphView {
                     option.selected = true;
                 }
             });
+
+            // Distribution selector
+            const distributionRow = controls.createDiv({ cls: 'gradient-control-row' });
+            distributionRow.createDiv({ cls: 'gradient-control-label', text: 'Scale' });
+            const distributionSelect = distributionRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
+            ['linear', 'quantize', 'jenks'].forEach(d => {
+                const option = distributionSelect.createEl('option', { value: d, text: d });
+                if (d === this.gradientSettings[type].distribution) {
+                    option.selected = true;
+                }
+            });
+            distributionSelect.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const target = e.target as HTMLSelectElement;
+                this.gradientSettings[type].distribution = target.value as 'linear' | 'quantize' | 'jenks';
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
             typeSelect.addEventListener('change', (e) => {
                 e.stopPropagation(); // Prevent event from bubbling up
                 const target = e.target as HTMLSelectElement;
@@ -1601,7 +1620,7 @@ export class GraphView {
 
             // Reversed button
             const reversedRow = controls.createDiv({ cls: 'gradient-control-row' });
-            reversedRow.createDiv({ cls: 'gradient-control-label', text: 'Reversed' });
+            reversedRow.createDiv({ cls: 'gradient-control-label', text: 'Reverse' });
             const reversedButton = reversedRow.createDiv({ cls: 'gradient-control-input' })
                 .createEl('button', { 
                     cls: `gradient-control-button ${this.gradientSettings[type].reversed ? 'active' : ''}`,
@@ -1712,17 +1731,20 @@ export class GraphView {
         }
     }
 
-    private createCentralityButton(label: string, tooltip: string, type: typeof this.centralityTypes[number]): HTMLElement {
+    private createCentralityButton(type: typeof this.centralityTypes[number]): HTMLElement {
         const button = this.controlPanel.createDiv({ cls: 'centrality-button' });
+        
+        // Set button label based on type
+        const label = type.charAt(0).toUpperCase(); // First letter capitalized
         button.setText(label);
         
         // Create tooltip with title and description
         const tooltipEl = button.createDiv({ cls: 'centrality-button-tooltip' });
         
-        // Add title
+        // Add title (capitalize first letter and add "Centrality")
         tooltipEl.createDiv({ 
             cls: 'tooltip-title',
-            text: tooltip
+            text: `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`
         });
         
         // Add description based on centrality type
@@ -1769,7 +1791,7 @@ export class GraphView {
                 // Deactivate other buttons and states
                 this.centralityTypes.forEach(t => {
                     this.centralityState[t] = false;
-                    const otherButton = this[`${t}Button` as keyof this];
+                    const otherButton = this.controlPanel.querySelector(`[data-centrality-type="${t}"]`);
                     if (t !== type && otherButton instanceof HTMLElement) {
                         otherButton.removeClass('active');
                     }
@@ -1784,6 +1806,9 @@ export class GraphView {
                 await this.calculateAndDisplayCentrality(type);
             }
         });
+        
+        // Add data attribute for type identification
+        button.setAttribute('data-centrality-type', type);
         
         return button;
     }
@@ -1827,10 +1852,36 @@ export class GraphView {
                 reversed: this.gradientSettings[type].reversed
             });
 
-            // Create color scale with quantile breaks for better distribution
-            const colorScale = d3.scaleQuantile<string>()
-                .domain(scores)
-                .range(colorRange.colors);
+            // Create color scale based on distribution method
+            let colorScale: (score: number) => string;
+            const colors = colorRange.colors;
+
+            switch (this.gradientSettings[type].distribution) {
+                case 'linear':
+                    colorScale = d3.scaleLinear<string>()
+                        .domain([minScore, maxScore])
+                        .range([colors[0], colors[colors.length - 1]]);
+                    break;
+
+                case 'quantize':
+                    colorScale = d3.scaleQuantize<string>()
+                        .domain([minScore, maxScore])
+                        .range(colors);
+                    break;
+
+                case 'jenks':
+                    // Calculate Jenks natural breaks
+                    const breaks = this.calculateJenksBreaks(scores, colors.length);
+                    colorScale = d3.scaleThreshold<number, string>()
+                        .domain(breaks.slice(1, -1)) // Remove first and last break points
+                        .range(colors);
+                    break;
+
+                default:
+                    colorScale = d3.scaleLinear<string>()
+                        .domain([minScore, maxScore])
+                        .range([colors[0], colors[colors.length - 1]]);
+            }
 
             // Apply gradient colors to nodes with enhanced transition
             this.nodesSelection
@@ -1842,17 +1893,9 @@ export class GraphView {
                     if (score === undefined || score === null) {
                         return this.NODE.COLORS.DEFAULT;
                     }
-                    if (score === maxScore) {
-                        return colorRange.colors[colorRange.colors.length - 1];
-                    }
                     return colorScale(score);
                 })
-                .style('opacity', d => {
-                    const score = this.lastCentralityScores[parseInt(d.id)];
-                    // Increase opacity for higher scores
-                    return score === undefined ? 'var(--graph-node-opacity-default)' : 
-                           0.4 + (0.6 * (score - minScore) / (maxScore - minScore));
-                });
+                .style('opacity', 'var(--graph-node-opacity-default)');
 
             // Display results in the right sidebar
             plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
@@ -1863,16 +1906,41 @@ export class GraphView {
         }
     }
 
-    private async resetToDegree() {
-        try {
-            const plugin = this.pluginService.getPlugin();
-            const results = plugin.calculateDegreeCentralityCached();
-            this.updateNodeColors(results, 'degree');
-        } catch (error) {
-            console.error('Failed to reset to degree centrality:', error);
-            new Notice('Failed to reset to degree centrality');
+    /**
+     * Calculate Jenks natural breaks for a dataset
+     * @param data Array of numbers to classify
+     * @param numClasses Number of classes to create
+     * @returns Array of break points including min and max values
+     */
+    private calculateJenksBreaks(data: number[], numClasses: number): number[] {
+        if (data.length === 0) return [];
+        if (data.length === 1) return [data[0], data[0]];
+        if (numClasses >= data.length) return [...new Set(data)].sort((a: number, b: number) => a - b);
+
+        // Use simple-statistics for Jenks Natural Breaks calculation
+        const breaks = ss.jenks(data, numClasses);
+        
+        // Ensure we include both min and max values
+        if (!breaks.includes(Math.min(...data))) {
+            breaks.unshift(Math.min(...data));
         }
+        if (!breaks.includes(Math.max(...data))) {
+            breaks.push(Math.max(...data));
+        }
+        
+        return breaks.sort((a: number, b: number) => a - b);
     }
+
+    // private async resetToDegree() {
+    //     try {
+    //         const plugin = this.pluginService.getPlugin();
+    //         const results = plugin.calculateDegreeCentralityCached();
+    //         this.updateNodeColors(results, 'degree');
+    //     } catch (error) {
+    //         console.error('Failed to reset to degree centrality:', error);
+    //         new Notice('Failed to reset to degree centrality');
+    //     }
+    // }
 
     private updateNodeColors(results: GraphNode[], type: 'betweenness' | 'closeness' | 'eigenvector' | 'degree') {
         // Find min and max values for normalization
