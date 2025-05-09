@@ -1,0 +1,73 @@
+name: Release Obsidian plugin
+
+on:
+  push:
+    tags:
+      - "*"
+
+env:
+  PLUGIN_NAME: obsidian-graph-analysis
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+          cache: 'npm'
+      
+      # Set up Rust
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      
+      # Install wasm-pack
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      
+      # Install dependencies and build
+      - name: Build plugin
+        run: |
+          npm ci
+          npm run build-wasm
+          npm run build
+
+      # Package the plugin
+      - name: Package plugin
+        run: |
+          mkdir ${{ env.PLUGIN_NAME }}
+          # Copy build artifacts
+          cp dist/main.js ${{ env.PLUGIN_NAME }}/
+          cp dist/styles.css ${{ env.PLUGIN_NAME }}/ || true
+          cp dist/graph_analysis_wasm_bg.wasm ${{ env.PLUGIN_NAME }}/
+          
+          # Copy static files
+          cp manifest.json ${{ env.PLUGIN_NAME }}/
+          cp README.md ${{ env.PLUGIN_NAME }}/
+          cp LICENSE ${{ env.PLUGIN_NAME }}/
+          
+          # Create release package
+          zip -r ${{ env.PLUGIN_NAME }}.zip ${{ env.PLUGIN_NAME }}
+
+      # Create release
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          
+          # Update version in manifest and package.json
+          npm version $tag --allow-same-version --no-git-tag-version
+          
+          gh release create "$tag" \
+            --title="$tag" \
+            --draft \
+            --notes-file README.md \
+            ${{ env.PLUGIN_NAME }}.zip 

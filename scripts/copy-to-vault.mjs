@@ -50,9 +50,11 @@ if (!fs.existsSync(pluginDir)) {
 // Files to copy with their source locations
 const filesToCopy = [
     { source: 'dist/main.js', dest: 'main.js' },
-    { source: 'dist/manifest.json', dest: 'manifest.json' },
-    { source: 'dist/assets/styles.css', dest: 'styles.css' },
-    { source: 'dist/graph_analysis_wasm_bg.wasm', dest: 'graph_analysis_wasm_bg.wasm' }
+    { source: 'manifest.json', dest: 'manifest.json' },
+    { source: 'dist/styles.css', dest: 'styles.css' },
+    { source: 'dist/graph_analysis_wasm_bg.wasm', dest: 'graph_analysis_wasm_bg.wasm' },
+    { source: 'README.md', dest: 'README.md' },
+    { source: 'LICENSE', dest: 'LICENSE' }
 ];
 
 // Copy each file
