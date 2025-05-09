@@ -67,33 +67,33 @@ export default class GraphAnalysisPlugin extends Plugin {
             }
         );
 
-        // Add command for degree centrality
-        this.addCommand({
-            id: 'analyze-vault-degree-centrality',
-            name: 'Analyze Vault (Degree Centrality)',
-            callback: () => this.analyzeCentrality('degree')
-        });
+        // // Add command for degree centrality
+        // this.addCommand({
+        //     id: 'analyze-vault-degree-centrality',
+        //     name: 'Analyze Vault (Degree Centrality)',
+        //     callback: () => this.analyzeCentrality('degree')
+        // });
 
-        // Add command for eigenvector centrality
-        this.addCommand({
-            id: 'analyze-vault-eigenvector-centrality',
-            name: 'Analyze Vault (Eigenvector Centrality)',
-            callback: () => this.analyzeCentrality('eigenvector')
-        });
+        // // Add command for eigenvector centrality
+        // this.addCommand({
+        //     id: 'analyze-vault-eigenvector-centrality',
+        //     name: 'Analyze Vault (Eigenvector Centrality)',
+        //     callback: () => this.analyzeCentrality('eigenvector')
+        // });
 
-        // Add command for betweenness centrality
-        this.addCommand({
-            id: 'analyze-vault-betweenness-centrality',
-            name: 'Analyze Vault (Betweenness Centrality)',
-            callback: () => this.analyzeCentrality('betweenness')
-        });
+        // // Add command for betweenness centrality
+        // this.addCommand({
+        //     id: 'analyze-vault-betweenness-centrality',
+        //     name: 'Analyze Vault (Betweenness Centrality)',
+        //     callback: () => this.analyzeCentrality('betweenness')
+        // });
 
-        // Add command for closeness centrality
-        this.addCommand({
-            id: 'analyze-vault-closeness-centrality',
-            name: 'Analyze Vault (Closeness Centrality)',
-            callback: () => this.analyzeCentrality('closeness')
-        });
+        // // Add command for closeness centrality
+        // this.addCommand({
+        //     id: 'analyze-vault-closeness-centrality',
+        //     name: 'Analyze Vault (Closeness Centrality)',
+        //     callback: () => this.analyzeCentrality('closeness')
+        // });
 
         // Add settings tab
         this.addSettingTab(new GraphAnalysisSettingTab(this.app, this));
