@@ -1,36 +1,21 @@
-import { App, Notice, TFile } from 'obsidian';
+import { App, Notice, TFile, setIcon } from 'obsidian';
 import * as d3 from 'd3';
-import { CentralityCalculator } from './types';
-import { CentralityCalculator as CentralityCalculatorImpl } from './data/centrality';
+import * as ss from 'simple-statistics';
+import { 
+    SimulationGraphLink, 
+    SimulationGraphNode,
+    GraphData,
+    Node as GraphNode
+} from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
-
-// Define the link type for D3 simulation
-interface SimulationGraphLink {
-    source: string | SimulationGraphNode;
-    target: string | SimulationGraphNode;
-}
-
-// Define the type for cached node neighbors
-interface NodeNeighborsCache {
-    nodeId: number; // ID of the node whose neighbors are cached
-    neighbors: Set<number>; // Set of neighbor node IDs
-    timestamp?: number; // Optional: for future cache invalidation
-}
-
-interface SimulationGraphNode {
-    id: string;
-    name: string;
-    path: string;
-    degreeCentrality: number;
-    highlighted?: boolean;
-    dimmed?: boolean;
-    x?: number;
-    y?: number;
-    vx?: number;
-    vy?: number;
-    fx?: number | null;
-    fy?: number | null;
-}
+import { PluginService } from '../../services/PluginService';
+import { CENTRALITY_RESULTS_VIEW_TYPE } from '../../views/CentralityResultsView';
+import {
+    KEPLER_COLOR_PALETTES,
+    colorPaletteToColorRange,
+    // buildCustomPalette,
+    // CATEGORIES
+} from '../../utils/color-palette';
 
 /**
  * A simplified graph view implementation based on the D3 example
@@ -49,7 +34,16 @@ export class GraphView {
     
     // Core components
     private graphDataBuilder: GraphDataBuilder;
-    private centralityCalculator: CentralityCalculatorImpl;
+    private pluginService: PluginService;
+    
+    // Centrality state tracking
+    private readonly centralityTypes = ['betweenness', 'closeness', 'eigenvector'] as const;
+    private centralityState: Record<typeof this.centralityTypes[number], boolean> = {
+        betweenness: false,
+        closeness: false,
+        eigenvector: false
+    };
+    private lastCentralityScores: { [nodeId: string]: number } = {};
     
     // Animation and timing constants
     private readonly ANIMATION = {
@@ -64,6 +58,10 @@ export class GraphView {
             BASE: 4,
             MAX: 12,
             SCALE_FACTOR: 0.69
+        },
+        COLORS: {
+            DEFAULT: 'var(--graph-node-color-default)',
+            HIGHLIGHTED: 'var(--graph-node-color-highlighted)'
         }
     } as const;
 
@@ -96,7 +94,8 @@ export class GraphView {
     private isDraggingNode: boolean = false;
     
     // Neighbors cache to avoid repeated WASM calls
-    private nodeNeighborsCache: NodeNeighborsCache | null = null;
+    private cachedNeighbors: Set<number> | null = null;
+    private cachedNodeId: number | null = null;
     
     // Add this property at the class level after the private readonly constants section
     private currentTooltip: HTMLElement | null = null;
@@ -111,34 +110,67 @@ export class GraphView {
     private vaultRenameHandler: (file: TFile, oldPath: string) => void;
     private debounceTimeout: number | null = null;
 
-    constructor(app: App, calculateDegreeCentrality?: CentralityCalculator) {
+    // Control panel elements
+    private controlPanel: HTMLElement;
+    private activeButton: HTMLElement | null = null;
+
+    // Track selected gradients for each centrality type
+    private selectedPalettes: Record<typeof this.centralityTypes[number], string> = {
+        betweenness: 'Viridis',
+        closeness: 'Magma',
+        eigenvector: 'Plasma'
+    };
+
+    // Track gradient settings for each centrality type
+    private gradientSettings: Record<typeof this.centralityTypes[number], {
+        type: 'sequential' | 'diverging' | 'cyclical' | 'qualitative';
+        reversed: boolean;
+        steps: number;
+        distribution: 'linear' | 'quantize' | 'jenks';
+    }> = {
+        betweenness: { type: 'sequential', reversed: false, steps: 6, distribution: 'jenks' },
+        closeness: { type: 'sequential', reversed: false, steps: 6, distribution: 'jenks' },
+        eigenvector: { type: 'sequential', reversed: false, steps: 6, distribution: 'jenks' }
+    };
+
+    // Add color palette state
+    private colorPalettes = KEPLER_COLOR_PALETTES;
+
+    constructor(app: App) {
         this.app = app;
         
         // Initialize core modules
-        this.centralityCalculator = new CentralityCalculatorImpl(calculateDegreeCentrality);
+        this.pluginService = new PluginService(app);
         this.graphDataBuilder = new GraphDataBuilder(app);
     }
 
     public async onload(container: HTMLElement) {
         this.container = container;
         
-        // Get initial dimensions from container
-        const rect = container.getBoundingClientRect();
-        this.width = rect.width;
-        this.height = rect.height;
-        
-        // Set up the visualization
+        // Initialize D3 components
         this.initializeD3();
+        
+        // Setup zoom behavior
+        this.setupZoomBehavior();
+        
+        // Create control panel
+        this.createControlPanel();
         
         // Setup visibility detection
         this.setupVisibilityObserver();
-
+        
         // Setup vault event handlers
         this.setupVaultEventHandlers();
+        
+        // Mark container as initialized
+        this.container.addClass('graph-initialized');
         
         // Load vault data
         this.showLoadingIndicator();
         try {
+            // Ensure WASM is initialized first
+            await this.pluginService.ensureWasmLoaded();
+            
             await this.loadVaultData();
         } catch (error) {
             console.error('Error loading vault data:', error);
@@ -773,26 +805,18 @@ export class GraphView {
         
         // Check if we have a valid cache for this node
         const nodeIdInt = parseInt(nodeId);
-        const cacheValid = this.nodeNeighborsCache && 
-                           this.nodeNeighborsCache.nodeId === nodeIdInt;
+        const cacheValid = this.cachedNodeId === nodeIdInt && this.cachedNeighbors !== null;
         
         // If we're in a drag operation or we have a valid cache, use the cached data
         if ((this.isDraggingNode && this.highlightedNodeId === nodeId) || cacheValid) {
-            if (this.nodeNeighborsCache) {
-                connectedNodeIds = this.nodeNeighborsCache.neighbors;
+            if (this.cachedNeighbors) {
+                connectedNodeIds = this.cachedNeighbors;
             }
         } else {
             // No cache hit, need to get data from WASM
             try {
-                const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-                
-                if (!plugin || !plugin.getNodeNeighborsCached) {
-                    console.error('WASM functions are not available. Make sure the plugin is properly initialized.');
-                    throw new Error('WASM functions not available');
-                }
-                
                 // Use the WASM cached implementation
-                const neighborResult = plugin.getNodeNeighborsCached(nodeIdInt);
+                const neighborResult = this.pluginService.getNodeNeighbors(nodeIdInt);
                 
                 // Extract neighbor IDs from the result
                 if (neighborResult && neighborResult.neighbors) {
@@ -801,59 +825,47 @@ export class GraphView {
                     });
                     
                     // Update the cache with the new data
-                    this.nodeNeighborsCache = {
-                        nodeId: nodeIdInt,
-                        neighbors: connectedNodeIds
-                    };
-                } else if (neighborResult && neighborResult.error) {
-                    console.error(`Error from WASM neighbor function: ${neighborResult.error}`);
-                    throw new Error(neighborResult.error);
+                    this.cachedNodeId = nodeIdInt;
+                    this.cachedNeighbors = connectedNodeIds;
                 } else {
                     console.error('Unexpected result format from WASM neighbor function', neighborResult);
                     throw new Error('Unexpected result format from WASM');
                 }
             } catch (error) {
                 console.error('Error in highlightConnections with WASM:', error);
-                this.nodeNeighborsCache = null;
-                
-                try {
-                    const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-                    if (plugin && plugin.initializeGraphCache) {
-                        const wasmGraphData = {
-                            nodes: this.nodes.map(node => node.name),
-                            edges: this.links.map(link => {
-                                const source = typeof link.source === 'string' ? parseInt(link.source) : parseInt((link.source as unknown as SimulationGraphNode).id);
-                                const target = typeof link.target === 'string' ? parseInt(link.target) : parseInt((link.target as unknown as SimulationGraphNode).id);
-                                return [source, target];
-                            })
-                        };
-                        
-                        plugin.initializeGraphCache(JSON.stringify(wasmGraphData))
-                            .then(() => {
-                                console.log('Graph cache reinitialized after error');
-                                this.highlightConnections(nodeId, highlight);
-                                return;
-                            })
-                            .catch((reinitError: any) => {
-                                console.error('Failed to reinitialize graph cache:', reinitError);
-                            });
-                    }
-                } catch (reinitError) {
-                    console.error('Error attempting to reinitialize graph cache:', reinitError);
-                }
+                this.cachedNodeId = null;
+                this.cachedNeighbors = null;
                 return;
             }
         }
+        
+        // Check if any centrality analysis is active
+        const isCentralityActive = Object.values(this.centralityState).some(state => state);
         
         // Dim all nodes and links not connected
         this.nodesSelection.each(function(d) {
             const isSelected = d.id === nodeId;
             const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
-            d3.select(this)
-                .transition()
+            const selection = d3.select(this);
+            
+            selection.transition()
                 .duration(animationDuration)
-                .style('fill', isSelected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)')
                 .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)');
+            
+            // Only change the fill color if centrality analysis is not active
+            if (!isCentralityActive) {
+                selection.transition()
+                    .duration(animationDuration)
+                    .style('fill', isSelected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
+            }
+            
+            // For highlighted nodes in centrality mode, add a stroke for visual feedback
+            if (isCentralityActive && isSelected) {
+                selection.transition()
+                    .duration(animationDuration)
+                    .style('stroke', 'var(--graph-node-color-highlighted)')
+                    .style('stroke-width', '2px');
+            }
         });
         
         this.linksSelection.each(function(d) {
@@ -883,17 +895,30 @@ export class GraphView {
     
     private resetHighlights() {
         // Clear the neighbors cache when resetting highlights
-        this.nodeNeighborsCache = null;
+        this.cachedNodeId = null;
+        this.cachedNeighbors = null;
         
         // Store animation duration in a local variable for consistency with other methods
         const animationDuration = this.ANIMATION.DURATION;
+        
+        // Check if any centrality analysis is active
+        const isCentralityActive = Object.values(this.centralityState).some(state => state);
         
         // Reset all nodes, links, and labels to default state
         this.nodesSelection
             .transition()
             .duration(animationDuration)
             .style('opacity', 'var(--graph-node-opacity-default)')
-            .style('fill', 'var(--graph-node-color-default)');
+            .style('stroke', 'var(--graph-node-color-default)')
+            .style('stroke-width', 'var(--graph-node-stroke-width)');
+        
+        // Only reset fill color if no centrality analysis is active
+        if (!isCentralityActive) {
+            this.nodesSelection
+                .transition()
+                .duration(animationDuration)
+                .style('fill', 'var(--graph-node-color-default)');
+        }
             
         // Reset links to default style
         this.linksSelection
@@ -1017,9 +1042,32 @@ export class GraphView {
         const node = d3.select(element);
         const nodeData = node.datum() as SimulationGraphNode;
         
-        node.transition()
-            .duration(this.ANIMATION.DURATION)
-            .style('fill', highlight ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
+        // Get the current node fill color, which could be a gradient if centrality analysis is active
+        const currentFill = node.style('fill');
+        
+        // Check if any centrality analysis is active
+        const isCentralityActive = Object.values(this.centralityState).some(state => state);
+        
+        // If highlighting and a centrality is active, we need to preserve the gradient color
+        if (highlight && isCentralityActive) {
+            // For highlighted nodes, we still want to show some visual feedback
+            // We can slightly increase opacity or add a stroke instead of changing the fill color
+            node.transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('stroke', 'var(--graph-node-color-highlighted)')
+                .style('stroke-width', '2px');
+        } else if (!highlight && isCentralityActive) {
+            // When un-highlighting with centrality active, just remove the stroke
+            node.transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('stroke', 'var(--graph-node-color-default)')
+                .style('stroke-width', 'var(--graph-node-stroke-width)');
+        } else {
+            // Default behavior when no centrality is active
+            node.transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('fill', highlight ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
+        }
     }
     
     /**
@@ -1054,18 +1102,26 @@ export class GraphView {
     
     private async loadVaultData() {
         try {
-            // Get graph data from builder
-            const graphData = await this.graphDataBuilder.buildGraphData();
+            // Get graph data and degree centrality from builder
+            const { graphData, degreeCentrality } = await this.graphDataBuilder.buildGraphData();
             
             // Convert edges to links format
             const nodes: SimulationGraphNode[] = graphData.nodes.map((nodePath: string, index: number) => {
                 const fileName = nodePath.split('/').pop() || nodePath;
                 const displayName = fileName.replace('.md', '');
+                
+                // Find degree centrality for this node
+                const nodeData = degreeCentrality?.find(r => r?.node_id === index);
+                // Safely access centrality.degree with multiple null checks
+                const degreeCentralityScore = nodeData && nodeData.centrality && nodeData.centrality.degree !== undefined
+                    ? nodeData.centrality.degree 
+                    : 0;
+                
                 return {
                     id: index.toString(),
                     name: displayName,
                     path: nodePath,
-                    degreeCentrality: 0, // Will be updated by centrality calculation
+                    degreeCentrality: degreeCentralityScore,
                     x: undefined,
                     y: undefined,
                     vx: undefined,
@@ -1079,17 +1135,6 @@ export class GraphView {
                 source: sourceIdx.toString(),
                 target: targetIdx.toString()
             }));
-            
-            // Calculate centrality scores
-            const centralityResults = this.centralityCalculator.calculate({ nodes: graphData.nodes, edges: graphData.edges });
-            
-            // Update node centrality scores
-            nodes.forEach(node => {
-                const centralityResult = centralityResults.find((r: { node_id: number; score: number }) => r.node_id === parseInt(node.id));
-                if (centralityResult) {
-                    node.degreeCentrality = centralityResult.score;
-                }
-            });
             
             // Update the graph with the processed data
             await this.updateData({ nodes, links });
@@ -1105,36 +1150,8 @@ export class GraphView {
         this.links = graphData.links || [];
         
         // Clear any existing neighbors cache as the graph data has changed
-        this.nodeNeighborsCache = null;
-        
-        // Initialize the graph cache in WASM with current graph data
-        try {
-            // Format the graph data for WASM
-            const wasmGraphData = {
-                nodes: this.nodes.map(node => node.name),
-                edges: this.links.map(link => {
-                    const source = typeof link.source === 'string' ? parseInt(link.source) : parseInt((link.source as unknown as SimulationGraphNode).id);
-                    const target = typeof link.target === 'string' ? parseInt(link.target) : parseInt((link.target as unknown as SimulationGraphNode).id);
-                    return [source, target];
-                })
-            };
-            
-            // Initialize the graph in WASM
-            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            if (!plugin || !plugin.initializeGraphCache) {
-                throw new Error('WASM functions are not available. Make sure the plugin is properly initialized.');
-            }
-            
-            const result = await plugin.initializeGraphCache(JSON.stringify(wasmGraphData));
-            
-            if (result && result.error) {
-                console.error(`Error initializing graph cache in WASM: ${result.error}`);
-                throw new Error(`Failed to initialize graph cache: ${result.error}`);
-            }
-        } catch (error) {
-            console.error('Failed to initialize graph cache:', error);
-            new Notice(`Graph initialization failed: ${(error as Error).message || 'Unknown error'}`);
-        }
+        this.cachedNodeId = null;
+        this.cachedNeighbors = null;
         
         // Create D3 selections for the graph elements
         this.linksSelection = this.svgGroup.select('.links-group')
@@ -1377,7 +1394,8 @@ export class GraphView {
         }
         
         // Clear data caches
-        this.nodeNeighborsCache = null;
+        this.cachedNodeId = null;
+        this.cachedNeighbors = null;
         this.nodes = [];
         this.links = [];
         
@@ -1403,17 +1421,6 @@ export class GraphView {
         if (this.visibilityObserver) {
             this.visibilityObserver.disconnect();
             this.visibilityObserver = null;
-        }
-        
-        // Clear the graph cache in WASM
-        try {
-            const plugin = (this.app as any).plugins.plugins['obsidian-graph-analysis'];
-            if (plugin && plugin.clearGraphCache) {
-                plugin.clearGraphCache();
-                console.log('Graph cache cleared from WASM');
-            }
-        } catch (error) {
-            console.error('Error clearing graph cache:', error);
         }
         
         // Clean up D3 selections and SVG
@@ -1448,7 +1455,7 @@ export class GraphView {
         // @ts-ignore - explicitly break circular references
         this.graphDataBuilder = null;
         // @ts-ignore - explicitly break circular references
-        this.centralityCalculator = null;
+        this.pluginService = null;
         // @ts-ignore - explicitly break circular references
         this.app = null;
     }
@@ -1520,5 +1527,507 @@ export class GraphView {
             }
             this.debounceTimeout = null;
         }, 2000); // 2 second debounce delay
+    }
+
+    private createControlPanel() {
+        // Create control panel container
+        this.controlPanel = this.container.createDiv({ cls: 'centrality-control-panel' });
+        
+        // Create color settings button
+        this.createColorSettingsButton();
+        
+        // Create centrality buttons
+        this.centralityTypes.forEach(type => {
+            this.createCentralityButton(type);
+        });
+    }
+
+    private createColorSettingsButton() {
+        const settingsButton = this.container.createDiv({ cls: 'color-settings-button' });
+        setIcon(settingsButton, 'settings-2');
+
+        const dropdown = this.container.createDiv({ cls: 'color-settings-dropdown' });
+        dropdown.style.display = 'none';
+
+        // Create gradient selectors for each centrality type
+        this.centralityTypes.forEach(type => {
+            const section = dropdown.createDiv({ cls: 'gradient-section' });
+            
+            // Add section title
+            section.createDiv({
+                cls: 'gradient-section-title',
+                text: type
+            });
+
+            // Create current gradient preview
+            const preview = section.createDiv({ cls: 'gradient-preview' });
+            this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+
+            // Create options container for this section
+            const optionsContainer = section.createDiv({ cls: 'gradient-options' });
+
+            // Create gradient controls inside options container
+            const controls = optionsContainer.createDiv({ cls: 'gradient-controls' });
+
+            // Type selector
+            const typeRow = controls.createDiv({ cls: 'gradient-control-row' });
+            typeRow.createDiv({ cls: 'gradient-control-label', text: 'Type' });
+            const typeSelect = typeRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
+            ['sequential', 'diverging', 'cyclical', 'qualitative'].forEach(t => {
+                const option = typeSelect.createEl('option', { value: t, text: t });
+                if (t === this.gradientSettings[type].type) {
+                    option.selected = true;
+                }
+            });
+
+            // Distribution selector
+            const distributionRow = controls.createDiv({ cls: 'gradient-control-row' });
+            distributionRow.createDiv({ cls: 'gradient-control-label', text: 'Scale' });
+            const distributionSelect = distributionRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
+            ['linear', 'quantize', 'jenks'].forEach(d => {
+                const option = distributionSelect.createEl('option', { value: d, text: d });
+                if (d === this.gradientSettings[type].distribution) {
+                    option.selected = true;
+                }
+            });
+            distributionSelect.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const target = e.target as HTMLSelectElement;
+                this.gradientSettings[type].distribution = target.value as 'linear' | 'quantize' | 'jenks';
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
+            typeSelect.addEventListener('change', (e) => {
+                e.stopPropagation(); // Prevent event from bubbling up
+                const target = e.target as HTMLSelectElement;
+                this.gradientSettings[type].type = target.value as any;
+                
+                // Clear existing options
+                optionsContainer.querySelectorAll('.gradient-option').forEach(opt => opt.remove());
+                
+                // Add filtered palettes based on selected type
+                this.colorPalettes
+                    .filter(palette => {
+                        if (target.value === 'qualitative') {
+                            return palette.type === 'qualitative';
+                        } else if (target.value === 'sequential') {
+                            return palette.type === 'sequential';
+                        } else if (target.value === 'diverging') {
+                            return palette.type === 'diverging';
+                        } else if (target.value === 'cyclical') {
+                            return palette.type === 'cyclical';
+                        }
+                        return false;
+                    })
+                    .forEach(palette => {
+                        const option = optionsContainer.createDiv({
+                            cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
+                        });
+
+                        // Create gradient preview with colors
+                        this.updateGradientPreview(option, palette.name, type);
+
+                        // Add click handler
+                        option.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.selectedPalettes[type] = palette.name;
+                            this.updateGradientPreview(preview, palette.name, type);
+                            optionsContainer.querySelectorAll('.gradient-option').forEach(opt => 
+                                opt.classList.remove('selected')
+                            );
+                            option.classList.add('selected');
+                            if (this.centralityState[type]) {
+                                this.calculateAndDisplayCentrality(type);
+                            }
+                        });
+                    });
+
+                this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
+            // Steps input
+            const stepsRow = controls.createDiv({ cls: 'gradient-control-row' });
+            stepsRow.createDiv({ cls: 'gradient-control-label', text: 'Steps' });
+            const stepsSelect = stepsRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
+            // Add options from 2 to 20
+            for (let i = 2; i <= 20; i++) {
+                const option = stepsSelect.createEl('option', { value: String(i), text: String(i) });
+                if (i === this.gradientSettings[type].steps) {
+                    option.selected = true;
+                }
+            }
+            stepsSelect.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const value = parseInt((e.target as HTMLSelectElement).value);
+                this.gradientSettings[type].steps = value;
+                this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
+            // Reversed button
+            const reversedRow = controls.createDiv({ cls: 'gradient-control-row' });
+            reversedRow.createDiv({ cls: 'gradient-control-label', text: 'Reverse' });
+            const reversedButton = reversedRow.createDiv({ cls: 'gradient-control-input' })
+                .createEl('button', { 
+                    cls: `gradient-control-button ${this.gradientSettings[type].reversed ? 'active' : ''}`,
+                    text: this.gradientSettings[type].reversed ? 'on' : 'off'
+                });
+            reversedButton.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent event from bubbling up
+                this.gradientSettings[type].reversed = !this.gradientSettings[type].reversed;
+                reversedButton.classList.toggle('active', this.gradientSettings[type].reversed);
+                reversedButton.setText(this.gradientSettings[type].reversed ? 'on' : 'off');
+                this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+                if (this.centralityState[type]) {
+                    this.calculateAndDisplayCentrality(type);
+                }
+            });
+
+            // Add all available palettes as options, filtered by current type
+            this.colorPalettes
+                .filter(palette => {
+                    const currentType = this.gradientSettings[type].type;
+                    if (currentType === 'qualitative') {
+                        return palette.type === 'qualitative';
+                    } else if (currentType === 'sequential') {
+                        return palette.type === 'sequential';
+                    } else if (currentType === 'diverging') {
+                        return palette.type === 'diverging';
+                    } else if (currentType === 'cyclical') {
+                        return palette.type === 'cyclical';
+                    }
+                    return false;
+                })
+                .forEach(palette => {
+                    const option = optionsContainer.createDiv({
+                        cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
+                    });
+
+                    // Create gradient preview with colors
+                    this.updateGradientPreview(option, palette.name, type);
+
+                    // Add click handler
+                    option.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.selectedPalettes[type] = palette.name;
+                        this.updateGradientPreview(preview, palette.name, type);
+                        optionsContainer.querySelectorAll('.gradient-option').forEach(opt => 
+                            opt.classList.remove('selected')
+                        );
+                        option.classList.add('selected');
+                        if (this.centralityState[type]) {
+                            this.calculateAndDisplayCentrality(type);
+                        }
+                    });
+                });
+
+            // Handle preview click to toggle options
+            preview.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                // Close other expanded sections
+                dropdown.querySelectorAll('.gradient-options.expanded').forEach(opt => {
+                    if (opt !== optionsContainer) {
+                        opt.classList.remove('expanded');
+                    }
+                });
+
+                // Toggle this section's options
+                optionsContainer.classList.toggle('expanded');
+            });
+
+            // Prevent clicks inside the options container from closing it
+            optionsContainer.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        });
+
+        // Toggle dropdown on button click
+        settingsButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = dropdown.style.display !== 'none';
+            dropdown.style.display = isVisible ? 'none' : 'block';
+        });
+
+        // Prevent clicks inside the dropdown from closing it
+        dropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Close dropdown only when clicking outside
+        document.addEventListener('click', () => {
+            dropdown.style.display = 'none';
+        });
+    }
+
+    private updateGradientPreview(element: HTMLElement, paletteName: string, type?: typeof this.centralityTypes[number]) {
+        element.empty();
+        const palette = this.colorPalettes.find(p => p.name === paletteName);
+        if (palette) {
+            const settings = type ? this.gradientSettings[type] : { steps: 6, reversed: false };
+            const colorRange = colorPaletteToColorRange(palette, {
+                steps: settings.steps,
+                reversed: settings.reversed
+            });
+            colorRange.colors.forEach(color => {
+                const colorBox = element.createDiv({ cls: 'color-box' });
+                colorBox.style.backgroundColor = color;
+                colorBox.style.flex = '1';
+            });
+        }
+    }
+
+    private createCentralityButton(type: typeof this.centralityTypes[number]): HTMLElement {
+        const button = this.controlPanel.createDiv({ cls: 'centrality-button' });
+        
+        // Set button label based on type
+        const label = type.charAt(0).toUpperCase(); // First letter capitalized
+        button.setText(label);
+        
+        // Create tooltip with title and description
+        const tooltipEl = button.createDiv({ cls: 'centrality-button-tooltip' });
+        
+        // Add title (capitalize first letter and add "Centrality")
+        tooltipEl.createDiv({ 
+            cls: 'tooltip-title',
+            text: `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`
+        });
+        
+        // Add description based on centrality type
+        const description = tooltipEl.createDiv({ cls: 'tooltip-description' });
+        switch (type) {
+            case 'betweenness':
+                description.setText('Measures how often a node acts as a bridge along the shortest path between two other nodes. Higher values indicate more important bridge nodes.');
+                break;
+            case 'closeness':
+                description.setText('Measures how close a node is to all other nodes in the network. Higher values indicate nodes that can quickly reach or communicate with other nodes.');
+                break;
+            case 'eigenvector':
+                description.setText('Measures node importance based on the importance of its neighbors. Higher values indicate nodes connected to other important nodes.');
+                break;
+        }
+        
+        // Add click handler
+        button.addEventListener('click', async () => {
+            const isActive = this.centralityState[type];
+            const plugin = this.pluginService.getPlugin();
+
+            if (isActive) {
+                // If already active, deactivate it
+                button.removeClass('active');
+                this.centralityState[type] = false;
+                this.activeButton = null;
+                
+                // Reset node colors to default
+                this.nodesSelection
+                    .transition()
+                    .duration(this.ANIMATION.DURATION)
+                    .style('fill', 'var(--graph-node-color-default)')
+                    .style('opacity', 'var(--graph-node-opacity-default)');
+                
+                // Clear the last centrality scores
+                this.lastCentralityScores = {};
+
+                // Hide the centrality results view
+                const leaf = this.app.workspace.getLeavesOfType(CENTRALITY_RESULTS_VIEW_TYPE)[0];
+                if (leaf) {
+                    leaf.detach();
+                }
+            } else {
+                // Deactivate other buttons and states
+                this.centralityTypes.forEach(t => {
+                    this.centralityState[t] = false;
+                    const otherButton = this.controlPanel.querySelector(`[data-centrality-type="${t}"]`);
+                    if (t !== type && otherButton instanceof HTMLElement) {
+                        otherButton.removeClass('active');
+                    }
+                });
+                
+                // Activate this button and state
+                button.addClass('active');
+                this.centralityState[type] = true;
+                this.activeButton = button;
+                
+                // Calculate and display the selected centrality
+                await this.calculateAndDisplayCentrality(type);
+            }
+        });
+        
+        // Add data attribute for type identification
+        button.setAttribute('data-centrality-type', type);
+        
+        return button;
+    }
+
+    private async calculateAndDisplayCentrality(type: typeof this.centralityTypes[number]) {
+        try {
+            // Get centrality scores based on type
+            let results: GraphNode[];
+            const plugin = this.pluginService.getPlugin();
+            
+            switch (type) {
+                case 'betweenness':
+                    results = plugin.calculateBetweennessCentralityCached();
+                    break;
+                case 'closeness':
+                    results = plugin.calculateClosenessCentralityCached();
+                    break;
+                case 'eigenvector':
+                    results = plugin.calculateEigenvectorCentralityCached();
+                    break;
+            }
+
+            // Store the scores for later use
+            this.lastCentralityScores = {};
+            results.forEach(node => {
+                this.lastCentralityScores[node.node_id] = node.centrality[type] || 0;
+            });
+
+            // Find min and max scores for normalization
+            const scores = Object.values(this.lastCentralityScores);
+            const minScore = Math.min(...scores);
+            const maxScore = Math.max(...scores);
+            
+            // Get the color palette
+            const palette = this.colorPalettes.find(p => p.name === this.selectedPalettes[type]);
+            if (!palette) return;
+
+            // Create color range with current settings
+            const colorRange = colorPaletteToColorRange(palette, {
+                steps: this.gradientSettings[type].steps,
+                reversed: this.gradientSettings[type].reversed
+            });
+
+            // Create color scale based on distribution method
+            let colorScale: (score: number) => string;
+            const colors = colorRange.colors;
+
+            switch (this.gradientSettings[type].distribution) {
+                case 'linear':
+                    colorScale = d3.scaleLinear<string>()
+                        .domain([minScore, maxScore])
+                        .range([colors[0], colors[colors.length - 1]]);
+                    break;
+
+                case 'quantize':
+                    colorScale = d3.scaleQuantize<string>()
+                        .domain([minScore, maxScore])
+                        .range(colors);
+                    break;
+
+                case 'jenks':
+                    // Calculate Jenks natural breaks
+                    const breaks = this.calculateJenksBreaks(scores, colors.length);
+                    colorScale = d3.scaleThreshold<number, string>()
+                        .domain(breaks.slice(1, -1)) // Remove first and last break points
+                        .range(colors);
+                    break;
+
+                default:
+                    colorScale = d3.scaleLinear<string>()
+                        .domain([minScore, maxScore])
+                        .range([colors[0], colors[colors.length - 1]]);
+            }
+
+            // Save current highlighted node ID before applying colors
+            const currentHighlightedNodeId = this.highlightedNodeId;
+            
+            // Apply gradient colors to nodes with enhanced transition
+            this.nodesSelection
+                .transition()
+                .duration(this.ANIMATION.DURATION)
+                .style('fill', d => {
+                    const score = this.lastCentralityScores[parseInt(d.id)];
+                    // Handle edge cases
+                    if (score === undefined || score === null) {
+                        return this.NODE.COLORS.DEFAULT;
+                    }
+                    return colorScale(score);
+                })
+                .style('opacity', 'var(--graph-node-opacity-default)');
+
+            // If a node was highlighted, restore highlighting
+            if (currentHighlightedNodeId) {
+                // Find the node element by ID
+                const highlightedNode = this.nodesSelection.filter(d => d.id === currentHighlightedNodeId).node();
+                if (highlightedNode) {
+                    // Re-apply highlighting
+                    setTimeout(() => {
+                        this.highlightNode(highlightedNode, true);
+                        this.highlightConnections(currentHighlightedNodeId, true);
+                    }, this.ANIMATION.DURATION);
+                }
+            }
+
+            // Display results in the right sidebar
+            plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
+
+        } catch (error) {
+            console.error(`Failed to calculate ${type} centrality:`, error);
+            new Notice(`Failed to calculate ${type} centrality: ${(error as Error).message}`);
+        }
+    }
+
+    /**
+     * Calculate Jenks natural breaks for a dataset
+     * @param data Array of numbers to classify
+     * @param numClasses Number of classes to create
+     * @returns Array of break points including min and max values
+     */
+    private calculateJenksBreaks(data: number[], numClasses: number): number[] {
+        if (data.length === 0) return [];
+        if (data.length === 1) return [data[0], data[0]];
+        if (numClasses >= data.length) return [...new Set(data)].sort((a: number, b: number) => a - b);
+
+        // Use simple-statistics for Jenks Natural Breaks calculation
+        const breaks = ss.jenks(data, numClasses);
+        
+        // Ensure we include both min and max values
+        if (!breaks.includes(Math.min(...data))) {
+            breaks.unshift(Math.min(...data));
+        }
+        if (!breaks.includes(Math.max(...data))) {
+            breaks.push(Math.max(...data));
+        }
+        
+        return breaks.sort((a: number, b: number) => a - b);
+    }
+
+    // private async resetToDegree() {
+    //     try {
+    //         const plugin = this.pluginService.getPlugin();
+    //         const results = plugin.calculateDegreeCentralityCached();
+    //         this.updateNodeColors(results, 'degree');
+    //     } catch (error) {
+    //         console.error('Failed to reset to degree centrality:', error);
+    //         new Notice('Failed to reset to degree centrality');
+    //     }
+    // }
+
+    private updateNodeColors(results: GraphNode[], type: 'betweenness' | 'closeness' | 'eigenvector' | 'degree') {
+        // Find min and max values for normalization
+        const values = results.map(r => r.centrality[type] || 0);
+        const minValue = Math.min(...values);
+        const maxValue = Math.max(...values);
+        
+        // Update node colors based on normalized centrality values
+        this.nodesSelection.each(function(d: SimulationGraphNode) {
+            const node = results.find(r => r.node_id.toString() === d.id);
+            if (node && node.centrality[type] !== undefined) {
+                const normalizedValue = (node.centrality[type]! - minValue) / (maxValue - minValue);
+                const color = d3.interpolateRdYlBu(1 - normalizedValue); // Using a color scale that works well for both light and dark themes
+                d3.select(this)
+                    .transition()
+                    .duration(200)
+                    .style('fill', color);
+            }
+        });
     }
 } 
