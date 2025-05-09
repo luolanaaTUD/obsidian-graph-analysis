@@ -79,4 +79,7 @@ graph-analysis-wasm/target/
 
 # Node modules and build artifacts
 dist/
-data.json 
+data.json
+
+# Release directory
+release/ 
