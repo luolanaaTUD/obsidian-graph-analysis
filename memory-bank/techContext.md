@@ -4,90 +4,109 @@
 - TypeScript (Frontend/Plugin)
 - Rust/WASM (Backend)
 - Obsidian Plugin API
+- rustnetworkx-core for graph operations
 - D3.js for visualization
 
 ## Current Technical Stack
-### Service Layer (New)
-- PluginService pattern
-- IGraphAnalysisPlugin interface
-- Type-safe operations
-- Centralized error handling
+### TypeScript Configuration
+- ESNext module syntax
+- ES6 target compilation
+- Strict type checking enabled
+- Node.js module resolution
+- Modern JavaScript features support
+- Isolated module transpilation
+
+### Backend (Rust/WASM)
+- rustnetworkx-core for graph processing
+- Optimized centrality calculations
+- Efficient memory management
+- Enhanced performance characteristics
 
 ### Frontend (TypeScript)
 - GraphView component
 - GraphDataBuilder utility
 - D3.js visualization
-- Service integration
+- Efficient data handling
 
-### Backend (Rust/WASM)
-- Graph processing
-- Centrality calculations
-- Cache management
-- Memory optimization
+### Integration Layer
+- Clean WASM bindings
+- Optimized data transfer
+- Efficient memory usage
+- Type-safe operations
 
 ## Architecture Patterns
-1. Service Layer:
-   ```typescript
-   class PluginService {
-       private plugin: IGraphAnalysisPlugin;
-       
-       // Type-safe plugin access
-       // Centralized error handling
-       // Unified WASM integration
-   }
+1. Graph Processing:
+   ```rust
+   use rustnetworkx_core::{Graph, algorithms};
+   
+   // Efficient graph operations
+   // Optimized centrality calculations
+   // Memory-efficient processing
    ```
 
 2. Plugin Interface:
    ```typescript
    interface IGraphAnalysisPlugin {
-       ensureWasmLoaded(): Promise<void>;
-       initializeGraphAndCalculateCentrality(): Promise<GraphInitializationResult>;
+       calculateCentrality(): Promise<CentralityResult>;
+       processGraph(): Promise<GraphData>;
        // Other plugin operations
    }
    ```
 
-3. Graph Operations:
+3. Data Structures:
    ```typescript
-   interface GraphInitializationResult {
+   interface GraphAnalysisResult {
        graphData: GraphData;
-       degreeCentrality: CentralityResult[];
+       centrality: CentralityMetrics;
    }
    ```
 
 ## Technical Constraints
-1. Service Layer:
-   - Type safety requirements
-   - Error handling standards
-   - Performance considerations
-   - Cache management
-
-2. Graph Operations:
-   - Combined initialization
-   - On-demand calculations
+1. Graph Operations:
+   - rustnetworkx-core compatibility
    - Memory efficiency
    - Performance optimization
+   - Calculation accuracy
+
+2. TypeScript Compilation:
+   - Strict type checking
+   - Null safety
+   - Module isolation
+   - Modern JavaScript support
 
 3. Integration:
-   - Service pattern adoption
-   - Component updates
-   - Cache coordination
-   - Error propagation
-
-## Development Standards
-1. Code Organization:
-   - Service-based architecture
-   - Clear interfaces
+   - WASM optimization
+   - Memory management
    - Type safety
    - Error handling
 
-2. Testing:
-   - Service layer tests
-   - Component integration
-   - Performance metrics
-   - Error scenarios
+4. Performance:
+   - Calculation speed
+   - Memory usage
+   - Response time
+   - Resource efficiency
 
-3. Documentation:
-   - Service documentation
-   - Interface definitions
-   - Architecture updates
-   - Pattern guidelines
+## Development Standards
+1. Code Organization:
+   - Clean architecture
+   - Efficient algorithms
+   - Memory optimization
+   - Performance focus
+
+2. TypeScript Standards:
+   - Strict type usage
+   - Null safety
+   - Modern syntax
+   - Clean imports
+
+3. Testing:
+   - Calculation accuracy
+   - Performance metrics
+   - Memory profiling
+   - Integration tests
+
+4. Documentation:
+   - Technical specs
+   - API documentation
+   - Performance guidelines
+   - Usage examples

@@ -1,82 +1,82 @@
 # System Patterns
 
 ## Architecture Overview
-The system now follows a service-oriented architecture with the Plugin Service pattern at its core, providing centralized access to plugin functionality and optimized graph operations.
+The system now utilizes rustnetworkx-core for efficient graph operations, providing optimized performance and enhanced capabilities for graph analysis.
 
 ## Core Components
-1. Service Layer
-   - PluginService: Central access point for plugin functionality
-   - Type-safe plugin interactions
-   - Centralized error handling
-   - Unified WASM integration
+1. Graph Processing Layer
+   - rustnetworkx-core integration
+   - Optimized centrality calculations
+   - Efficient memory management
+   - Enhanced performance
 
 2. Graph Components
    - GraphView: UI and visualization
    - GraphDataBuilder: Data preparation
-   - Combined initialization process
-   - Optimized centrality calculations
+   - Optimized data flow
+   - Efficient processing
 
-## Service Pattern Implementation
+## Implementation Pattern
 ```mermaid
 graph TD
-    A[Components] --> B[PluginService]
-    B --> C[Plugin Interface]
-    C --> D[WASM Module]
+    A[Frontend] --> B[WASM Interface]
+    B --> C[rustnetworkx-core]
+    C --> D[Graph Processing]
     
     E[GraphView] --> A
     F[GraphDataBuilder] --> A
     
-    B --> G[Graph Operations]
-    B --> H[Centrality Calc]
-    B --> I[Cache Management]
+    C --> G[Centrality Calc]
+    C --> H[Graph Operations]
+    C --> I[Memory Management]
 ```
 
 ## Design Patterns
-1. Plugin Service Pattern
-   - Single point of access
-   - Type-safe operations
-   - Centralized error handling
-   - Clean abstraction layer
+1. Graph Processing Pattern
+   - rustnetworkx-core based
+   - Optimized operations
+   - Memory efficiency
+   - Performance focus
 
-2. Graph Initialization Pattern
-   - Combined operations
+2. Data Flow Pattern
+   - Efficient processing
    - Optimized calculations
-   - Smart caching
-   - On-demand processing
+   - Smart memory usage
+   - Fast operations
 
 3. Component Communication
-   - Service-based interaction
-   - Clear dependencies
-   - Type-safe interfaces
-   - Consistent error handling
+   - Clean interfaces
+   - Efficient data transfer
+   - Type safety
+   - Error handling
 
 ## Component Relationships
 ```mermaid
 graph TD
-    A[GraphView] --> B[PluginService]
+    A[GraphView] --> B[WASM Interface]
     C[GraphDataBuilder] --> B
-    B --> D[IGraphAnalysisPlugin]
-    D --> E[WASM Module]
-    E --> F[Graph Processing]
-    E --> G[Centrality Calc]
-    E --> H[Cache System]
+    B --> D[rustnetworkx-core]
+    D --> E[Graph Processing]
+    E --> F[Centrality Calc]
+    E --> G[Graph Operations]
+    E --> H[Memory Management]
 ```
 
 ## Implementation Strategy
-1. Service Layer:
-   - Centralized plugin access
-   - Type-safe operations
-   - Error handling
-   - Cache management
+1. Graph Layer:
+   - rustnetworkx-core integration
+   - Optimized processing
+   - Memory efficiency
+   - Performance focus
 
-2. Graph Operations:
-   - Combined initialization
-   - Optimized calculations
-   - Smart caching
-   - On-demand processing
+2. Operations:
+   - Fast calculations
+   - Efficient memory use
+   - Optimized algorithms
+   - Enhanced performance
 
 3. Future Enhancements:
-   - Extended metrics
-   - Better caching
-   - More analysis tools
-   - Enhanced visualization
+   - Additional metrics
+   - Performance optimization
+   - Memory improvements
+   - New capabilities

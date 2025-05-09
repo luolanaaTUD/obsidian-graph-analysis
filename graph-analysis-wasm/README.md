@@ -1,84 +1,137 @@
-<div align="center">
+# Graph Analysis WASM Module
 
-  <h1><code>wasm-pack-template</code></h1>
+This is the Rust/WebAssembly core of the Obsidian Graph Analysis plugin, providing high-performance graph analysis capabilities with automatic updates and efficient memory management.
 
-  <strong>A template for kick starting a Rust and WebAssembly project using <a href="https://github.com/rustwasm/wasm-pack">wasm-pack</a>.</strong>
+## Overview
 
-  <p>
-    <a href="https://travis-ci.org/rustwasm/wasm-pack-template"><img src="https://img.shields.io/travis/rustwasm/wasm-pack-template.svg?style=flat-square" alt="Build Status" /></a>
-  </p>
+This module handles all graph-related computations using Rust compiled to WebAssembly, providing:
+- Efficient graph construction and manipulation
+- High-performance centrality calculations
+- Smart memory management
+- Real-time graph updates
 
-  <h3>
-    <a href="https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html">Tutorial</a>
-    <span> | </span>
-    <a href="https://discordapp.com/channels/442252698964721669/443151097398296587">Chat</a>
-  </h3>
+## Technical Stack
 
-  <sub>Built with 🦀🕸 by <a href="https://rustwasm.github.io/">The Rust and WebAssembly Working Group</a></sub>
-</div>
+- **Rust**: Core implementation language
+- **rustnetworkx-core**: Primary graph processing library
+- **wasm-bindgen**: WebAssembly bindings
+- **web-sys**: Web API integrations
 
-## About
+## Features
 
-[**📚 Read this template tutorial! 📚**][template-docs]
+### Graph Processing
+- Efficient graph construction from vault data
+- Automatic updates on vault changes
+- Smart memory management
+- Optimized refresh cycles
 
-This template is designed for compiling Rust libraries into WebAssembly and
-publishing the resulting package to NPM.
+### Centrality Calculations
+- Degree Centrality
+- Eigenvector Centrality
+- Betweenness Centrality
+- Closeness Centrality
 
-Be sure to check out [other `wasm-pack` tutorials online][tutorials] for other
-templates and usages of `wasm-pack`.
+### Performance Optimizations
+- Smart refresh debouncing
+- Efficient memory usage
+- Optimized algorithms
+- Quick response time
 
-[tutorials]: https://rustwasm.github.io/docs/wasm-pack/tutorials/index.html
-[template-docs]: https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html
+## Development
 
-## 🚴 Usage
+### Prerequisites
+- Rust (latest stable)
+- wasm-pack
+- Node.js (for testing)
 
-### 🐑 Use `cargo generate` to Clone this Template
-
-[Learn more about `cargo generate` here.](https://github.com/ashleygwilliams/cargo-generate)
-
-```
-cargo generate --git https://github.com/rustwasm/wasm-pack-template.git --name my-project
-cd my-project
-```
-
-### 🛠️ Build with `wasm-pack build`
-
-```
-wasm-pack build
-```
-
-### 🔬 Test in Headless Browsers with `wasm-pack test`
-
-```
-wasm-pack test --headless --firefox
+### Building
+```bash
+wasm-pack build --target web
 ```
 
-### 🎁 Publish to NPM with `wasm-pack publish`
-
+### Testing
+```bash
+cargo test
+wasm-pack test --node
 ```
-wasm-pack publish
+
+## Architecture
+
+### Core Components
+```rust
+// Graph representation using rustnetworkx-core
+use rustnetworkx_core::Graph;
+
+// Main graph processing structure
+pub struct GraphProcessor {
+    graph: Graph,
+    cache: Cache,
+}
+
+// Centrality calculations
+impl GraphProcessor {
+    pub fn calculate_degree_centrality(&self) -> HashMap<NodeId, f64>;
+    pub fn calculate_eigenvector_centrality(&self) -> HashMap<NodeId, f64>;
+    pub fn calculate_betweenness_centrality(&self) -> HashMap<NodeId, f64>;
+    pub fn calculate_closeness_centrality(&self) -> HashMap<NodeId, f64>;
+}
 ```
 
-## 🔋 Batteries Included
+### Data Flow
+1. JS/TS sends vault data to Rust
+2. Rust constructs graph using rustnetworkx-core
+3. Automatic updates handled efficiently
+4. Results returned to JS/TS
 
-* [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen) for communicating
-  between WebAssembly and JavaScript.
-* [`console_error_panic_hook`](https://github.com/rustwasm/console_error_panic_hook)
-  for logging panic messages to the developer console.
-* `LICENSE-APACHE` and `LICENSE-MIT`: most Rust projects are licensed this way, so these are included for you
+## Integration
+
+### TypeScript Interface
+```typescript
+interface WasmGraphAnalysis {
+    createGraph(data: VaultData): Promise<void>;
+    calculateCentrality(type: CentralityType): Promise<CentralityResult>;
+    getGraphStats(): Promise<GraphStats>;
+    handleVaultUpdate(changes: VaultChanges): Promise<void>;
+}
+```
+
+### Usage Example
+```typescript
+const wasmModule = await import('./pkg/graph_analysis_wasm.js');
+const analyzer = new wasmModule.GraphAnalyzer();
+
+// Initial setup
+await analyzer.createGraph(vaultData);
+
+// Handle updates
+analyzer.handleVaultUpdate(changes);
+
+// Get analysis results
+const results = await analyzer.calculateCentrality('degree');
+```
+
+## Performance Considerations
+
+### Memory Management
+- Smart refresh debouncing
+- Efficient graph updates
+- Optimized memory usage
+- Quick response time
+
+### Optimization Techniques
+- Custom memory allocators
+- Smart update handling
+- Efficient algorithms
+- Responsive calculations
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Add tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
 
 ## License
 
-Licensed under either of
-
-* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally
-submitted for inclusion in the work by you, as defined in the Apache-2.0
-license, shall be dual licensed as above, without any additional terms or
-conditions.
+MIT License - see the LICENSE file for details

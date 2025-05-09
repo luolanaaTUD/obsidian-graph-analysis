@@ -1,50 +1,50 @@
 # Active Context
 
 ## Current Focus
-Implementation of Plugin Service pattern and optimized graph initialization
+Streamlined user interface with integrated graph view and automatic updates
 
 ## Active Tasks
-1. Service Layer Implementation:
-   - ✅ Implemented PluginService for centralized plugin access
-   - ✅ Combined graph initialization and degree centrality calculation
-   - ✅ Improved type safety with IGraphAnalysisPlugin interface
-   - ✅ Better error handling through service layer
+1. UI Integration:
+   - ✅ Consolidated all analysis features into graph view
+   - ✅ Removed separate command palette entries
+   - ✅ Implemented automatic graph updates
+   - ✅ Enhanced user interaction model
 
-2. Graph Optimization:
-   - ✅ Optimized graph initialization flow
-   - ✅ Improved degree centrality calculation timing
-   - ✅ Better cache management through PluginService
-   - ✅ Reduced unnecessary WASM calls
+2. Performance Optimization:
+   - ✅ Smart refresh handling with debouncing
+   - ✅ Efficient WASM initialization
+   - ✅ Improved memory management
+   - ✅ Optimized update cycles
 
 ## Recent Decisions
-1. Implemented Plugin Service Pattern:
-   - Centralized plugin access
-   - Type-safe interactions
-   - Better error handling
-   - Cleaner component code
+1. Unified Interface Approach:
+   - Single graph view for all analysis features
+   - Automatic updates on vault changes
+   - Improved user experience
+   - More intuitive interaction model
 
-2. Combined Graph Initialization:
-   - Graph building and degree centrality calculated together
-   - Other centrality measures on-demand only
-   - More efficient initialization process
-   - Better user experience
+2. Performance Improvements:
+   - Smart refresh debouncing
+   - Efficient WASM management
+   - Better memory handling
+   - Optimized data flow
 
 ## Next Steps
-1. Further Service Layer Enhancements:
-   - Add more specific return types for service methods
-   - Implement better error types
-   - Add service-level caching if needed
-   - Consider adding more graph analysis methods
+1. Interface Enhancement:
+   - Add more interactive features
+   - Improve visualization options
+   - Enhance user controls
+   - Add more analysis tools
 
-2. Graph Analysis Features:
-   - Implement on-demand centrality calculations
-   - Add more graph metrics
-   - Enhance visualization based on metrics
-   - Improve user controls for analysis
+2. Performance Optimization:
+   - Further tune refresh timing
+   - Optimize memory usage
+   - Enhance update efficiency
+   - Improve responsiveness
 
 ## Considerations
-1. Monitor service pattern effectiveness
-2. Watch for any performance impacts
-3. Consider adding service tests
-4. Plan for future metrics
-5. Keep documentation updated
+1. Monitor automatic update performance
+2. Watch memory usage patterns
+3. Consider additional visualization options
+4. Keep documentation updated
+5. Plan for future enhancements

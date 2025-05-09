@@ -1,13 +1,18 @@
 # Obsidian Graph Analysis Plugin
 
-A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using graph theory algorithms to provide insights into note relationships and importance.
+A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using advanced graph theory algorithms to provide deep insights into note relationships and importance.
 
 ## Features
 
-- **Degree Centrality Analysis**: Identifies the most connected notes in your vault based on incoming and outgoing links
-- **Eigenvector Centrality Analysis**: Determines note importance based on connections to other important notes (coming soon)
-- **Interactive Results**: View results in a sortable table and click on notes to navigate directly to them
-- **Customizable Settings**: Exclude specific folders or tags from analysis and control the number of results displayed
+- **Interactive Graph View**: Dynamic visualization of your vault's note relationships
+- **Real-time Analysis**: Automatic updates as you modify your vault
+- **Multiple Centrality Measures**:
+  - Degree Centrality: Identifies the most connected notes
+  - Eigenvector Centrality: Determines note importance based on connections
+  - Betweenness Centrality: Identifies bridge notes between topics
+  - Closeness Centrality: Measures how central notes are to your vault
+- **Smart Performance**: Efficient updates and memory management
+- **Customizable Settings**: Control analysis scope and visualization
 
 ## Installation
 
@@ -23,27 +28,28 @@ A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using grap
 
 ## Usage
 
-### Analyzing Your Vault
+### Accessing the Graph Analysis View
 
-1. Open the command palette (Ctrl/Cmd + P)
-2. Search for "Graph Analysis" and select the algorithm you want to use:
-   - "Analyze Vault (Degree Centrality)"
-   - "Analyze Vault (Eigenvector Centrality)"
+1. Click the graph analysis icon in the ribbon (left sidebar)
+2. The graph view will open, showing your vault's note relationships
+3. Interact with the graph to explore relationships and centrality measures
+4. The view updates automatically as you modify your vault
 
-### Understanding the Results
+### Understanding the Visualization
 
-The plugin will display:
-- A modal window with a table of results
-- A notification showing the top 3 most central notes
-- Detailed results in the developer console (for debugging)
+The graph view provides multiple ways to understand your vault's structure:
+- Interactive node exploration
+- Visual relationship indicators
+- Multiple centrality measures
+- Real-time updates
 
-#### Degree Centrality
+#### Centrality Measures
 
-Degree centrality measures how many connections a note has. Notes with high degree centrality are "hubs" in your knowledge graph.
-
-#### Eigenvector Centrality
-
-Eigenvector centrality not only considers the number of connections but also the importance of the connected notes. A note connected to many important notes will have a high eigenvector centrality.
+Each centrality measure provides different insights into your notes:
+- **Degree Centrality**: Shows which notes have the most direct connections
+- **Eigenvector Centrality**: Reveals notes connected to other important notes
+- **Betweenness Centrality**: Identifies notes that bridge different topics
+- **Closeness Centrality**: Shows how easily notes can reach others
 
 ### Settings
 
@@ -51,26 +57,25 @@ Access plugin settings from the Obsidian settings panel under "Graph Analysis":
 
 - **Exclude Folders**: Comma-separated list of folders to exclude from analysis
 - **Exclude Tags**: Comma-separated list of tags to exclude from analysis
-- **Result Limit**: Maximum number of results to display in the results modal
+- **Result Limit**: Maximum number of results to display
+- **Visualization Options**: Customize the graph view appearance
 
 ## Technical Details
 
-This plugin combines:
+This plugin leverages cutting-edge technology for optimal performance:
 - TypeScript for the Obsidian plugin interface
 - Rust compiled to WebAssembly for high-performance graph analysis
-- The [petgraph](https://github.com/petgraph/petgraph) Rust crate for graph algorithms
+- [rustnetworkx-core](https://github.com/rustworkx/rustworkx) for efficient graph algorithms
+- Modern web technologies for interactive visualizations
 
-### Recent Performance Improvements
+### Performance Features
 
-The `refactor/move-graph-calculations-to-rust` branch contains significant performance improvements:
+The plugin includes several optimizations for excellent performance:
 
-- **Graph Construction in Rust**: Moved the graph building process from TypeScript to Rust for better performance
-- **Advanced Centrality Algorithms**: Implemented proper eigenvector centrality and betweenness centrality algorithms in Rust
-- **Optimized Data Flow**: Reduced data transfer between TypeScript and Rust by processing entire vault data in one operation
-- **Interactive Centrality Selection**: Added ability to switch between different centrality measures in the graph view
-- **Fallback Mechanisms**: Implemented graceful fallbacks to TypeScript if the Rust implementation fails
-
-These changes provide better performance especially for larger vaults, with minimal changes to the user interface.
+- **Smart Updates**: Efficient graph refresh with debouncing
+- **Memory Management**: Optimized memory usage for large vaults
+- **Fast Calculations**: High-performance centrality algorithms
+- **Responsive Interface**: Non-blocking operations for smooth experience
 
 ## Development
 
@@ -122,3 +127,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - The Obsidian team for creating such an amazing knowledge management tool
 - The Rust and WebAssembly communities for their excellent tools and documentation
+- The rustnetworkx-core team for their powerful graph processing library
