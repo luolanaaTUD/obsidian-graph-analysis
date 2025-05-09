@@ -22,11 +22,12 @@ jobs:
           node-version: "18.x"
           cache: 'npm'
       
-      # Set up Rust
+      # Set up Rust with wasm target
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+          targets: wasm32-unknown-unknown
       
       # Install wasm-pack
       - name: Install wasm-pack
@@ -36,7 +37,7 @@ jobs:
       - name: Build plugin
         run: |
           npm ci
-          npm run build-wasm
+          cd graph-analysis-wasm && RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' wasm-pack build --target web -- --features wasm_js && cd ..
           npm run build
 
       # Package the plugin
