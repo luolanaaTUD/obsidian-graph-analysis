@@ -37,8 +37,7 @@ jobs:
       - name: Build plugin
         run: |
           npm ci
-          cd graph-analysis-wasm && RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' wasm-pack build --target web -- --features wasm_js && cd ..
-          npm run build
+          npm run full-build
 
       # Package the plugin
       - name: Package plugin
