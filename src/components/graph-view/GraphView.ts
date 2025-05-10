@@ -5,7 +5,8 @@ import {
     SimulationGraphLink, 
     SimulationGraphNode,
     GraphData,
-    Node as GraphNode
+    Node as GraphNode,
+    GraphMetadata
 } from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
@@ -29,6 +30,7 @@ export class GraphView {
     private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
     private nodes: SimulationGraphNode[] = [];
     private links: SimulationGraphLink[] = [];
+    private graphMetadata: GraphMetadata | null = null;
     private width: number;
     private height: number;
     
@@ -1102,8 +1104,20 @@ export class GraphView {
     
     private async loadVaultData() {
         try {
-            // Get graph data and degree centrality from builder
-            const { graphData, degreeCentrality } = await this.graphDataBuilder.buildGraphData();
+            // Get graph data, degree centrality and metadata from builder
+            const { graphData, degreeCentrality, metadata } = await this.graphDataBuilder.buildGraphData();
+            
+            // Store metadata for later use
+            this.graphMetadata = metadata;
+            
+            // Log additional details about the graph structure
+            console.log('Graph structure summary:');
+            console.log(`  Nodes: ${metadata.node_count}`);
+            console.log(`  Edges: ${metadata.edge_count}`);
+            console.log(`  Max degree: ${metadata.max_degree}`);
+            console.log(`  Avg degree: ${metadata.avg_degree.toFixed(2)}`);
+            console.log(`  Directed: ${metadata.is_directed}`);
+            console.log(`  Avg connections per node: ${(metadata.edge_count / metadata.node_count).toFixed(2)}`);
             
             // Convert edges to links format
             const nodes: SimulationGraphNode[] = graphData.nodes.map((nodePath: string, index: number) => {
