@@ -4,12 +4,11 @@
  * Table of Contents:
  * 1. Variables & Imports
  * 2. Base Container Styles
- * 3. Graph Elements
- * 4. Labels & Text
- * 5. Interaction States
- * 6. Tooltips & Popups
- * 7. Performance Optimizations
- * 8. Media Queries
+ * 3. Graph Elements & Labels
+ * 4. Interaction States
+ * 5. Tooltips & Popups
+ * 6. Centrality Features
+ * 7. Color Settings Panel
  *----------------------------------------*/
 
 /* 1. Variables & Imports
@@ -35,21 +34,8 @@
   flex: 1;
 }
 
-/* 3. Graph Elements
+/* 3. Graph Elements & Labels
 /*----------------------------------------*/
-/* Node styles */
-.graph-node {
-  /* Removed transition */
-}
-
-/* Link styles */
-.graph-link {
-  /* Removed transition */
-}
-
-/* 4. Labels & Text
-/*----------------------------------------*/
-/* Labels container */
 .graph-labels-container {
   position: absolute;
   top: 0;
@@ -60,67 +46,64 @@
   overflow: visible;
 }
 
-/* Node label styles */
-.graph-node-label {
-  position: absolute;
-  font-size: var(--graph-label-font-size, 10px);
-  color: var(--graph-label-color, var(--text-muted));
-  opacity: var(--graph-label-opacity, 0.7);
+/* Node label styles - text appears below nodes */
+.graph-node-label,
+.graph-label {
   pointer-events: none;
   user-select: none;
+  opacity: var(--graph-label-opacity, 0.7);
+  font-size: var(--graph-label-font-size, 10px);
+}
+
+.graph-node-label {
+  position: absolute;
+  color: var(--graph-label-color, var(--text-muted));
   text-align: center;
   white-space: nowrap;
-  /* Removed transition */
   margin: 0;
   padding: 0;
 }
 
 .graph-label {
-  pointer-events: none;
-  user-select: none;
   font-family: var(--font-interface);
-  font-size: var(--graph-label-font-size, 10px);
   fill: var(--graph-label-color, var(--text-normal));
-  opacity: var(--graph-label-opacity, 0.7);
   text-anchor: middle;
   dominant-baseline: text-after-edge;
-  /* Removed transition */
 }
 
-/* Label states */
+/* Label state variations */
 .graph-node-label.highlighted,
-.graph-label.highlighted {
+.graph-label.highlighted,
+.graph-node.highlighted + .graph-label {
   opacity: var(--graph-label-opacity-highlighted, 1);
+}
+
+.graph-node-label.highlighted {
   color: var(--graph-label-color-highlighted, var(--text-normal));
+}
+
+.graph-label.highlighted,
+.graph-node.highlighted + .graph-label {
   fill: var(--graph-label-color-highlighted, var(--text-accent));
 }
 
 .graph-node-label.dimmed,
-.graph-label.dimmed {
+.graph-label.dimmed,
+.graph-node.dimmed + .graph-label {
   opacity: var(--graph-label-opacity-dimmed, 0.3);
 }
 
-.graph-node.highlighted + .graph-label {
-  opacity: 1;
-  fill: var(--text-normal);
-}
-
-.graph-node.dimmed + .graph-label {
-  opacity: 0.3;
-}
-
-/* 5. Interaction States
+/* 4. Interaction States
 /*----------------------------------------*/
 /* Dragging state */
-.dragging {
+.dragging,
+.graph-view-dragging {
   cursor: grabbing !important;
   touch-action: none;
 }
 
 .graph-view-dragging {
   user-select: none !important;
-  touch-action: none !important;
-  cursor: grabbing !important;
 }
 
 .graph-view-dragging .graph-container {
@@ -133,10 +116,7 @@
   touch-action: none;
 }
 
-/* Removed performance optimizations for transitions during interactions */
-/* Removed default animations section */
-
-/* 6. Tooltips & Popups
+/* 5. Tooltips & Popups
 /*----------------------------------------*/
 .graph-node-tooltip {
   background-color: var(--background-primary);
@@ -199,10 +179,15 @@
   flex: 1;
 }
 
-.metadata-section-title {
+.metadata-section-title,
+.preview-section-title {
   color: var(--text-accent);
   font-weight: var(--font-medium);
   font-size: var(--font-ui-small);
+  margin-bottom: 6px;
+}
+
+.metadata-section-title {
   margin: 12px 0 8px 0;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--background-modifier-border);
@@ -236,13 +221,6 @@
   flex-direction: column;
 }
 
-.preview-section-title {
-  color: var(--text-accent);
-  font-weight: var(--font-medium);
-  font-size: var(--font-ui-small);
-  margin-bottom: 6px;
-}
-
 .preview-content {
   background-color: var(--background-secondary);
   color: var(--text-normal);
@@ -265,11 +243,9 @@
   color: var(--text-on-accent) !important;
   border: none;
   border-radius: var(--radius-s);
-  /* padding: 6px 12px; */
   cursor: pointer;
   font-weight: var(--font-medium);
   font-size: var(--font-ui-smaller);
-  /* Removed transition */
   display: inline-block;
   width: 100%;
 }
@@ -295,7 +271,6 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  /* Using absolute positioning instead of transform for positioning */
   margin-top: -15px; /* Half of expected height */
   margin-left: -50px; /* Half of expected width */
   background-color: var(--graph-loading-background);
@@ -307,293 +282,315 @@
   font-size: var(--font-ui-small);
 }
 
-/* 7. Performance Optimizations - Removed section */
-/* Removed all GPU acceleration optimizations */
-
-/* 8. Media Queries
+/* 6. Centrality Features
 /*----------------------------------------*/
-/* Accessibility - reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  /* No need for this since we removed all transitions and animations */
-}
-
 /* Centrality Control Panel */
 .centrality-control-panel {
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    /* Using margins instead of transform */
-    margin-top: -50px; /* Estimate of half the height */
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 100;
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  margin-top: -50px; /* Estimate of half the height */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 100;
 }
 
 .centrality-button {
-    width: var(--icon-size);
-    height: var(--icon-size);
-    border-radius: 50%;
-    border: none;
-    background-color: var(--background-modifier-border);
-    color: var(--text-muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-ui-smaller);
-    /* Removed transition */
-    box-shadow: 0 1px 3px var(--background-modifier-box-shadow);
-    position: relative;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  border-radius: 50%;
+  border: none;
+  background-color: var(--background-modifier-border);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-ui-smaller);
+  box-shadow: 0 1px 3px var(--background-modifier-box-shadow);
+  position: relative;
 }
 
 .centrality-button:hover {
-    background-color: var(--interactive-accent-hover);
-    color: var(--text-on-accent);
-    /* Removed transform scale */
+  background-color: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
 }
 
 .centrality-button.active {
-    background-color: var(--interactive-accent);
-    color: var(--text-on-accent);
-    box-shadow: 0 2px 4px var(--background-modifier-box-shadow);
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-shadow: 0 2px 4px var(--background-modifier-box-shadow);
 }
 
 .centrality-button-tooltip {
-    position: absolute;
-    right: 30px;
-    top: 50%;
-    /* Using margins instead of transform */
-    margin-top: -35px; /* Estimate of half height */
-    background-color: var(--background-primary);
-    padding: 8px 12px;
-    border-radius: var(--radius-m);
-    opacity: 0;
-    pointer-events: none;
-    /* Removed transition */
-    box-shadow: 0 2px 8px var(--background-modifier-box-shadow);
-    border: var(--border-width) solid var(--background-modifier-border);
-    width: 200px;
-    white-space: normal;
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  margin-top: -35px; /* Estimate of half height */
+  background-color: var(--background-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius-m);
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 2px 8px var(--background-modifier-box-shadow);
+  border: var(--border-width) solid var(--background-modifier-border);
+  width: 200px;
+  white-space: normal;
 }
 
 .centrality-button-tooltip .tooltip-title {
-    font-weight: var(--font-medium);
-    font-size: var(--font-ui-small);
-    margin-bottom: 4px;
-    color: var(--text-normal);
-    word-wrap: break-word;
+  font-weight: var(--font-medium);
+  font-size: var(--font-ui-small);
+  margin-bottom: 4px;
+  color: var(--text-normal);
+  word-wrap: break-word;
 }
 
 .centrality-button-tooltip .tooltip-description {
-    font-size: var(--font-ui-smaller);
-    color: var(--text-muted);
-    line-height: 1.4;
-    word-wrap: break-word;
-    hyphens: auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: 1.4;
+  word-wrap: break-word;
+  hyphens: auto;
 }
 
 .centrality-button:hover .centrality-button-tooltip {
-    opacity: 1;
+  opacity: 1;
 }
 
 /* Centrality Results View */
 .centrality-results-container {
-    padding: 8px;
-    height: 100%;
-    overflow-y: auto;
+  padding: 8px;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .centrality-results-header {
-    margin-bottom: 12px;
-    padding: 0 8px;
+  margin-bottom: 12px;
+  padding: 0 8px;
 }
 
 .centrality-results-header h2 {
-    margin: 0;
-    font-size: var(--font-ui-medium);
-    color: var(--text-normal);
+  margin: 0;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
 }
 
 .centrality-results-list {
-    display: flex;
-    flex-direction: column;
-    counter-reset: result-counter;
+  display: flex;
+  flex-direction: column;
+  counter-reset: result-counter;
 }
 
 .centrality-result-item {
-    display: flex;
-    align-items: center;
-    padding: 4px 8px;
-    /* Removed transition */
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: var(--font-ui-small);
-    border-radius: 2px;
-    position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  border-radius: 2px;
+  position: relative;
 }
 
 .centrality-result-item::before {
-    counter-increment: result-counter;
-    content: counter(result-counter) ".";
-    color: var(--text-muted);
-    font-size: var(--font-ui-smaller);
-    margin-right: 8px;
-    min-width: 20px;
+  counter-increment: result-counter;
+  content: counter(result-counter) ".";
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-right: 8px;
+  min-width: 20px;
 }
 
 .centrality-result-item:hover {
-    background-color: var(--nav-item-background-hover);
-    color: var(--text-normal);
+  background-color: var(--nav-item-background-hover);
+  color: var(--text-normal);
 }
 
 .result-note-info {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-note-link {
-    color: inherit;
-    text-decoration: none;
+  color: inherit;
+  text-decoration: none;
 }
 
 .result-score {
-    color: var(--interactive-accent);
-    font-size: var(--font-ui-smaller);
-    margin-left: 8px;
+  color: var(--interactive-accent);
+  font-size: var(--font-ui-smaller);
+  margin-left: 8px;
 }
 
-
-/* Color Settings Styles */
+/* 7. Color Settings Panel
+/*----------------------------------------*/
 .color-settings-button {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    z-index: 1000;
-    width: var(--icon-size);
-    height: var(--icon-size);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    /* Removed transition */
-}
-
-.color-settings-button:hover {
-    /* Removed transform */
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .color-settings-button svg {
-    width: var(--icon-size);
-    height: var(--icon-size);
-    color: var(--text-muted);
-    /* Removed transition */
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--text-muted);
 }
 
 .color-settings-button:hover svg {
-    color: var(--text-normal);
+  color: var(--text-normal);
 }
 
 .color-settings-dropdown {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: var(--background-primary);
-    /* Removed backdrop-filter */
-    border-radius: var(--radius-m);
-    box-shadow: 
-        0 4px 12px var(--background-modifier-box-shadow),
-        inset 0 0 0 1px var(--background-modifier-border);
-    width: 210px;
-    height: fit-content;
-    max-height: 90vh;
-    padding: 20px;
-    z-index: 1000;
-    overflow-y: auto;
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: var(--background-primary);
+  border-radius: var(--radius-m);
+  box-shadow: 
+    0 4px 12px var(--background-modifier-box-shadow),
+    inset 0 0 0 1px var(--background-modifier-border);
+  width: 210px;
+  height: fit-content;
+  max-height: 90vh;
+  padding: 20px;
+  z-index: 1000;
+  overflow-y: auto;
 }
 
+/* Gradient sections */
 .gradient-section {
-    margin-bottom: 9px;
+  margin-bottom: 9px;
 }
 
 .gradient-section:last-child {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 .gradient-section-title {
-    font-size: var(--font-ui-smaller);
-    font-weight: var(--font-medium);
-    color: var(--text-normal);
-    margin-bottom: 9px;
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  color: var(--text-normal);
+  margin-bottom: 9px;
+}
+
+/* Gradient previews */
+.gradient-preview,
+.gradient-option {
+  border-radius: var(--radius-s);
+  overflow: hidden;
+  display: flex;
+  cursor: pointer;
+  border: var(--border-width) solid var(--background-modifier-border);
 }
 
 .gradient-preview {
-    height: 15px;
-    border-radius: var(--radius-s);
-    overflow: hidden;
-    display: flex;
-    cursor: pointer;
-    border: var(--border-width) solid var(--background-modifier-border);
-    /* Removed transition */
-    margin-bottom: 9px;
+  height: 15px;
+  margin-bottom: 9px;
 }
 
-.gradient-preview:hover {
-    /* Removed transform */
-    box-shadow: 
-        0 4px 8px var(--background-modifier-box-shadow),
-        inset 0 0 0 1px var(--background-modifier-border-hover);
+.gradient-option {
+  height: 12px;
+  min-height: 12px;
 }
 
-.gradient-preview .color-box {
-    flex: 1;
-    height: 100%;
+.gradient-preview:hover,
+.gradient-option:hover {
+  box-shadow: 
+    0 4px 8px var(--background-modifier-box-shadow),
+    inset 0 0 0 1px var(--background-modifier-border-hover);
 }
 
+.gradient-preview .color-box,
+.gradient-option .color-box {
+  flex: 1;
+  height: 100%;
+}
+
+.gradient-option.selected {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+/* Options container */
 .gradient-options {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-    margin-top: 0;
-    max-height: 0;
-    opacity: 0;
-    overflow-y: hidden;
-    /* Removed transition */
-    pointer-events: none;
-    padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 0;
+  max-height: 0;
+  opacity: 0;
+  overflow-y: hidden;
+  pointer-events: none;
+  padding-right: 6px;
 }
 
 .gradient-options.expanded {
-    max-height: 60vh;
-    opacity: 1;
-    margin-top: 9px;
-    pointer-events: auto;
-    overflow-y: auto;
+  max-height: 60vh;
+  opacity: 1;
+  margin-top: 9px;
+  pointer-events: auto;
+  overflow-y: auto;
 }
 
-/* Scrollbar styles */
 .gradient-options.expanded::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 
+/* Controls */
+.gradient-controls {
+  margin-top: 12px;
+  padding: 8px;
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.gradient-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gradient-control-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  min-width: 60px;
+}
+
+.gradient-control-input {
+  flex: 1;
+}
+
+/* Form elements */
 .gradient-control-input select {
-    width: 100%;
-    background: var(--background-primary);
-    color: var(--text-normal);
-    border-radius: var(--radius-s);
-    padding: 2px 6px;
-    font-size: var(--font-ui-smaller);
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    text-align-last: center;
-    border: var(--border-width) solid var(--background-modifier-border);
-    /* Removed transition */
-    box-shadow: none;
+  width: 100%;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border-radius: var(--radius-s);
+  padding: 2px 6px;
+  font-size: var(--font-ui-smaller);
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-align-last: center;
+  border: var(--border-width) solid var(--background-modifier-border);
+  box-shadow: none;
 }
 
 .gradient-control-input select:hover {
@@ -601,87 +598,29 @@
 }
 
 .gradient-control-input select:focus {
-    border-color: var(--interactive-accent-hover);
-    box-shadow: none;
-}
-
-
-
-.gradient-option {
-    height: 12px;
-    min-height: 12px;
-    border-radius: var(--radius-s);
-    overflow: hidden;
-    display: flex;
-    cursor: pointer;
-    border: var(--border-width) solid var(--background-modifier-border);
-    /* Removed transition */
-}
-
-.gradient-option .color-box {
-    flex: 1;
-    height: 100%;
-}
-
-.gradient-option:hover {
-    /* Removed transform */
-    box-shadow: 
-        0 4px 8px var(--background-modifier-box-shadow),
-        inset 0 0 0 1px var(--background-modifier-border-hover);
-}
-
-.gradient-option.selected {
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 1px var(--interactive-accent);
-}
-
-.gradient-controls {
-    margin-top: 12px;
-    padding: 8px;
-    background: var(--background-secondary);
-    border-radius: var(--radius-s);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.gradient-control-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.gradient-control-label {
-    font-size: var(--font-ui-smaller);
-    color: var(--text-muted);
-    min-width: 60px;
-}
-
-.gradient-control-input {
-    flex: 1;
+  border-color: var(--interactive-accent-hover);
+  box-shadow: none;
 }
 
 .gradient-control-button {
-    width: 100%;
-    background: var(--background-primary);
-    color: var(--text-normal);
-    border-radius: var(--radius-s);
-    padding: 2px;
-    font-size: var(--font-ui-smaller);
-    cursor: pointer;
-    /* Removed transition */
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  width: 100%;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border-radius: var(--radius-s);
+  padding: 2px;
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .gradient-control-button:hover {
-    background: var(--background-modifier-border-hover);
+  background: var(--background-modifier-border-hover);
 }
 
 .gradient-control-button.active {
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
