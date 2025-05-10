@@ -39,18 +39,12 @@
 /*----------------------------------------*/
 /* Node styles */
 .graph-node {
-  will-change: cx, cy, r, fill, opacity;
-  contain: strict;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  transform-origin: center;
+  /* Removed transition */
 }
 
 /* Link styles */
 .graph-link {
-  will-change: x1, y1, x2, y2, stroke, stroke-width;
-  contain: paint;
-  transform: translateZ(0);
+  /* Removed transition */
 }
 
 /* 4. Labels & Text
@@ -64,15 +58,11 @@
   height: 100%;
   pointer-events: none;
   overflow: visible;
-  transform-origin: center center;
-  will-change: transform;
-  backface-visibility: hidden;
 }
 
 /* Node label styles */
 .graph-node-label {
   position: absolute;
-  transform-origin: center top;
   font-size: var(--graph-label-font-size, 10px);
   color: var(--graph-label-color, var(--text-muted));
   opacity: var(--graph-label-opacity, 0.7);
@@ -80,12 +70,9 @@
   user-select: none;
   text-align: center;
   white-space: nowrap;
-  transition: opacity 200ms ease-out, color 200ms ease-out;
-  will-change: transform;
-  backface-visibility: hidden;
+  /* Removed transition */
   margin: 0;
   padding: 0;
-  text-rendering: optimizeLegibility;
 }
 
 .graph-label {
@@ -97,7 +84,7 @@
   opacity: var(--graph-label-opacity, 0.7);
   text-anchor: middle;
   dominant-baseline: text-after-edge;
-  transition: opacity 200ms ease-out, fill 200ms ease-out;
+  /* Removed transition */
 }
 
 /* Label states */
@@ -138,8 +125,6 @@
 
 .graph-view-dragging .graph-container {
   pointer-events: auto !important;
-  contain: strict !important;
-  will-change: transform !important;
 }
 
 /* Zooming state */
@@ -148,27 +133,8 @@
   touch-action: none;
 }
 
-/* Disable transitions during interactions */
-.dragging .graph-node,
-.dragging .graph-link,
-.zooming .graph-node,
-.zooming .graph-link,
-.zooming .graph-node-label,
-.dragging .graph-node-label {
-  transition: none !important;
-  animation: none !important;
-}
-
-/* Default animations */
-.graph-initialized .graph-node,
-.graph-initialized .graph-link {
-  transition: 
-    transform 200ms ease-out, 
-    opacity 200ms ease-out, 
-    fill 200ms ease-out, 
-    stroke 200ms ease-out, 
-    stroke-width 200ms ease-out;
-}
+/* Removed performance optimizations for transitions during interactions */
+/* Removed default animations section */
 
 /* 6. Tooltips & Popups
 /*----------------------------------------*/
@@ -303,7 +269,7 @@
   cursor: pointer;
   font-weight: var(--font-medium);
   font-size: var(--font-ui-smaller);
-  transition: background-color 0.2s ease;
+  /* Removed transition */
   display: inline-block;
   width: 100%;
 }
@@ -329,7 +295,9 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  /* Using absolute positioning instead of transform for positioning */
+  margin-top: -15px; /* Half of expected height */
+  margin-left: -50px; /* Half of expected width */
   background-color: var(--graph-loading-background);
   color: var(--graph-loading-text);
   padding: 8px 16px;
@@ -339,33 +307,14 @@
   font-size: var(--font-ui-small);
 }
 
-/* 7. Performance Optimizations
-/*----------------------------------------*/
-.graph-view-svg,
-.graph-container {
-  will-change: transform;
-  contain: strict;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
+/* 7. Performance Optimizations - Removed section */
+/* Removed all GPU acceleration optimizations */
 
 /* 8. Media Queries
 /*----------------------------------------*/
-/* High-DPI optimizations */
-@media (min-resolution: 2dppx) {
-  .graph-node,
-  .graph-link {
-    image-rendering: optimizeSpeed;
-  }
-}
-
 /* Accessibility - reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .graph-node,
-  .graph-link {
-    transition: none !important;
-    animation: none !important;
-  }
+  /* No need for this since we removed all transitions and animations */
 }
 
 /* Centrality Control Panel */
@@ -373,7 +322,8 @@
     position: absolute;
     right: 20px;
     top: 50%;
-    transform: translateY(-50%);
+    /* Using margins instead of transform */
+    margin-top: -50px; /* Estimate of half the height */
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -392,7 +342,7 @@
     align-items: center;
     justify-content: center;
     font-size: var(--font-ui-smaller);
-    transition: all 200ms ease;
+    /* Removed transition */
     box-shadow: 0 1px 3px var(--background-modifier-box-shadow);
     position: relative;
 }
@@ -400,7 +350,7 @@
 .centrality-button:hover {
     background-color: var(--interactive-accent-hover);
     color: var(--text-on-accent);
-    transform: scale(1.1);
+    /* Removed transform scale */
 }
 
 .centrality-button.active {
@@ -413,13 +363,14 @@
     position: absolute;
     right: 30px;
     top: 50%;
-    transform: translateY(-50%);
+    /* Using margins instead of transform */
+    margin-top: -35px; /* Estimate of half height */
     background-color: var(--background-primary);
     padding: 8px 12px;
     border-radius: var(--radius-m);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 200ms ease;
+    /* Removed transition */
     box-shadow: 0 2px 8px var(--background-modifier-box-shadow);
     border: var(--border-width) solid var(--background-modifier-border);
     width: 200px;
@@ -474,7 +425,7 @@
     display: flex;
     align-items: center;
     padding: 4px 8px;
-    transition: background-color 100ms ease-in-out;
+    /* Removed transition */
     cursor: pointer;
     color: var(--text-muted);
     font-size: var(--font-ui-small);
@@ -527,18 +478,18 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 0.2s ease;
+    /* Removed transition */
 }
 
 .color-settings-button:hover {
-    transform: scale(1.1);
+    /* Removed transform */
 }
 
 .color-settings-button svg {
     width: var(--icon-size);
     height: var(--icon-size);
     color: var(--text-muted);
-    transition: color 0.2s ease;
+    /* Removed transition */
 }
 
 .color-settings-button:hover svg {
@@ -549,8 +500,8 @@
     position: absolute;
     top: 20px;
     left: 20px;
-    background: var(--background-primary-transparent);
-    backdrop-filter: blur(10px);
+    background: var(--background-primary);
+    /* Removed backdrop-filter */
     border-radius: var(--radius-m);
     box-shadow: 
         0 4px 12px var(--background-modifier-box-shadow),
@@ -585,12 +536,12 @@
     display: flex;
     cursor: pointer;
     border: var(--border-width) solid var(--background-modifier-border);
-    transition: all 0.2s ease;
+    /* Removed transition */
     margin-bottom: 9px;
 }
 
 .gradient-preview:hover {
-    transform: translateY(-1px);
+    /* Removed transform */
     box-shadow: 
         0 4px 8px var(--background-modifier-box-shadow),
         inset 0 0 0 1px var(--background-modifier-border-hover);
@@ -609,7 +560,7 @@
     max-height: 0;
     opacity: 0;
     overflow-y: hidden;
-    transition: all 0.2s ease-out;
+    /* Removed transition */
     pointer-events: none;
     padding-right: 6px;
 }
@@ -641,7 +592,7 @@
     text-align: center;
     text-align-last: center;
     border: var(--border-width) solid var(--background-modifier-border);
-    transition: border 0.2s ease;
+    /* Removed transition */
     box-shadow: none;
 }
 
@@ -664,7 +615,7 @@
     display: flex;
     cursor: pointer;
     border: var(--border-width) solid var(--background-modifier-border);
-    transition: all 0.2s ease;
+    /* Removed transition */
 }
 
 .gradient-option .color-box {
@@ -673,7 +624,7 @@
 }
 
 .gradient-option:hover {
-    transform: translateY(-1px);
+    /* Removed transform */
     box-shadow: 
         0 4px 8px var(--background-modifier-box-shadow),
         inset 0 0 0 1px var(--background-modifier-border-hover);
@@ -719,7 +670,7 @@
     padding: 2px;
     font-size: var(--font-ui-smaller);
     cursor: pointer;
-    transition: all 0.2s ease;
+    /* Removed transition */
     height: 24px;
     display: flex;
     align-items: center;
