@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import { GraphData, Node, IGraphAnalysisPlugin, GraphNeighborsResult, GraphMetadata } from '../types/types';
+import { GraphData, Node, IGraphAnalysisPlugin, GraphNeighborsResult, GraphMetadata, VaultData } from '../types/types';
 import GraphAnalysisPlugin from '../main';
 
 interface ExtendedApp extends App {
@@ -32,6 +32,15 @@ export class PluginService {
     async buildGraphFromVault(): Promise<GraphData> {
         await this.ensureWasmLoaded();
         return this.plugin.buildGraphFromVault();
+    }
+
+    /**
+     * Initialize the graph with provided graph data.
+     * This method aligns with the Rust side's VaultData structure.
+     */
+    async initializeGraph(graphData: GraphData): Promise<void> {
+        await this.ensureWasmLoaded();
+        await this.plugin.initializeGraphWithData(graphData);
     }
 
     calculateDegreeCentrality(): Node[] {

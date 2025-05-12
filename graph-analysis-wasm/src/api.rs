@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 use rustworkx_core::centrality::{betweenness_centrality, closeness_centrality, eigenvector_centrality, degree_centrality};
 use rustworkx_core::petgraph::visit::EdgeRef;
 use crate::models::*;
-use crate::graph_manager::{GRAPH_MANAGER, check_graph_initialized, initialize_from_vault};
+use crate::graph_manager::{GRAPH_MANAGER, check_graph_initialized, initialize_from_vault, clear};
 use crate::utils;
 
 // Helper function to sort and format results
@@ -57,17 +57,15 @@ pub fn build_graph_from_vault(vault_data_json: &str) -> String {
         }
     };
     
-    // Use GraphManager to initialize from vault files
-    match initialize_from_vault(&vault_data.files) {
-        Ok(graph_data) => {
-            // Return the graph data as JSON
-            match serde_json::to_string(&graph_data) {
-                Ok(json) => json,
-                Err(e) => {
-                    let error = ErrorResponse { error: format!("Failed to serialize graph data: {}", e) };
-                    serde_json::to_string(&error).unwrap_or_else(|_| r#"{"error":"Failed to serialize error"}"#.to_string())
-                }
-            }
+    // Initialize the graph from vault data
+    match initialize_from_vault(&vault_data) {
+        Ok(()) => {
+            // Return success response
+            let success = serde_json::json!({
+                "status": "success",
+                "message": "Graph initialized successfully"
+            });
+            serde_json::to_string(&success).unwrap_or_else(|_| r#"{"status":"error","message":"Failed to serialize success response"}"#.to_string())
         },
         Err(e) => {
             let error = ErrorResponse { error: e };
@@ -127,8 +125,8 @@ pub fn get_graph_metadata() -> String {
 
 #[wasm_bindgen]
 pub fn clear_graph() -> String {
-    let mut graph_manager = GRAPH_MANAGER.lock().unwrap();
-    *graph_manager = None;
+    // Call the clear_graph function from graph_manager module
+    clear();
     
     let result = serde_json::json!({
         "status": "success",

@@ -4,6 +4,7 @@ import * as d3 from 'd3';
 export interface IGraphAnalysisPlugin {
     ensureWasmLoaded(): Promise<void>;
     buildGraphFromVault(): Promise<GraphData>;
+    initializeGraphWithData(graphData: GraphData): Promise<void>;
     getNodeNeighborsCached(nodeId: number): GraphNeighborsResult;
     calculateDegreeCentralityCached(): Node[];
     calculateEigenvectorCentralityCached(): Node[];
@@ -25,6 +26,17 @@ export const DEFAULT_SETTINGS: GraphAnalysisSettings = {
     excludeTags: [],
     resultLimit: 30
 };
+
+// Vault Note (matches Rust VaultNote)
+export interface VaultNote {
+    id: string;
+}
+
+// Vault Data structure for transferring data to Rust (matches Rust VaultData)
+export interface VaultData {
+    notes: VaultNote[];
+    links: [number, number][];  // Pairs of note indices representing connections
+}
 
 // Core Graph Data structure (matches Rust GraphData)
 export interface GraphData {

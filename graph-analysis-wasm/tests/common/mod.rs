@@ -1,28 +1,36 @@
-use graph_analysis_wasm::graph_manager::{GraphManager, GRAPH_MANAGER};
+use graph_analysis_wasm::models::{VaultNote, VaultData};
+use graph_analysis_wasm::{build_graph_from_vault, clear_graph};
+use serde_json;
 
-/// Creates a test graph with the following structure:
+/// Creates a test graph from vault data with the following structure:
 /// ```text
-/// A --- B --- C
-/// |           |
-/// |           |
-/// D -----------
+/// note1 --- note2
+///   |         |
+///   |         |
+/// note3 -------
 /// ```
-pub fn create_test_graph_manager() {
-    let mut manager = GraphManager::with_capacity(4, 4);
+pub fn create_test_graph_from_vault() -> VaultData {
+    VaultData {
+        notes: vec![
+            VaultNote { id: "note1.md".to_string() },
+            VaultNote { id: "note2.md".to_string() },
+            VaultNote { id: "note3.md".to_string() }
+        ],
+        links: vec![(0, 1), (0, 2), (1, 2)]  // note1->note2, note1->note3, note2->note3
+    }
+}
+
+
+/// Helper function to initialize the graph from vault data
+pub fn initialize_test_graph() {
+    // Ensure we start with a clean state
+    clear_graph();
     
-    // Add nodes
-    let a = manager.add_node("A".to_string());
-    let b = manager.add_node("B".to_string());
-    let c = manager.add_node("C".to_string());
-    let d = manager.add_node("D".to_string());
+    // create vault data from test graph
+    let vault_data = create_test_graph_from_vault();
+    // convert vault data to json
+    let vault_json = serde_json::to_string(&vault_data).unwrap();
     
-    // Add edges (using unwrap since we know the indices are valid)
-    manager.add_edge(a, b).unwrap(); // A - B
-    manager.add_edge(b, c).unwrap(); // B - C
-    manager.add_edge(a, d).unwrap(); // A - D
-    manager.add_edge(d, c).unwrap(); // D - C
-    
-    // Store in global state
-    let mut graph_manager = GRAPH_MANAGER.lock().unwrap();
-    *graph_manager = Some(manager);
+    // build graph from vault data using api
+    build_graph_from_vault(&vault_json);
 } 

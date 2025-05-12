@@ -7,7 +7,7 @@ mod api;
 pub use api::*;
 
 // Re-export needed items from models for convenience
-pub use models::{GraphData, VaultData, VaultFile, GraphNeighborsResult, GraphMetadata};
+pub use models::{GraphData, VaultData, GraphNeighborsResult, GraphMetadata};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.

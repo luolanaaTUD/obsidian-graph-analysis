@@ -1,10 +1,10 @@
 use rustworkx_core::petgraph::graph::UnGraph;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use std::sync::Mutex;
-use std::collections::HashMap;
-use regex;
+// use std::sync::Mutex;
+// use std::collections::HashMap;
 
-use crate::models::{GraphData, VaultFile};
+use crate::models::{GraphData, VaultData};
 
 // Graph manager to store the graph in memory
 #[derive(Debug)]
@@ -13,10 +13,8 @@ pub struct GraphManager {
     pub node_names: Vec<String>,
 }
 
-// Static mutex to store the graph manager
-lazy_static! {
-    pub static ref GRAPH_MANAGER: Mutex<Option<GraphManager>> = Mutex::new(None);
-}
+// Static reference to store the graph manager
+pub static GRAPH_MANAGER: Lazy<Mutex<Option<GraphManager>>> = Lazy::new(|| Mutex::new(None));
 
 impl GraphManager {
     /// Create a new empty graph manager
@@ -28,7 +26,7 @@ impl GraphManager {
     }
 
     /// Create a graph manager with pre-allocated capacity
-    pub fn with_capacity(node_capacity: usize, edge_capacity: usize) -> Self {
+    fn with_capacity(node_capacity: usize, edge_capacity: usize) -> Self {
         Self {
             graph: UnGraph::<String, ()>::with_capacity(node_capacity, edge_capacity),
             node_names: Vec::with_capacity(node_capacity),
@@ -44,7 +42,7 @@ impl GraphManager {
             manager.add_node(node_name.clone());
         }
         
-        // Add all edges
+        // Add all edges - edges are already deduplicated in TypeScript
         for (source, target) in &data.edges {
             if *source < manager.node_names.len() && *target < manager.node_names.len() {
                 // Using unwrap is safe here because we just checked the indices
@@ -58,47 +56,24 @@ impl GraphManager {
         manager
     }
     
-    /// Create a graph manager from vault files
-    pub fn from_vault_files(files: &[VaultFile]) -> Result<Self, String> {
-        let mut manager = Self::with_capacity(files.len(), files.len() * 2);
-        let mut node_map = HashMap::with_capacity(files.len());
+    /// Create a graph manager from vault data
+    fn from_vault_files(vault_data: &VaultData) -> Result<Self, String> {
+        let mut manager = Self::with_capacity(vault_data.notes.len(), vault_data.links.len());
         
-        // Add all nodes first and build the node map
-        for file in files {
-            let index = manager.add_node(file.path.clone());
-            node_map.insert(file.path.clone(), index);
+        // Add all nodes first
+        for note in &vault_data.notes {
+            manager.add_node(note.id.clone());
         }
         
-        // Extract links and add edges
-        match regex::Regex::new(r"\[\[([^]]+?)]]") {
-            Ok(link_regex) => {
-                for file in files {
-                    if let Some(&source_id) = node_map.get(&file.path) {
-                        for capture in link_regex.captures_iter(&file.content) {
-                            if let Some(link_match) = capture.get(1) {
-                                let mut link_path = link_match.as_str().to_string();
-                                
-                                // Handle aliases in links
-                                if link_path.contains('|') {
-                                    link_path = link_path.split('|').next().unwrap().to_string();
-                                }
-                                
-                                // Try to resolve the link to a file
-                                if let Some(&target_id) = node_map.get(&link_path) {
-                                    let _ = manager.add_edge(source_id, target_id);
-                                } 
-                                // Try with .md extension
-                                else if let Some(&target_id) = node_map.get(&format!("{}.md", link_path)) {
-                                    let _ = manager.add_edge(source_id, target_id);
-                                }
-                            }
-                        }
-                    }
-                }
-                Ok(manager)
-            },
-            Err(e) => Err(format!("Failed to compile link regex: {}", e))
+        // Add all edges
+        for (source, target) in &vault_data.links {
+            if let Err(e) = manager.add_edge(*source, *target) {
+                // Log the error but continue processing other edges
+                eprintln!("Error adding edge ({}, {}): {}", source, target, e);
+            }
         }
+        
+        Ok(manager)
     }
 
     /// Convert manager back to GraphData for serialization
@@ -111,7 +86,12 @@ impl GraphManager {
                     let target_pos = self.graph.node_indices().position(|idx| idx == target);
                     
                     if let (Some(s), Some(t)) = (source_pos, target_pos) {
-                        Some((s, t))
+                        // For undirected graph, always return edge with smaller index first
+                        if s <= t {
+                            Some((s, t))
+                        } else {
+                            Some((t, s))
+                        }
                     } else {
                         None
                     }
@@ -143,13 +123,13 @@ impl GraphManager {
             return Err(format!("Invalid node index: {}", index));
         }
         
-        // Get node index in DiGraph
+        // Get node index in graph
         let node_idx = match self.graph.node_indices().nth(index) {
             Some(idx) => idx,
             None => return Err(format!("Node index {} not found in graph", index))
         };
         
-        // Remove from DiGraph
+        // Remove from graph
         self.graph.remove_node(node_idx);
         
         // Remove from node_names
@@ -167,7 +147,7 @@ impl GraphManager {
             return Err(format!("Invalid target index: {}", target));
         }
         
-        // Get DiGraph indices
+        // Get graph indices
         let source_idx = match self.graph.node_indices().nth(source) {
             Some(idx) => idx,
             None => return Err(format!("Source node index {} not found in graph", source))
@@ -178,7 +158,7 @@ impl GraphManager {
             None => return Err(format!("Target node index {} not found in graph", target))
         };
         
-        // Add edge to DiGraph
+        // Add edge to graph
         self.graph.add_edge(source_idx, target_idx, ());
         
         Ok(())
@@ -193,7 +173,7 @@ impl GraphManager {
             return Err(format!("Invalid target index: {}", target));
         }
         
-        // Get DiGraph indices
+        // Get graph indices
         let source_idx = match self.graph.node_indices().nth(source) {
             Some(idx) => idx,
             None => return Err(format!("Source node index {} not found in graph", source))
@@ -212,37 +192,49 @@ impl GraphManager {
             Err(format!("No edge found between nodes {} and {}", source, target))
         }
     }
+
+    /// Get a clone of the internal graph
+    pub fn get_graph(&self) -> UnGraph<String, ()> {
+        self.graph.clone()
+    }
+    
+    /// Helper method to check if global graph is initialized
+    fn check_initialized() -> Result<(), String> {
+        if GRAPH_MANAGER.lock().unwrap().is_none() {
+            return Err("Graph not initialized. Call initialize_graph first.".to_string());
+        }
+        Ok(())
+    }
+    
+    /// Initialize the global graph from vault data
+    fn initialize_from_vault(vault_data: &VaultData) -> Result<(), String> {
+        let manager = Self::from_vault_files(vault_data)?;
+        
+        // Update global manager
+        *GRAPH_MANAGER.lock().unwrap() = Some(manager);
+        
+        Ok(())
+    }
+    
+    /// Clear the global graph instance
+    fn clear() {
+        let mut graph_manager = GRAPH_MANAGER.lock().unwrap();
+        *graph_manager = None;
+    }
 }
 
 // Helper function to check if graph is initialized
 pub fn check_graph_initialized() -> Result<(), String> {
-    let graph_manager = GRAPH_MANAGER.lock().unwrap();
-    if graph_manager.is_none() {
-        return Err("Graph not initialized. Call initialize_graph first.".to_string());
-    }
-    Ok(())
+    GraphManager::check_initialized()
 }
 
-// Initialize the global graph manager from GraphData
-pub fn initialize_graph(graph_data: &GraphData) -> Result<(), String> {
-    let manager = GraphManager::from_graph_data(graph_data);
-    
-    let mut graph_manager = GRAPH_MANAGER.lock().unwrap();
-    *graph_manager = Some(manager);
-    
-    Ok(())
+// Initialize the graph from vault data
+pub fn initialize_from_vault(vault_data: &VaultData) -> Result<(), String> {
+    GraphManager::initialize_from_vault(vault_data)
 }
 
-// Initialize from vault files and return the resulting GraphData
-pub fn initialize_from_vault(files: &[VaultFile]) -> Result<GraphData, String> {
-    let manager = GraphManager::from_vault_files(files)?;
-    
-    // Get GraphData for returning to JS
-    let graph_data = manager.to_graph_data();
-    
-    // Update global manager
-    let mut graph_manager = GRAPH_MANAGER.lock().unwrap();
-    *graph_manager = Some(manager);
-    
-    Ok(graph_data)
+// Clear the global graph instance
+pub fn clear() {
+    GraphManager::clear();
 } 
+
