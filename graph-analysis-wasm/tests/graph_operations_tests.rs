@@ -12,16 +12,16 @@ fn test_graph_metadata() {
     
     assert_eq!(metadata.node_count, 4);
     assert_eq!(metadata.edge_count, 4);
-    assert_eq!(metadata.max_degree, 2);
+    assert_eq!(metadata.max_degree, 2); // Each node has exactly 2 connections
     assert_eq!(metadata.avg_degree, 2.0);
-    assert!(metadata.is_directed);
+    assert!(!metadata.is_directed);
 }
 
 #[test]
 fn test_neighbors() {
     common::create_test_graph_manager();
     
-    // Test A's neighbors (should be B and D)
+    // Test A's neighbors (should be B and D in undirected graph)
     let result = get_node_neighbors_cached(0);
     println!("Neighbors JSON: {}", result);
     
@@ -69,7 +69,7 @@ fn test_build_graph_from_vault() {
     
     assert_eq!(graph_data.nodes.len(), 2);
     assert_eq!(graph_data.edges.len(), 1);
-    assert_eq!(graph_data.edges[0], (0, 1)); // note1 -> note2
+    assert_eq!(graph_data.edges[0], (0, 1)); // note1 - note2 (undirected)
     
     // Verify the graph is stored in the manager
     let metadata_result = get_graph_metadata();
@@ -77,6 +77,7 @@ fn test_build_graph_from_vault() {
     
     assert_eq!(metadata.node_count, 2);
     assert_eq!(metadata.edge_count, 1);
+    assert!(!metadata.is_directed);
 }
 
 #[test]
@@ -87,6 +88,7 @@ fn test_graph_clear() {
     let before_result = get_graph_metadata();
     let before_metadata: GraphMetadata = serde_json::from_str(&before_result).unwrap();
     assert_eq!(before_metadata.node_count, 4);
+    assert!(!before_metadata.is_directed);
     
     // Clear the graph
     let result = clear_graph();

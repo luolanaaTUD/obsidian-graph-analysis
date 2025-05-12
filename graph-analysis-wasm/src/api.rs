@@ -1,8 +1,6 @@
 use wasm_bindgen::prelude::*;
-use rustworkx_core::petgraph::Direction;
+use rustworkx_core::centrality::{betweenness_centrality, closeness_centrality, eigenvector_centrality, degree_centrality};
 use rustworkx_core::petgraph::visit::EdgeRef;
-use rustworkx_core::centrality;
-
 use crate::models::*;
 use crate::graph_manager::{GRAPH_MANAGER, check_graph_initialized, initialize_from_vault};
 use crate::utils;
@@ -100,10 +98,8 @@ pub fn get_graph_metadata() -> String {
     let mut total_degree = 0;
     
     for node_idx in manager.graph.node_indices() {
-        let out_degree = manager.graph.edges_directed(node_idx, Direction::Outgoing).count();
-        let in_degree = manager.graph.edges_directed(node_idx, Direction::Incoming).count();
-        let degree = out_degree + in_degree;
-        
+        // For undirected graph, we only need to count edges once
+        let degree = manager.graph.edges(node_idx).count();
         max_degree = std::cmp::max(max_degree, degree);
         total_degree += degree;
     }
@@ -116,7 +112,7 @@ pub fn get_graph_metadata() -> String {
         edge_count,
         max_degree,
         avg_degree,
-        is_directed: true, // DiGraph is always directed
+        is_directed: false, // Now using UnGraph which is undirected
     };
     
     // Serialize
@@ -166,35 +162,24 @@ pub fn get_node_neighbors_cached(node_id: usize) -> String {
     let node_idx = manager.graph.node_indices().nth(node_id).unwrap();
     
     let mut neighbors = Vec::new();
-    
-    // Add outgoing and incoming neighbors
     let mut processed_neighbors = std::collections::HashSet::new();
     
-    // Add outgoing neighbors
-    for edge in manager.graph.edges_directed(node_idx, Direction::Outgoing) {
-        let target_idx = manager.graph.node_indices().position(|id| id == edge.target()).unwrap();
+    // For undirected graph, we only need to get edges once
+    for edge in manager.graph.edges(node_idx) {
+        let neighbor_idx = if edge.source() == node_idx {
+            edge.target()
+        } else {
+            edge.source()
+        };
         
-        if !processed_neighbors.contains(&target_idx) {
-            processed_neighbors.insert(target_idx);
+        let neighbor_pos = manager.graph.node_indices().position(|id| id == neighbor_idx).unwrap();
+        
+        if !processed_neighbors.contains(&neighbor_pos) {
+            processed_neighbors.insert(neighbor_pos);
             
             neighbors.push(Node {
-                node_id: target_idx,
-                node_name: manager.node_names[target_idx].clone(),
-                centrality: CentralityScores::default(),
-            });
-        }
-    }
-    
-    // Add incoming neighbors
-    for edge in manager.graph.edges_directed(node_idx, Direction::Incoming) {
-        let source_idx = manager.graph.node_indices().position(|id| id == edge.source()).unwrap();
-        
-        if !processed_neighbors.contains(&source_idx) {
-            processed_neighbors.insert(source_idx);
-            
-            neighbors.push(Node {
-                node_id: source_idx,
-                node_name: manager.node_names[source_idx].clone(),
+                node_id: neighbor_pos,
+                node_name: manager.node_names[neighbor_pos].clone(),
                 centrality: CentralityScores::default(),
             });
         }
@@ -232,7 +217,7 @@ pub fn calculate_degree_centrality_cached() -> String {
     let manager = graph_manager.as_ref().unwrap();
     
     // Calculate degree centrality using rustworkx-core
-    let centrality_scores = centrality::degree_centrality(&manager.graph,None);
+    let centrality_scores = degree_centrality(&manager.graph, None);
     
     let mut results = Vec::new();
     
@@ -272,7 +257,7 @@ pub fn calculate_eigenvector_centrality_cached() -> String {
     
     // Calculate eigenvector centrality using rustworkx-core
     // Use unit weights (1.0) for all edges, max_iter=100, tol=1e-6
-    let centrality_result = centrality::eigenvector_centrality(
+    let centrality_result = eigenvector_centrality(
         &manager.graph,
         |_| Ok::<f64, String>(1.0),
         Some(100),
@@ -319,7 +304,7 @@ pub fn calculate_betweenness_centrality_cached() -> String {
     // include_endpoints: true (count paths ending at each vertex)
     // normalized: true (normalize by (n-1)(n-2) for directed graphs)
     // parallel_threshold: 1000 (default)
-    let centrality_scores = centrality::betweenness_centrality(
+    let centrality_scores = betweenness_centrality(
         &manager.graph,
         true,   // include endpoints
         true,   // normalize the results
@@ -363,7 +348,7 @@ pub fn calculate_closeness_centrality_cached() -> String {
     // Calculate closeness centrality using rustworkx-core
     // wf_improved: true for Wasserman and Faust's improved formula
     // This handles disconnected components and directed graphs better
-    let centrality_scores = centrality::closeness_centrality(
+    let centrality_scores = closeness_centrality(
         &manager.graph,
         true  // use improved formula for better handling of directed graphs
     );

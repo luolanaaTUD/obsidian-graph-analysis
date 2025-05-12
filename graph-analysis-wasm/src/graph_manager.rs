@@ -1,4 +1,4 @@
-use rustworkx_core::petgraph::graph::DiGraph;
+use rustworkx_core::petgraph::graph::UnGraph;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use crate::models::{GraphData, VaultFile};
 // Graph manager to store the graph in memory
 #[derive(Debug)]
 pub struct GraphManager {
-    pub graph: DiGraph<String, ()>,
+    pub graph: UnGraph<String, ()>,
     pub node_names: Vec<String>,
 }
 
@@ -22,7 +22,7 @@ impl GraphManager {
     /// Create a new empty graph manager
     pub fn new() -> Self {
         Self {
-            graph: DiGraph::<String, ()>::new(),
+            graph: UnGraph::<String, ()>::new_undirected(),
             node_names: Vec::new(),
         }
     }
@@ -30,7 +30,7 @@ impl GraphManager {
     /// Create a graph manager with pre-allocated capacity
     pub fn with_capacity(node_capacity: usize, edge_capacity: usize) -> Self {
         Self {
-            graph: DiGraph::<String, ()>::with_capacity(node_capacity, edge_capacity),
+            graph: UnGraph::<String, ()>::with_capacity(node_capacity, edge_capacity),
             node_names: Vec::with_capacity(node_capacity),
         }
     }

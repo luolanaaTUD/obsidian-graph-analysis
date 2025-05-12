@@ -14,14 +14,15 @@ fn test_degree_centrality_basic() {
     let result = calculate_degree_centrality_cached();
     let result_value: Vec<Node> = serde_json::from_str(&result).unwrap();
     
-    // Expected degree centralities for our test graph using rustworkx-core normalization:
-    // A: out=2, in=0, total=2 -> 2/(4-1) = 0.667 (normalized by n-1)
-    // B: out=1, in=1, total=2 -> 2/(4-1) = 0.667
-    // C: out=0, in=2, total=2 -> 2/(4-1) = 0.667
-    // D: out=1, in=1, total=2 -> 2/(4-1) = 0.667
+    // Expected degree centralities for our undirected test graph:
+    // Each edge contributes to both nodes' degrees
+    // A: connected to B and D -> 2/(4-1) ≈ 0.667
+    // B: connected to A and C -> 2/(4-1) ≈ 0.667
+    // C: connected to B and D -> 2/(4-1) ≈ 0.667
+    // D: connected to A and C -> 2/(4-1) ≈ 0.667
     
-    for result in result_value {
-        assert_relative_eq!(result.centrality.degree.unwrap_or(0.0), 0.667, epsilon = EPSILON);
+    for node in result_value {
+        assert_relative_eq!(node.centrality.degree.unwrap_or(0.0), 0.667, epsilon = EPSILON);
     }
 }
 
@@ -58,16 +59,17 @@ fn test_centrality_with_vault_graph() {
     // Validate results
     assert_eq!(centrality.len(), 3);
     
-    // Find note3 (should have highest centrality as it has 2 incoming links)
+    // In undirected graph:
+    // note3 has 2 connections (note1, note2) -> 2/(3-1) = 1.0
+    // note1 has 2 connections (note2, note3) -> 2/(3-1) = 1.0
+    // note2 has 2 connections (note1, note3) -> 2/(3-1) = 1.0
     let note3 = centrality.iter().find(|c| c.node_name == "note3.md").unwrap();
     let note1 = centrality.iter().find(|c| c.node_name == "note1.md").unwrap();
     let note2 = centrality.iter().find(|c| c.node_name == "note2.md").unwrap();
     
-    // note3 has the highest centrality (2 incoming, 0 outgoing)
-    // note1 has medium centrality (0 incoming, 2 outgoing)
-    // note2 has medium centrality (1 incoming, 1 outgoing)
-    assert!(note3.centrality.degree.unwrap_or(0.0) >= note1.centrality.degree.unwrap_or(0.0));
-    assert!(note3.centrality.degree.unwrap_or(0.0) >= note2.centrality.degree.unwrap_or(0.0));
+    assert_relative_eq!(note1.centrality.degree.unwrap_or(0.0), 1.0, epsilon = EPSILON);
+    assert_relative_eq!(note2.centrality.degree.unwrap_or(0.0), 1.0, epsilon = EPSILON);
+    assert_relative_eq!(note3.centrality.degree.unwrap_or(0.0), 1.0, epsilon = EPSILON);
 }
 
 #[test]
@@ -80,10 +82,9 @@ fn test_eigenvector_centrality_basic() {
     // Verify we got results for all nodes
     assert_eq!(result_value.len(), 4);
     
-    // In our test graph:
-    // C should have the highest eigenvector centrality (2 incoming edges)
-    // B and D should have medium values (each has 1 incoming and contributes to C)
-    // A should have lowest (no incoming edges)
+    // In our undirected test graph:
+    // All nodes have 2 connections each, forming a symmetric cycle
+    // Therefore, all nodes should have equal eigenvector centrality
     
     let a = result_value.iter().find(|n| n.node_name == "A").unwrap();
     let b = result_value.iter().find(|n| n.node_name == "B").unwrap();
@@ -97,14 +98,10 @@ fn test_eigenvector_centrality_basic() {
         c.centrality.eigenvector,
         d.centrality.eigenvector,
     ) {
-        // C should have highest centrality
-        assert!(c_score > b_score);
-        assert!(c_score > d_score);
-        
-        // A should have lowest centrality (no incoming edges)
-        assert!(a_score < b_score);
-        assert!(a_score < c_score);
-        assert!(a_score < d_score);
+        // All nodes should have similar eigenvector centrality
+        assert_relative_eq!(a_score, b_score, epsilon = EPSILON);
+        assert_relative_eq!(b_score, c_score, epsilon = EPSILON);
+        assert_relative_eq!(c_score, d_score, epsilon = EPSILON);
         
         // All values should be non-negative
         assert!(a_score >= 0.0);
@@ -124,17 +121,17 @@ fn test_betweenness_centrality_basic() {
     // Verify we got results for all nodes
     assert_eq!(result_value.len(), 4);
     
-    // In our directed test graph with endpoints included:
-    // A -> B -> C
-    // |         ^
-    // v         |
-    // D ------->|
+    // In our undirected test graph:
+    // A --- B --- C
+    // |           |
+    // |           |
+    // D -----------
     //
-    // Path analysis (including endpoints):
-    // A: source for paths A->B, A->B->C, A->D, A->D->C
-    // B: on paths A->B, A->B->C and endpoint for A->B
-    // C: endpoint for A->B->C, A->D->C, B->C, D->C
-    // D: on paths A->D, A->D->C and endpoint for A->D
+    // Path analysis:
+    // A is on paths: B-A-D, C-A-D
+    // B is on paths: A-B-C, D-B-C
+    // C is on paths: A-C-D, B-C-D
+    // D is on paths: A-D-C, B-D-C
     
     let a = result_value.iter().find(|n| n.node_name == "A").unwrap();
     let b = result_value.iter().find(|n| n.node_name == "B").unwrap();
@@ -148,15 +145,10 @@ fn test_betweenness_centrality_basic() {
         c.centrality.betweenness,
         d.centrality.betweenness,
     ) {
-        // C should have highest betweenness (endpoint of most paths)
-        assert!(c_score > b_score);
-        assert!(c_score > d_score);
-        
-        // B and D should have similar betweenness (each on 2 paths)
-        assert_relative_eq!(b_score, d_score, epsilon = EPSILON);
-        
-        // A should have non-zero betweenness (source of paths)
-        assert!(a_score > 0.0);
+        // All nodes should have similar betweenness in this symmetric graph
+        assert_relative_eq!(a_score, b_score, epsilon = EPSILON);
+        assert_relative_eq!(b_score, c_score, epsilon = EPSILON);
+        assert_relative_eq!(c_score, d_score, epsilon = EPSILON);
         
         // All scores should be normalized and between 0 and 1
         assert!(a_score >= 0.0 && a_score <= 1.0);
@@ -176,14 +168,14 @@ fn test_closeness_centrality_basic() {
     // Verify we got results for all nodes
     assert_eq!(result_value.len(), 4);
     
-    // In our directed test graph:
-    // A -> B -> C
-    // |         ^
-    // v         |
-    // D ------->|
+    // In our undirected test graph:
+    // A --- B --- C
+    // |           |
+    // |           |
+    // D -----------
     //
-    // Closeness centrality with wf_improved=true in directed graph:
-    // Formula: C(v) = (n_reach/(n-1)) / (sum_distances/n_reach)
+    // All nodes have similar closeness due to the symmetric nature
+    // Each node can reach all others in at most 2 steps
 
     let a = result_value.iter().find(|n| n.node_name == "A").unwrap();
     let b = result_value.iter().find(|n| n.node_name == "B").unwrap();
@@ -197,16 +189,9 @@ fn test_closeness_centrality_basic() {
         c.centrality.closeness,
         d.centrality.closeness,
     ) {
-        // A should have highest closeness (≈0.75)
-        assert_relative_eq!(a_score, 0.0, epsilon = EPSILON);
-        
-        // B and D should have equal closeness (=0.33)
-        assert_relative_eq!(b_score, 0.33333, epsilon = EPSILON);
-        assert_relative_eq!(d_score, 0.33333, epsilon = EPSILON);
-        
-        // C should have zero closeness (no outgoing paths)
-        assert_relative_eq!(c_score, 0.75, epsilon = EPSILON);
-        
+        // All nodes should have similar closeness
+        assert_relative_eq!(a_score, c_score, epsilon = EPSILON);
+        assert_relative_eq!(b_score, d_score, epsilon = EPSILON);
         
         // All values should be between 0 and 1
         assert!(a_score >= 0.0 && a_score <= 1.0);
