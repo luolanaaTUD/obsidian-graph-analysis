@@ -36,9 +36,6 @@ export class GraphDataBuilder {
             }
         }
 
-        // Instead of directly using getBacklinksForFile which may not be available,
-        // let's modify our approach to only use standard API methods
-        // This ensures compatibility with the Obsidian API
 
         return links;
     }
