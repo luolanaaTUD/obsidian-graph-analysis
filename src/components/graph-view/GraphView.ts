@@ -138,6 +138,16 @@ export class GraphView {
     // Add color palette state
     private colorPalettes = KEPLER_COLOR_PALETTES;
 
+    // Add a new property to track the current zoom scale
+    private currentZoomScale: number = 1;
+
+    // Add a label visibility constant to control when labels appear
+    private readonly LABEL = {
+        VISIBILITY: {
+            SHOW_THRESHOLD: 0.7  // Only show labels when zoomed in beyond this scale
+        }
+    } as const;
+
     constructor(app: App) {
         this.app = app;
         
@@ -172,7 +182,6 @@ export class GraphView {
         try {
             // Ensure WASM is initialized first
             await this.pluginService.ensureWasmLoaded();
-            
             await this.loadVaultData();
         } catch (error) {
             console.error('Error loading vault data:', error);
@@ -192,7 +201,7 @@ export class GraphView {
             .attr('width', '100%')
             .attr('height', '100%')
             .attr('viewBox', [
-                -this.width / 2,
+                -this.width / 2,  // Center the viewBox at (0,0)
                 -this.height / 2,
                 this.width,
                 this.height
@@ -295,7 +304,10 @@ export class GraphView {
                 // Update SVG group transform
                 this.svgGroup.attr('transform', event.transform);
                 
-                // Request a frame to update labels
+                // Store current zoom scale for label visibility calculation
+                this.currentZoomScale = event.transform.k;
+                
+                // Request a frame to update graph elements
                 if (!this._frameRequest) {
                     this._frameRequest = window.requestAnimationFrame(() => {
                         this.updateGraph();
@@ -306,6 +318,9 @@ export class GraphView {
             .on('end', () => {
                 this.container.removeClass('zooming');
                 this.restartSimulationGently();
+                
+                // Update label visibility after zoom ends
+                this.updateLabelVisibility();
             });
             
         // Enable zoom and pan
@@ -317,31 +332,29 @@ export class GraphView {
 
 
     /**
-     * Initialize the force simulation with modified forces to better fill the available space
+     * Initialize the force simulation with simplified forces similar to the D3 example
      */
     private initializeSimulation() {
-        // Create a simulation with modified forces to better fill the available space
-        const collisionRadius = this.getNodeRadius() + 2;
-        
+        // Create a simulation with forces matching Obsidian's built-in graph view defaults
         this.simulation = d3.forceSimulation<SimulationGraphNode>()
+            // Link force connects nodes with edges (link force: 1)
             .force('link', d3.forceLink<SimulationGraphNode, SimulationGraphLink>()
                 .id(d => d.id)
-                .distance(50)
-                .strength(0.7)) // Slightly reduced for smoother movement
+                .distance(250)) // link distance: 250
+            // Charge force creates repulsion between nodes (repel force: 10)
             .force('charge', d3.forceManyBody()
-                .strength(-120)
-                .distanceMax(300)) // Limit the distance of charge effect
-            .force('x', d3.forceX().strength(0.15)) // Increased for better centering stability
-            .force('y', d3.forceY().strength(0.15)) // Increased for better centering stability
+                .strength(-1000)) // Stronger repulsion to match Obsidian's repel force of 10
+            // Center forces to keep the graph roughly centered (center force: 0.52)
+            .force('x', d3.forceX().strength(0.052)) // Scaled down by factor of 10 to match D3's scale
+            .force('y', d3.forceY().strength(0.052)) // Scaled down by factor of 10 to match D3's scale
+            // Simple collision detection to prevent overlap
             .force('collision', d3.forceCollide<SimulationGraphNode>()
-                .radius(d => collisionRadius)
-                .strength(0.5) // Reduced for smoother collisions
-                .iterations(2))
-            .alphaDecay(0.02) // Slower decay for smoother transitions
-            .velocityDecay(0.35) // Slightly increased for more stability
+                .radius(d => this.getNodeRadius(d) + 1)
+                .strength(0.7))
+            // Standard decay parameters
+            .alphaDecay(0.0228) // D3 default value
+            .velocityDecay(0.4) // D3 default value
             .on('tick', () => {
-                this.applyBoundingForce();
-                
                 if (!this._frameRequest) {
                     this._frameRequest = window.requestAnimationFrame(() => {
                         this.updateGraph();
@@ -352,24 +365,16 @@ export class GraphView {
     }
     
     /**
-     * Apply a bounding force to ensure nodes stay within a reasonable area
+     * Gently restart the simulation with lower alpha
      */
-    private applyBoundingForce() {
-        const bound = 1000; // Boundary size
-        const strength = 0.05; // Force strength
-        
-        for (let node of this.nodes) {
-            const x = node.x || 0;
-            const y = node.y || 0;
-            
-            // Apply force toward center when nodes go beyond boundaries
-            if (Math.abs(x) > bound) {
-                node.vx = (node.vx || 0) - (x > 0 ? strength : -strength);
+    public restartSimulationGently(): void {
+        try {
+            if (this.simulation) {
+                // Default D3 behavior - lower alpha for gentle restart
+                this.simulation.alpha(0.3).restart();
             }
-            
-            if (Math.abs(y) > bound) {
-                node.vy = (node.vy || 0) - (y > 0 ? strength : -strength);
-            }
+        } catch (e) {
+            console.error("Error restarting simulation:", e);
         }
     }
     
@@ -394,15 +399,21 @@ export class GraphView {
             .attr('cx', d => d.x || 0)
             .attr('cy', d => d.y || 0);
 
-        // Update label positions
-        labelsSelection
-            .attr('x', d => (d.x || 0)) // Center horizontally with node
+        // For performance, only update visible labels and use a cached margin value
+        // First, get all visible labels as an array to avoid repeated filtering
+        const visibleLabels = labelsSelection.filter(function() { 
+            return d3.select(this).style('display') !== 'none';
+        });
+        
+        // Use a fixed margin value to avoid expensive DOM access on every node
+        const labelMargin = 8;
+        
+        // Only update position of visible labels
+        visibleLabels
+            .attr('x', d => (d.x || 0))
             .attr('y', d => {
                 const radius = this.getNodeRadius(d);
-                const margin = parseInt(getComputedStyle(document.documentElement)
-                    .getPropertyValue('--graph-label-margin')
-                    .trim()) || 8;
-                return (d.y || 0) + radius + margin;
+                return (d.y || 0) + radius + labelMargin;
             });
     }
     
@@ -448,7 +459,7 @@ export class GraphView {
                     return;
                 }
 
-                // Update the SVG viewBox to match new container size
+                // Update the SVG viewBox to maintain centering at (0,0)
                 this.svg.attr('viewBox', [
                     -this.width / 2,
                     -this.height / 2,
@@ -883,16 +894,23 @@ export class GraphView {
                 .style('stroke-opacity', isConnected ? 'var(--graph-link-opacity-default)' : 'var(--graph-link-opacity-dimmed)');
         });
 
-        // Update label styles based on node connection state
-        this.labelsSelection.each(function(d) {
-            const isSelected = d.id === nodeId;
-            const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
-            d3.select(this)
-                .transition()
-                .duration(animationDuration)
-                .style('fill', isSelected ? 'var(--graph-label-color-highlighted)' : 'var(--graph-label-color)')
-                .style('opacity', isConnected ? 'var(--graph-label-opacity-highlighted)' : 'var(--graph-label-opacity-dimmed)');
-        });
+        // Update label styles without limiting which ones are visible
+        if (this.labelsSelection) {
+            // Only manipulate labels if they're visible (based on zoom level)
+            const isZoomedIn = this.currentZoomScale >= this.LABEL.VISIBILITY.SHOW_THRESHOLD;
+            
+            if (isZoomedIn) {
+                // Update styles without changing visibility
+                this.labelsSelection.each(function(d) {
+                    const isSelected = d.id === nodeId;
+                    const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
+                    
+                    d3.select(this)
+                        .style('opacity', isConnected ? 'var(--graph-label-opacity-highlighted)' : 'var(--graph-label-opacity-dimmed)')
+                        .style('fill', isSelected ? 'var(--graph-label-color-highlighted)' : 'var(--graph-label-color)');
+                });
+            }
+        }
     }
     
     private resetHighlights() {
@@ -930,109 +948,77 @@ export class GraphView {
             .style('stroke-width', 'var(--graph-link-width-default)')
             .style('stroke', 'var(--graph-link-color-default)');
 
-        // Reset labels to default style
-        this.labelsSelection
-            .transition()
-            .duration(animationDuration)
-            .style('opacity', 'var(--graph-label-opacity)')
-            .style('fill', 'var(--graph-label-color)');
+        // Reset label visibility based on zoom level
+        this.updateLabelVisibility();
     }
     
     private setupDragBehavior() {
         return d3.drag<SVGCircleElement, SimulationGraphNode>()
             .on('start', (event, d) => {
-                try {
-                    // Stop any animation frames during drag to prevent jitter
-                    if (this._frameRequest) {
-                        window.cancelAnimationFrame(this._frameRequest);
-                        this._frameRequest = null;
-                    }
-                    
-                    // Update simulation if it exists
-                    if (this.simulation && !event.active) {
-                        this.simulation.alphaTarget(0.3).restart();
-                    }
-                    
-                    // Set fixed position
-                    d.fx = d.x;
-                    d.fy = d.y;
-                    
-                    // Set drag state and remove tooltip
-                    this.isDraggingNode = true;
-                    this.clearTooltipTimeout();
-                    this.removeNodeTooltip();
-                    
-                    // Apply node highlighting if not already highlighted
+                // Reheat simulation when drag starts
+                if (!event.active && this.simulation) {
+                    this.simulation.alphaTarget(0.3).restart();
+                }
+                
+                // Fix the position of the dragged node
+                d.fx = d.x;
+                d.fy = d.y;
+                
+                // Set drag state and remove tooltip
+                this.isDraggingNode = true;
+                this.clearTooltipTimeout();
+                this.removeNodeTooltip();
+                
+                // Apply highlighting
+                this.highlightedNodeId = d.id;
+                this.highlightNode(event.sourceEvent.currentTarget, true);
+                this.highlightConnections(d.id, true);
+            })
+            .on('drag', (event, d) => {
+                // Update the fixed position of the dragged node
+                d.fx = event.x;
+                d.fy = event.y;
+                
+                // Maintain highlighting during drag
+                if (this.highlightedNodeId !== d.id) {
                     this.highlightedNodeId = d.id;
                     this.highlightNode(event.sourceEvent.currentTarget, true);
                     this.highlightConnections(d.id, true);
-                } catch (e) {
-                    console.error("Error in drag start:", e);
-                }
-            })
-            .on('drag', (event, d) => {
-                try {
-                    d.fx = event.x;
-                    d.fy = event.y;
-                    
-                    // Ensure highlight state is maintained during drag
-                    if (this.highlightedNodeId !== d.id) {
-                        this.highlightedNodeId = d.id;
-                        this.highlightNode(event.sourceEvent.currentTarget, true);
-                        this.highlightConnections(d.id, true);
-                    }
-                } catch (e) {
-                    console.error("Error in drag:", e);
                 }
             })
             .on('end', (event, d) => {
-                try {
-                    const wasFixed = d.fx !== null || d.fy !== null;
-                    
-                    // Clear fixed position if shift key is not pressed
-                    if (!event.sourceEvent.shiftKey) {
-                        d.fx = null;
-                        d.fy = null;
-                    }
+                // Cool down the simulation
+                if (!event.active && this.simulation) {
+                    this.simulation.alphaTarget(0);
+                }
+                
+                // Release the fixed position if shift is not pressed
+                if (!event.sourceEvent.shiftKey) {
+                    d.fx = null;
+                    d.fy = null;
+                }
 
-                    // Gently transition the simulation
-                    if (this.simulation) {
-                        if (wasFixed && !event.sourceEvent.shiftKey) {
-                            // If we're releasing a fixed node, use a gentler transition
-                            this.simulation
-                                .alphaTarget(0)
-                                .alpha(0.1) // Start with a lower alpha for gentler movement
-                                .restart();
-                        } else {
-                            // For other cases (like fixing a node), stop more quickly
-                            this.simulation.alphaTarget(0);
+                // Reset drag state
+                this.isDraggingNode = false;
+
+                // Check if mouse is still over the node
+                const element = event.sourceEvent.target;
+                const bounds = element.getBoundingClientRect();
+                const mouseX = event.sourceEvent.clientX;
+                const mouseY = event.sourceEvent.clientY;
+                
+                const isMouseOver = mouseX >= bounds.left && mouseX <= bounds.right && 
+                                  mouseY >= bounds.top && mouseY <= bounds.bottom;
+
+                if (!isMouseOver) {
+                    // Reset highlights if mouse is not over the node
+                    setTimeout(() => {
+                        if (!this.isDraggingNode && this.highlightedNodeId === d.id) {
+                            this.highlightNode(element, false);
+                            this.highlightConnections(d.id, false);
+                            this.highlightedNodeId = null;
                         }
-                    }
-
-                    // Check if mouse is still over the node
-                    const element = event.sourceEvent.target;
-                    const bounds = element.getBoundingClientRect();
-                    const mouseX = event.sourceEvent.clientX;
-                    const mouseY = event.sourceEvent.clientY;
-                    
-                    const isMouseOver = mouseX >= bounds.left && mouseX <= bounds.right && 
-                                      mouseY >= bounds.top && mouseY <= bounds.bottom;
-
-                    // Reset drag state
-                    this.isDraggingNode = false;
-
-                    if (!isMouseOver) {
-                        // Only reset highlights if mouse is not over the node
-                        setTimeout(() => {
-                            if (!this.isDraggingNode && this.highlightedNodeId === d.id) {
-                                this.highlightNode(element, false);
-                                this.highlightConnections(d.id, false);
-                                this.highlightedNodeId = null;
-                            }
-                        }, this.ANIMATION.DURATION);
-                    }
-                } catch (e) {
-                    console.error("Error in drag end:", e);
+                    }, this.ANIMATION.DURATION);
                 }
             });
     }
@@ -1218,17 +1204,42 @@ export class GraphView {
                 exit => exit.remove()
             );
 
+        // Apply initial label visibility based on zoom level
+        this.updateLabelVisibility();
+
         // Setup event handlers
         this.setupNodeEventHandlers();
-            
+        
         // Update simulation with new data
         if (this.simulation) {
+            // Assign random initial positions to prevent all nodes starting at (0,0)
+            // which can cause the slow central collapse
+            this.nodes.forEach(node => {
+                if (!node.x && !node.y) {
+                    // Use circle packing algorithm to distribute nodes
+                    const angle = Math.random() * 2 * Math.PI;
+                    const radius = 100 + Math.random() * 200; // Distribute within a larger radius
+                    node.x = Math.cos(angle) * radius;
+                    node.y = Math.sin(angle) * radius;
+                }
+            });
+
+            // Update the simulation with our nodes and links
             this.simulation.nodes(this.nodes);
             const linkForce = this.simulation.force('link') as d3.ForceLink<SimulationGraphNode, SimulationGraphLink>;
             if (linkForce) {
                 linkForce.links(this.links);
             }
+
+            // Start the simulation with a higher alpha for better initial layout
             this.simulation.alpha(1).restart();
+            
+            // Automatically cool down the simulation after a short time
+            setTimeout(() => {
+                if (this.simulation) {
+                    this.simulation.alphaTarget(0);
+                }
+            }, 3000);
         }
     }
     
@@ -1267,6 +1278,10 @@ export class GraphView {
         // Find the bounds of all nodes
         if (this.nodes.length === 0) return;
         
+        // Track if we've handled orphan nodes specially
+        let orphanNodesHandled = false;
+        
+        // First pass - find the bounds
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
         
@@ -1280,12 +1295,56 @@ export class GraphView {
             maxY = Math.max(maxY, node.y + radius);
         });
         
+        // Handle the special case where all nodes are at the center
+        if (Math.abs(maxX - minX) < 20 && Math.abs(maxY - minY) < 20) {
+            // We have identified a collapsed graph with very small bounds
+            orphanNodesHandled = true;
+            
+            // Redistribute nodes in a circle to create some initial space
+            const nodeCount = this.nodes.length;
+            const radius = Math.sqrt(nodeCount) * 15; // Scale radius based on node count
+            
+            this.nodes.forEach((node, i) => {
+                // Place nodes in a circle or grid formation
+                if (nodeCount <= 50) { 
+                    // Circle layout for small graphs
+                    const angle = (i / nodeCount) * 2 * Math.PI;
+                    node.x = Math.cos(angle) * radius;
+                    node.y = Math.sin(angle) * radius;
+                } else {
+                    // Grid layout for larger graphs
+                    const gridSize = Math.ceil(Math.sqrt(nodeCount));
+                    const col = i % gridSize;
+                    const row = Math.floor(i / gridSize);
+                    const gridSpacing = radius / 2;
+                    
+                    node.x = (col - gridSize/2) * gridSpacing;
+                    node.y = (row - gridSize/2) * gridSpacing;
+                }
+                
+                // Calculate new bounds with the rearranged nodes
+                const nodeRadius = this.getNodeRadius(node);
+                minX = Math.min(minX, node.x - nodeRadius);
+                minY = Math.min(minY, node.y - nodeRadius);
+                maxX = Math.max(maxX, node.x + nodeRadius);
+                maxY = Math.max(maxY, node.y + nodeRadius);
+            });
+            
+            // Restart simulation to apply new positions
+            if (this.simulation) {
+                this.simulation.alpha(1).restart();
+            }
+        }
+        
         // Only proceed if we have valid bounds
         if (minX === Infinity || minY === Infinity) return;
         
         // Calculate width and height of the graph
         const graphWidth = maxX - minX;
         const graphHeight = maxY - minY;
+        
+        // Safety check for zero dimensions
+        if (graphWidth === 0 || graphHeight === 0) return;
         
         const minDimension = Math.min(this.width, this.height);
         const scaleX = (this.ZOOM.CONTAINER_SCALE * minDimension) / graphWidth;
@@ -1304,27 +1363,17 @@ export class GraphView {
         const centerY = minY + graphHeight / 2;
         
         // Apply the transform with or without transition based on animate parameter
+        // Fix: translate relative to center of container's viewBox (which is centered at 0,0)
         const transform = d3.zoomIdentity
             .translate(-centerX * scale, -centerY * scale)
             .scale(scale);
         
-        if (animate) {
+        if (animate && !orphanNodesHandled) {
             this.svg.transition()
                 .duration(this.ANIMATION.RECENTER_DURATION)
                 .call(this.zoom.transform, transform);
         } else {
             this.svg.call(this.zoom.transform, transform);
-        }
-    }
-    
-    public restartSimulationGently(): void {
-        try {
-            if (this.simulation) {
-                // Use a lower alpha value for gentler restart with our optimized decay settings
-                this.simulation.alpha(0.1).restart();
-            }
-        } catch (e) {
-            console.error("Error restarting simulation:", e);
         }
     }
     
@@ -2043,5 +2092,16 @@ export class GraphView {
                     .style('fill', color);
             }
         });
+    }
+
+    // Add a new method to manage label visibility based on zoom level
+    private updateLabelVisibility() {
+        if (!this.labelsSelection) return;
+        
+        // Only show labels when zoomed in beyond the threshold
+        const showLabels = this.currentZoomScale >= this.LABEL.VISIBILITY.SHOW_THRESHOLD;
+        
+        // Simply toggle all labels based on zoom level
+        this.labelsSelection.style('display', showLabels ? 'inline' : 'none');
     }
 } 

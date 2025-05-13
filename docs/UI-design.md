@@ -103,3 +103,10 @@ Added batch processing for smoother frame rates
 Changed to more selective DOM updates during dragging
 Only update elements that need to change (dragged node and connected links)
 Separated rendering logic into a dedicated method for better performance
+
+
+## Obsidian built-in graph view default setting
+- center force: 0.52
+- repel force: 10
+- link force: 1
+- link distance: 250
