@@ -4,8 +4,8 @@ import * as ss from 'simple-statistics';
 import { 
     SimulationGraphLink, 
     SimulationGraphNode,
-    GraphData,
-    Node as GraphNode
+    Node as GraphNode,
+    GraphMetadata
 } from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
@@ -29,6 +29,7 @@ export class GraphView {
     private zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
     private nodes: SimulationGraphNode[] = [];
     private links: SimulationGraphLink[] = [];
+    private graphMetadata: GraphMetadata | null = null;
     private width: number;
     private height: number;
     
@@ -55,27 +56,27 @@ export class GraphView {
     // Node visualization constants
     private readonly NODE = {
         RADIUS: {
-            BASE: 4,
-            MAX: 12,
-            SCALE_FACTOR: 0.69
+            BASE: 3,
+            MAX: 9,
+            SCALE_FACTOR: 1
         },
         COLORS: {
             DEFAULT: 'var(--graph-node-color-default)',
             HIGHLIGHTED: 'var(--graph-node-color-highlighted)'
-        }
+        },
+        SIZE_CATEGORIES: 10 // Using 10 categories for optimal visual distinction while maintaining meaningful degree variations
     } as const;
 
     // Zoom behavior constants
     private readonly ZOOM = {
         OUT_SCALE_FACTOR: 600,
         IN_SCALE_FACTOR: 60,
-        CONTAINER_SCALE: 0.6 // The graph should use 60% of the minimum dimension
+        CONTAINER_SCALE: 0.8 // The graph should use 80% of the minimum dimension
     } as const;
 
     // D3 selections
     private nodesSelection: d3.Selection<SVGCircleElement, SimulationGraphNode, d3.BaseType, unknown>;
     private linksSelection: d3.Selection<SVGLineElement, SimulationGraphLink, d3.BaseType, unknown>;
-    private labelsSelection: d3.Selection<SVGTextElement, SimulationGraphNode, d3.BaseType, unknown>;
     
     // Force simulation
     private simulation: d3.Simulation<SimulationGraphNode, SimulationGraphLink>;
@@ -136,6 +137,12 @@ export class GraphView {
     // Add color palette state
     private colorPalettes = KEPLER_COLOR_PALETTES;
 
+    // Add a new property to track the current zoom scale
+    private currentZoomScale: number = 1;
+
+    // Add this as a class property after the NODE constant
+    private nodeRadiusScale: d3.ScaleThreshold<number, number> | null = null;
+
     constructor(app: App) {
         this.app = app;
         
@@ -170,7 +177,6 @@ export class GraphView {
         try {
             // Ensure WASM is initialized first
             await this.pluginService.ensureWasmLoaded();
-            
             await this.loadVaultData();
         } catch (error) {
             console.error('Error loading vault data:', error);
@@ -190,7 +196,7 @@ export class GraphView {
             .attr('width', '100%')
             .attr('height', '100%')
             .attr('viewBox', [
-                -this.width / 2,
+                -this.width / 2,  // Center the viewBox at (0,0)
                 -this.height / 2,
                 this.width,
                 this.height
@@ -203,7 +209,7 @@ export class GraphView {
         // Create the main SVG group
         this.svgGroup = this.svg.append('g');
         
-        // Create groups for links, nodes, and labels
+        // Create groups for links and nodes only (remove labels group)
         const linksGroup = this.svgGroup.append('g')
             .attr('class', 'links-group')
             .style('stroke', 'var(--graph-link-color-default)')
@@ -215,18 +221,9 @@ export class GraphView {
             .style('fill', 'var(--graph-node-color-default)')
             .style('opacity', 'var(--graph-node-opacity-default)');
 
-        const labelsGroup = this.svgGroup.append('g')
-            .attr('class', 'labels-group')
-            .style('fill', 'var(--graph-label-color)')
-            .style('font-size', 'var(--graph-label-font-size)')
-            .style('opacity', 'var(--graph-label-opacity)')
-            .style('pointer-events', 'none')
-            .style('text-anchor', 'middle');
-
         // Initialize selections
         this.linksSelection = linksGroup.selectAll('line');
         this.nodesSelection = nodesGroup.selectAll('circle');
-        this.labelsSelection = labelsGroup.selectAll('text');
         
         // Initialize force simulation
         this.initializeSimulation();
@@ -293,7 +290,10 @@ export class GraphView {
                 // Update SVG group transform
                 this.svgGroup.attr('transform', event.transform);
                 
-                // Request a frame to update labels
+                // Store current zoom scale for label visibility calculation
+                this.currentZoomScale = event.transform.k;
+                
+                // Request a frame to update graph elements
                 if (!this._frameRequest) {
                     this._frameRequest = window.requestAnimationFrame(() => {
                         this.updateGraph();
@@ -315,31 +315,29 @@ export class GraphView {
 
 
     /**
-     * Initialize the force simulation with modified forces to better fill the available space
+     * Initialize the force simulation with simplified forces similar to the D3 example
      */
     private initializeSimulation() {
-        // Create a simulation with modified forces to better fill the available space
-        const collisionRadius = this.getNodeRadius() + 2;
-        
+        // Create a simulation with forces matching Obsidian's built-in graph view defaults
         this.simulation = d3.forceSimulation<SimulationGraphNode>()
+            // Link force connects nodes with edges (link force: 1)
             .force('link', d3.forceLink<SimulationGraphNode, SimulationGraphLink>()
                 .id(d => d.id)
-                .distance(50)
-                .strength(0.7)) // Slightly reduced for smoother movement
+                .distance(50)) // link distance: 250
+            // Charge force creates repulsion between nodes (repel force: 10)
             .force('charge', d3.forceManyBody()
-                .strength(-120)
-                .distanceMax(300)) // Limit the distance of charge effect
-            .force('x', d3.forceX().strength(0.15)) // Increased for better centering stability
-            .force('y', d3.forceY().strength(0.15)) // Increased for better centering stability
+                .strength(-300)) // Stronger repulsion to match Obsidian's repel force of 10
+            // Center forces to keep the graph roughly centered (center force: 0.52)
+            .force('x', d3.forceX().strength(0.8)) // Scaled down by factor of 10 to match D3's scale
+            .force('y', d3.forceY().strength(0.8)) // Scaled down by factor of 10 to match D3's scale
+            // Simple collision detection to prevent overlap
             .force('collision', d3.forceCollide<SimulationGraphNode>()
-                .radius(d => collisionRadius)
-                .strength(0.5) // Reduced for smoother collisions
-                .iterations(2))
-            .alphaDecay(0.02) // Slower decay for smoother transitions
-            .velocityDecay(0.35) // Slightly increased for more stability
+                .radius(d => this.getNodeRadius(d) + 1)
+                .strength(0.8))
+            // Standard decay parameters
+            .alphaDecay(0.0228) // D3 default value
+            .velocityDecay(0.4) // D3 default value
             .on('tick', () => {
-                this.applyBoundingForce();
-                
                 if (!this._frameRequest) {
                     this._frameRequest = window.requestAnimationFrame(() => {
                         this.updateGraph();
@@ -350,24 +348,16 @@ export class GraphView {
     }
     
     /**
-     * Apply a bounding force to ensure nodes stay within a reasonable area
+     * Gently restart the simulation with lower alpha
      */
-    private applyBoundingForce() {
-        const bound = 1000; // Boundary size
-        const strength = 0.05; // Force strength
-        
-        for (let node of this.nodes) {
-            const x = node.x || 0;
-            const y = node.y || 0;
-            
-            // Apply force toward center when nodes go beyond boundaries
-            if (Math.abs(x) > bound) {
-                node.vx = (node.vx || 0) - (x > 0 ? strength : -strength);
+    public restartSimulationGently(): void {
+        try {
+            if (this.simulation) {
+                // Default D3 behavior - lower alpha for gentle restart
+                this.simulation.alpha(0.3).restart();
             }
-            
-            if (Math.abs(y) > bound) {
-                node.vy = (node.vy || 0) - (y > 0 ? strength : -strength);
-            }
+        } catch (e) {
+            console.error("Error restarting simulation:", e);
         }
     }
     
@@ -375,10 +365,9 @@ export class GraphView {
         // Cache selection references for performance
         const linksSelection = this.linksSelection;
         const nodesSelection = this.nodesSelection;
-        const labelsSelection = this.labelsSelection;
         
         // Safety check - if selections don't exist, exit early
-        if (!linksSelection || !nodesSelection || !labelsSelection) return;
+        if (!linksSelection || !nodesSelection) return;
         
         // Update link positions
         linksSelection
@@ -391,17 +380,6 @@ export class GraphView {
         nodesSelection
             .attr('cx', d => d.x || 0)
             .attr('cy', d => d.y || 0);
-
-        // Update label positions
-        labelsSelection
-            .attr('x', d => (d.x || 0)) // Center horizontally with node
-            .attr('y', d => {
-                const radius = this.getNodeRadius(d);
-                const margin = parseInt(getComputedStyle(document.documentElement)
-                    .getPropertyValue('--graph-label-margin')
-                    .trim()) || 8;
-                return (d.y || 0) + radius + margin;
-            });
     }
     
     private updateDimensions() {
@@ -446,7 +424,7 @@ export class GraphView {
                     return;
                 }
 
-                // Update the SVG viewBox to match new container size
+                // Update the SVG viewBox to maintain centering at (0,0)
                 this.svg.attr('viewBox', [
                     -this.width / 2,
                     -this.height / 2,
@@ -880,17 +858,6 @@ export class GraphView {
                 .style('stroke-width', isConnected ? 'var(--graph-link-width-highlighted)' : 'var(--graph-link-width-default)')
                 .style('stroke-opacity', isConnected ? 'var(--graph-link-opacity-default)' : 'var(--graph-link-opacity-dimmed)');
         });
-
-        // Update label styles based on node connection state
-        this.labelsSelection.each(function(d) {
-            const isSelected = d.id === nodeId;
-            const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
-            d3.select(this)
-                .transition()
-                .duration(animationDuration)
-                .style('fill', isSelected ? 'var(--graph-label-color-highlighted)' : 'var(--graph-label-color)')
-                .style('opacity', isConnected ? 'var(--graph-label-opacity-highlighted)' : 'var(--graph-label-opacity-dimmed)');
-        });
     }
     
     private resetHighlights() {
@@ -927,110 +894,75 @@ export class GraphView {
             .style('stroke-opacity', 'var(--graph-link-opacity-default)')
             .style('stroke-width', 'var(--graph-link-width-default)')
             .style('stroke', 'var(--graph-link-color-default)');
-
-        // Reset labels to default style
-        this.labelsSelection
-            .transition()
-            .duration(animationDuration)
-            .style('opacity', 'var(--graph-label-opacity)')
-            .style('fill', 'var(--graph-label-color)');
     }
     
     private setupDragBehavior() {
         return d3.drag<SVGCircleElement, SimulationGraphNode>()
             .on('start', (event, d) => {
-                try {
-                    // Stop any animation frames during drag to prevent jitter
-                    if (this._frameRequest) {
-                        window.cancelAnimationFrame(this._frameRequest);
-                        this._frameRequest = null;
-                    }
-                    
-                    // Update simulation if it exists
-                    if (this.simulation && !event.active) {
-                        this.simulation.alphaTarget(0.3).restart();
-                    }
-                    
-                    // Set fixed position
-                    d.fx = d.x;
-                    d.fy = d.y;
-                    
-                    // Set drag state and remove tooltip
-                    this.isDraggingNode = true;
-                    this.clearTooltipTimeout();
-                    this.removeNodeTooltip();
-                    
-                    // Apply node highlighting if not already highlighted
+                // Reheat simulation when drag starts
+                if (!event.active && this.simulation) {
+                    this.simulation.alphaTarget(0.3).restart();
+                }
+                
+                // Fix the position of the dragged node
+                d.fx = d.x;
+                d.fy = d.y;
+                
+                // Set drag state and remove tooltip
+                this.isDraggingNode = true;
+                this.clearTooltipTimeout();
+                this.removeNodeTooltip();
+                
+                // Apply highlighting
+                this.highlightedNodeId = d.id;
+                this.highlightNode(event.sourceEvent.currentTarget, true);
+                this.highlightConnections(d.id, true);
+            })
+            .on('drag', (event, d) => {
+                // Update the fixed position of the dragged node
+                d.fx = event.x;
+                d.fy = event.y;
+                
+                // Maintain highlighting during drag
+                if (this.highlightedNodeId !== d.id) {
                     this.highlightedNodeId = d.id;
                     this.highlightNode(event.sourceEvent.currentTarget, true);
                     this.highlightConnections(d.id, true);
-                } catch (e) {
-                    console.error("Error in drag start:", e);
-                }
-            })
-            .on('drag', (event, d) => {
-                try {
-                    d.fx = event.x;
-                    d.fy = event.y;
-                    
-                    // Ensure highlight state is maintained during drag
-                    if (this.highlightedNodeId !== d.id) {
-                        this.highlightedNodeId = d.id;
-                        this.highlightNode(event.sourceEvent.currentTarget, true);
-                        this.highlightConnections(d.id, true);
-                    }
-                } catch (e) {
-                    console.error("Error in drag:", e);
                 }
             })
             .on('end', (event, d) => {
-                try {
-                    const wasFixed = d.fx !== null || d.fy !== null;
-                    
-                    // Clear fixed position if shift key is not pressed
-                    if (!event.sourceEvent.shiftKey) {
-                        d.fx = null;
-                        d.fy = null;
-                    }
+                // Cool down the simulation
+                if (!event.active && this.simulation) {
+                    this.simulation.alphaTarget(0);
+                }
+                
+                // Release the fixed position if shift is not pressed
+                if (!event.sourceEvent.shiftKey) {
+                    d.fx = null;
+                    d.fy = null;
+                }
 
-                    // Gently transition the simulation
-                    if (this.simulation) {
-                        if (wasFixed && !event.sourceEvent.shiftKey) {
-                            // If we're releasing a fixed node, use a gentler transition
-                            this.simulation
-                                .alphaTarget(0)
-                                .alpha(0.1) // Start with a lower alpha for gentler movement
-                                .restart();
-                        } else {
-                            // For other cases (like fixing a node), stop more quickly
-                            this.simulation.alphaTarget(0);
+                // Reset drag state
+                this.isDraggingNode = false;
+
+                // Check if mouse is still over the node
+                const element = event.sourceEvent.target;
+                const bounds = element.getBoundingClientRect();
+                const mouseX = event.sourceEvent.clientX;
+                const mouseY = event.sourceEvent.clientY;
+                
+                const isMouseOver = mouseX >= bounds.left && mouseX <= bounds.right && 
+                                  mouseY >= bounds.top && mouseY <= bounds.bottom;
+
+                if (!isMouseOver) {
+                    // Reset highlights if mouse is not over the node
+                    setTimeout(() => {
+                        if (!this.isDraggingNode && this.highlightedNodeId === d.id) {
+                            this.highlightNode(element, false);
+                            this.highlightConnections(d.id, false);
+                            this.highlightedNodeId = null;
                         }
-                    }
-
-                    // Check if mouse is still over the node
-                    const element = event.sourceEvent.target;
-                    const bounds = element.getBoundingClientRect();
-                    const mouseX = event.sourceEvent.clientX;
-                    const mouseY = event.sourceEvent.clientY;
-                    
-                    const isMouseOver = mouseX >= bounds.left && mouseX <= bounds.right && 
-                                      mouseY >= bounds.top && mouseY <= bounds.bottom;
-
-                    // Reset drag state
-                    this.isDraggingNode = false;
-
-                    if (!isMouseOver) {
-                        // Only reset highlights if mouse is not over the node
-                        setTimeout(() => {
-                            if (!this.isDraggingNode && this.highlightedNodeId === d.id) {
-                                this.highlightNode(element, false);
-                                this.highlightConnections(d.id, false);
-                                this.highlightedNodeId = null;
-                            }
-                        }, this.ANIMATION.DURATION);
-                    }
-                } catch (e) {
-                    console.error("Error in drag end:", e);
+                    }, this.ANIMATION.DURATION);
                 }
             });
     }
@@ -1102,8 +1034,20 @@ export class GraphView {
     
     private async loadVaultData() {
         try {
-            // Get graph data and degree centrality from builder
-            const { graphData, degreeCentrality } = await this.graphDataBuilder.buildGraphData();
+            // Get graph data, degree centrality and metadata from builder
+            const { graphData, degreeCentrality, metadata } = await this.graphDataBuilder.buildGraphData();
+            
+            // Store metadata for later use
+            this.graphMetadata = metadata;
+            
+            // Log additional details about the graph structure
+            console.log('Graph structure summary:');
+            console.log(`  Nodes: ${metadata.node_count}`);
+            console.log(`  Edges: ${metadata.edge_count}`);
+            console.log(`  Max degree: ${metadata.max_degree}`);
+            console.log(`  Avg degree: ${metadata.avg_degree.toFixed(2)}`);
+            console.log(`  Directed: ${metadata.is_directed}`);
+            console.log(`  Avg connections per node: ${(metadata.edge_count / metadata.node_count).toFixed(2)}`);
             
             // Convert edges to links format
             const nodes: SimulationGraphNode[] = graphData.nodes.map((nodePath: string, index: number) => {
@@ -1149,6 +1093,9 @@ export class GraphView {
         this.nodes = graphData.nodes || [];
         this.links = graphData.links || [];
         
+        // Initialize the node radius scale
+        this.initializeNodeRadiusScale();
+        
         // Clear any existing neighbors cache as the graph data has changed
         this.cachedNodeId = null;
         this.cachedNeighbors = null;
@@ -1190,34 +1137,80 @@ export class GraphView {
                 exit => exit.remove()
             );
 
-        // Add labels with proper data binding and update handling
-        this.labelsSelection = this.svgGroup.select('.labels-group')
-            .selectAll<SVGTextElement, SimulationGraphNode>('text')
-            .data(this.nodes, d => d.id) // Use the same key function as nodes
-            .join(
-                enter => enter.append('text')
-                    .text(d => d.name)
-                    .attr('class', 'graph-label')
-                    .style('pointer-events', 'none')
-                    .style('text-anchor', 'middle'),
-                update => update.text(d => d.name), // Update text content on update
-                exit => exit.remove()
-            );
-
         // Setup event handlers
         this.setupNodeEventHandlers();
-            
+        
         // Update simulation with new data
         if (this.simulation) {
+            // Assign random initial positions to prevent all nodes starting at (0,0)
+            // which can cause the slow central collapse
+            this.nodes.forEach(node => {
+                if (!node.x && !node.y) {
+                    // Use circle packing algorithm to distribute nodes
+                    const angle = Math.random() * 2 * Math.PI;
+                    const radius = 100 + Math.random() * 200; // Distribute within a larger radius
+                    node.x = Math.cos(angle) * radius;
+                    node.y = Math.sin(angle) * radius;
+                }
+            });
+
+            // Update the simulation with our nodes and links
             this.simulation.nodes(this.nodes);
             const linkForce = this.simulation.force('link') as d3.ForceLink<SimulationGraphNode, SimulationGraphLink>;
             if (linkForce) {
                 linkForce.links(this.links);
             }
+
+            // Start the simulation with a higher alpha for better initial layout
             this.simulation.alpha(1).restart();
+            
+            // Automatically cool down the simulation after a short time
+            setTimeout(() => {
+                if (this.simulation) {
+                    this.simulation.alphaTarget(0);
+                }
+            }, 3000);
         }
     }
     
+    /**
+     * Initialize the node radius scale using Jenks natural breaks
+     * This should be called when the graph data is updated
+     */
+    private initializeNodeRadiusScale(): void {
+        if (!this.nodes.length) return;
+
+        // Collect all degree values
+        const degrees = this.nodes
+            .map(n => n.degreeCentrality)
+            .filter((d): d is number => d !== undefined);
+
+        if (degrees.length === 0) return;
+
+        // Calculate Jenks natural breaks using the number of size categories from NODE constant
+        const breaks = ss.jenks(degrees, this.NODE.SIZE_CATEGORIES);
+
+        // Create an array of radius values, evenly spaced between BASE and MAX
+        // We need one radius value for each category (length = breaks.length)
+        // because each break point defines the boundary between categories
+        const radiusSteps = Array.from({ length: breaks.length }, (_, i) => {
+            const t = i / (breaks.length - 1);
+            return this.NODE.RADIUS.BASE + (this.NODE.RADIUS.MAX - this.NODE.RADIUS.BASE) * t;
+        });
+
+        // Create the scale
+        this.nodeRadiusScale = d3.scaleThreshold<number, number>()
+            .domain(breaks.slice(1)) // Remove the first break point (minimum value)
+            .range(radiusSteps);
+
+        // Log the categorization for debugging
+        // console.log('Node size categorization:', {
+        //     breaks,
+        //     radiusSteps,
+        //     degreeRange: [Math.min(...degrees), Math.max(...degrees)]
+        // });
+    }
+
     /**
      * Calculate node radius based on centrality and other factors
      */
@@ -1225,23 +1218,22 @@ export class GraphView {
         if (!node) {
             return this.NODE.RADIUS.BASE;
         }
-        
-        // Scale node size based on centrality or degree
-        if (node.degreeCentrality !== undefined && node.degreeCentrality > 0) {
-            // Find a normalized value between 0 and 1 for the centrality score
-            // We'd need to know the max centrality across all nodes for perfect normalization
-            // As a simple approach, cap at 1.0 and ensure positive values
-            const normalizedScore = Math.min(1.0, Math.max(0, node.degreeCentrality));
-            
-            // Scale the node radius between BASE_NODE_RADIUS and MAX_NODE_RADIUS
-            // Linear scaling: radius = base + (max-base) * normalized * scale_factor
-            return this.NODE.RADIUS.BASE + 
-                   (this.NODE.RADIUS.MAX - this.NODE.RADIUS.BASE) * 
-                   normalizedScore * this.NODE.RADIUS.SCALE_FACTOR;
+
+        // If we don't have a scale yet or node has no centrality data, return base size
+        if (!this.nodeRadiusScale || node.degreeCentrality === undefined) {
+            return this.NODE.RADIUS.BASE;
         }
-        
-        // Default size if no centrality data available
-        return this.NODE.RADIUS.BASE;
+
+        // Get the categorized radius based on the node's degree
+        const radius = this.nodeRadiusScale(node.degreeCentrality);
+
+        // Log the categorization for debugging
+        // console.log(`Node ${node.name}:`, {
+        //     degree: node.degreeCentrality,
+        //     radius: radius.toFixed(2)
+        // });
+
+        return radius;
     }
     
     public refreshGraphView(): void {
@@ -1253,6 +1245,10 @@ export class GraphView {
         // Find the bounds of all nodes
         if (this.nodes.length === 0) return;
         
+        // Track if we've handled orphan nodes specially
+        let orphanNodesHandled = false;
+        
+        // First pass - find the bounds
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
         
@@ -1266,12 +1262,56 @@ export class GraphView {
             maxY = Math.max(maxY, node.y + radius);
         });
         
+        // Handle the special case where all nodes are at the center
+        if (Math.abs(maxX - minX) < 20 && Math.abs(maxY - minY) < 20) {
+            // We have identified a collapsed graph with very small bounds
+            orphanNodesHandled = true;
+            
+            // Redistribute nodes in a circle to create some initial space
+            const nodeCount = this.nodes.length;
+            const radius = Math.sqrt(nodeCount) * 15; // Scale radius based on node count
+            
+            this.nodes.forEach((node, i) => {
+                // Place nodes in a circle or grid formation
+                if (nodeCount <= 50) { 
+                    // Circle layout for small graphs
+                    const angle = (i / nodeCount) * 2 * Math.PI;
+                    node.x = Math.cos(angle) * radius;
+                    node.y = Math.sin(angle) * radius;
+                } else {
+                    // Grid layout for larger graphs
+                    const gridSize = Math.ceil(Math.sqrt(nodeCount));
+                    const col = i % gridSize;
+                    const row = Math.floor(i / gridSize);
+                    const gridSpacing = radius / 2;
+                    
+                    node.x = (col - gridSize/2) * gridSpacing;
+                    node.y = (row - gridSize/2) * gridSpacing;
+                }
+                
+                // Calculate new bounds with the rearranged nodes
+                const nodeRadius = this.getNodeRadius(node);
+                minX = Math.min(minX, node.x - nodeRadius);
+                minY = Math.min(minY, node.y - nodeRadius);
+                maxX = Math.max(maxX, node.x + nodeRadius);
+                maxY = Math.max(maxY, node.y + nodeRadius);
+            });
+            
+            // Restart simulation to apply new positions
+            if (this.simulation) {
+                this.simulation.alpha(1).restart();
+            }
+        }
+        
         // Only proceed if we have valid bounds
         if (minX === Infinity || minY === Infinity) return;
         
         // Calculate width and height of the graph
         const graphWidth = maxX - minX;
         const graphHeight = maxY - minY;
+        
+        // Safety check for zero dimensions
+        if (graphWidth === 0 || graphHeight === 0) return;
         
         const minDimension = Math.min(this.width, this.height);
         const scaleX = (this.ZOOM.CONTAINER_SCALE * minDimension) / graphWidth;
@@ -1290,27 +1330,17 @@ export class GraphView {
         const centerY = minY + graphHeight / 2;
         
         // Apply the transform with or without transition based on animate parameter
+        // Fix: translate relative to center of container's viewBox (which is centered at 0,0)
         const transform = d3.zoomIdentity
             .translate(-centerX * scale, -centerY * scale)
             .scale(scale);
         
-        if (animate) {
+        if (animate && !orphanNodesHandled) {
             this.svg.transition()
                 .duration(this.ANIMATION.RECENTER_DURATION)
                 .call(this.zoom.transform, transform);
         } else {
             this.svg.call(this.zoom.transform, transform);
-        }
-    }
-    
-    public restartSimulationGently(): void {
-        try {
-            if (this.simulation) {
-                // Use a lower alpha value for gentler restart with our optimized decay settings
-                this.simulation.alpha(0.1).restart();
-            }
-        } catch (e) {
-            console.error("Error restarting simulation:", e);
         }
     }
     
@@ -1999,17 +2029,6 @@ export class GraphView {
         
         return breaks.sort((a: number, b: number) => a - b);
     }
-
-    // private async resetToDegree() {
-    //     try {
-    //         const plugin = this.pluginService.getPlugin();
-    //         const results = plugin.calculateDegreeCentralityCached();
-    //         this.updateNodeColors(results, 'degree');
-    //     } catch (error) {
-    //         console.error('Failed to reset to degree centrality:', error);
-    //         new Notice('Failed to reset to degree centrality');
-    //     }
-    // }
 
     private updateNodeColors(results: GraphNode[], type: 'betweenness' | 'closeness' | 'eigenvector' | 'degree') {
         // Find min and max values for normalization

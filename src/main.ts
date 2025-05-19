@@ -1,5 +1,5 @@
 import { Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
-import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata } from './types/types';
+import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata, VaultData, VaultNote, CentralityScores } from './types/types';
 import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
 import { CentralityResultsView, CENTRALITY_RESULTS_VIEW_TYPE } from './views/CentralityResultsView';
@@ -371,31 +371,94 @@ export default class GraphAnalysisPlugin extends Plugin {
         }
     }
 
+    /**
+     * Builds the graph from the vault files and links.
+     * This is the main entry point for creating the graph from Obsidian notes.
+     */
     public async buildGraphFromVault(): Promise<GraphData> {
         await this.ensureWasmLoaded();
         
         try {
-            // Build the vault files data
-            const vaultFiles = await this.getVaultFiles();
-            const vaultData = { files: vaultFiles };
+            // Build the graph data structure from vault files
+            const graphData = this.buildGraphDataFromVault();
+            
+            // Convert to VaultData format for Rust
+            const vaultData = this.createVaultDataFromGraph(graphData);
             
             // Call Rust function to build graph
-            const result = build_graph_from_vault(JSON.stringify(vaultData));
-            const parsedResult = JSON.parse(result);
+            this.processJsonResult<{ status: string }>(
+                build_graph_from_vault(JSON.stringify(vaultData)),
+                'Graph Building'
+            );
             
-            if (parsedResult.error) {
-                console.error('Graph Analysis Error:', parsedResult.error);
-                throw new Error(parsedResult.error);
-            }
-            
-            return parsedResult as GraphData;
+            return graphData;
         } catch (error) {
             console.error('Failed to build graph from vault:', error);
             throw error;
         }
     }
     
-    private async getVaultFiles() {
+    /**
+     * Creates the GraphData structure by analyzing vault files and their links.
+     * This is extracted as a separate method to avoid code duplication.
+     */
+    private buildGraphDataFromVault(): GraphData {
+        // Get all files that we want to include in the graph
+        const files = this.getVaultFiles();
+        
+        // Create nodes array from file paths
+        const nodes: string[] = files.map(file => file.path);
+        
+        // Build links between files
+        const links: [number, number][] = [];
+        const pathToIndex = new Map<string, number>();
+        
+        // Create index mapping
+        nodes.forEach((path, index) => {
+            pathToIndex.set(path, index);
+        });
+        
+        // Process each file to find links
+        for (const file of files) {
+            const sourceIndex = pathToIndex.get(file.path);
+            if (sourceIndex === undefined) continue;
+            
+            // Get links from the file using metadata cache
+            const cache = this.app.metadataCache.getFileCache(this.app.vault.getAbstractFileByPath(file.path) as TFile);
+            
+            if (!cache) continue;
+            
+            // Collect all types of links
+            const allLinks = [
+                ...(cache.links || []),
+                ...(cache.embeds || []),
+                ...(cache.frontmatterLinks || [])
+            ];
+            
+            // Process each link
+            for (const link of allLinks) {
+                const resolvedFile = this.app.metadataCache.getFirstLinkpathDest(link.link, file.path);
+                if (resolvedFile) {
+                    const targetIndex = pathToIndex.get(resolvedFile.path);
+                    if (targetIndex !== undefined) {
+                        // For undirected graph, store each edge only once
+                        const minIndex = Math.min(sourceIndex, targetIndex);
+                        const maxIndex = Math.max(sourceIndex, targetIndex);
+                        
+                        // Check if link already exists to avoid duplicates
+                        if (!links.some(([s, t]) => s === minIndex && t === maxIndex)) {
+                            links.push([minIndex, maxIndex]);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Return the complete graph data
+        return { nodes, edges: links };
+    }
+    
+    private getVaultFiles() {
         const files = this.app.vault.getMarkdownFiles();
         const vaultFiles = [];
         
@@ -405,170 +468,108 @@ export default class GraphAnalysisPlugin extends Plugin {
                 continue;
             }
             
-            try {
-                const content = await this.app.vault.read(file);
-                vaultFiles.push({ path: file.path, content });
-            } catch (error) {
-                console.error(`Failed to read file ${file.path}:`, error);
-            }
+            vaultFiles.push({ path: file.path });
         }
         
         return vaultFiles;
     }
 
-    public calculateDegreeCentralityCached(): Node[] {
-        const result = calculate_degree_centrality_cached();
-        const parsedResult = JSON.parse(result);
+    /**
+     * Helper method to process centrality calculation results.
+     * This eliminates code duplication across the different centrality methods.
+     * 
+     * @param jsonResult The raw JSON result from WASM
+     * @param centralityType The type of centrality being calculated
+     * @returns Processed Node array with normalized centrality values
+     */
+    private processCentralityResult(jsonResult: string, centralityType: 'degree' | 'eigenvector' | 'betweenness' | 'closeness'): Node[] {
+        const parsedResult = JSON.parse(jsonResult);
         
         if (parsedResult.error) {
-            console.error('Degree Centrality Error:', parsedResult.error);
+            console.error(`${centralityType} Centrality Error:`, parsedResult.error);
             throw new Error(parsedResult.error);
         }
         
         // Verify that the parsed result is an array of nodes
         if (!Array.isArray(parsedResult)) {
             console.error('Unexpected result format:', parsedResult);
-            throw new Error('Degree centrality result is not an array');
+            throw new Error(`${centralityType} centrality result is not an array`);
         }
         
         // Validate and normalize each node to ensure it has the expected structure
-        return parsedResult.map((node: any) => ({
-            node_id: node.node_id,
-            node_name: node.node_name,
-            centrality: {
-                degree: node.centrality?.degree ?? 0,
-                eigenvector: node.centrality?.eigenvector ?? null,
-                betweenness: node.centrality?.betweenness ?? null,
-                closeness: node.centrality?.closeness ?? null
-            }
-        }));
+        return parsedResult.map((node: any) => {
+            const centralityScores: CentralityScores = {
+                degree: node.centrality?.degree,
+                eigenvector: node.centrality?.eigenvector,
+                betweenness: node.centrality?.betweenness,
+                closeness: node.centrality?.closeness
+            };
+            
+            // Ensure that the requested centrality type has a value (default to 0)
+            centralityScores[centralityType] = centralityScores[centralityType] ?? 0;
+            
+            return {
+                node_id: node.node_id,
+                node_name: node.node_name,
+                centrality: centralityScores
+            };
+        });
+    }
+
+    public calculateDegreeCentralityCached(): Node[] {
+        return this.processCentralityResult(calculate_degree_centrality_cached(), 'degree');
     }
     
     public calculateEigenvectorCentralityCached(): Node[] {
-        const result = calculate_eigenvector_centrality_cached();
-        const parsedResult = JSON.parse(result);
-        
-        if (parsedResult.error) {
-            console.error('Eigenvector Centrality Error:', parsedResult.error);
-            throw new Error(parsedResult.error);
-        }
-        
-        // Verify that the parsed result is an array of nodes
-        if (!Array.isArray(parsedResult)) {
-            console.error('Unexpected result format:', parsedResult);
-            throw new Error('Eigenvector centrality result is not an array');
-        }
-        
-        // Validate and normalize each node to ensure it has the expected structure
-        return parsedResult.map((node: any) => {
-            // Create a normalized Node object
-            return {
-                node_id: node.node_id,
-                node_name: node.node_name,
-                centrality: {
-                    degree: node.centrality?.degree,
-                    eigenvector: node.centrality?.eigenvector ?? 0,
-                    betweenness: node.centrality?.betweenness,
-                    closeness: node.centrality?.closeness
-                }
-            };
-        });
+        return this.processCentralityResult(calculate_eigenvector_centrality_cached(), 'eigenvector');
     }
     
     public calculateBetweennessCentralityCached(): Node[] {
-        const result = calculate_betweenness_centrality_cached();
-        const parsedResult = JSON.parse(result);
-        
-        if (parsedResult.error) {
-            console.error('Betweenness Centrality Error:', parsedResult.error);
-            throw new Error(parsedResult.error);
-        }
-        
-        // Verify that the parsed result is an array of nodes
-        if (!Array.isArray(parsedResult)) {
-            console.error('Unexpected result format:', parsedResult);
-            throw new Error('Betweenness centrality result is not an array');
-        }
-        
-        // Validate and normalize each node to ensure it has the expected structure
-        return parsedResult.map((node: any) => {
-            // Create a normalized Node object
-            return {
-                node_id: node.node_id,
-                node_name: node.node_name,
-                centrality: {
-                    degree: node.centrality?.degree,
-                    eigenvector: node.centrality?.eigenvector,
-                    betweenness: node.centrality?.betweenness ?? 0,
-                    closeness: node.centrality?.closeness
-                }
-            };
-        });
+        return this.processCentralityResult(calculate_betweenness_centrality_cached(), 'betweenness');
     }
     
     public calculateClosenessCentralityCached(): Node[] {
-        const result = calculate_closeness_centrality_cached();
-        const parsedResult = JSON.parse(result);
+        return this.processCentralityResult(calculate_closeness_centrality_cached(), 'closeness');
+    }
+    
+    /**
+     * Helper method to process JSON results from Rust WASM side.
+     * This eliminates code duplication in methods that return JSON results.
+     * 
+     * @param jsonResult The raw JSON result from WASM
+     * @param errorContext A descriptive context for error messages
+     * @returns The parsed result
+     */
+    private processJsonResult<T>(jsonResult: string, errorContext: string): T {
+        const parsedResult = JSON.parse(jsonResult);
         
         if (parsedResult.error) {
-            console.error('Closeness Centrality Error:', parsedResult.error);
+            console.error(`${errorContext} Error:`, parsedResult.error);
             throw new Error(parsedResult.error);
         }
         
-        // Verify that the parsed result is an array of nodes
-        if (!Array.isArray(parsedResult)) {
-            console.error('Unexpected result format:', parsedResult);
-            throw new Error('Closeness centrality result is not an array');
-        }
-        
-        // Validate and normalize each node to ensure it has the expected structure
-        return parsedResult.map((node: any) => {
-            // Create a normalized Node object
-            return {
-                node_id: node.node_id,
-                node_name: node.node_name,
-                centrality: {
-                    degree: node.centrality?.degree,
-                    eigenvector: node.centrality?.eigenvector,
-                    betweenness: node.centrality?.betweenness,
-                    closeness: node.centrality?.closeness ?? 0
-                }
-            };
-        });
+        return parsedResult as T;
     }
     
     public getNodeNeighborsCached(nodeId: number): GraphNeighborsResult {
-        const result = get_node_neighbors_cached(nodeId);
-        const parsedResult = JSON.parse(result);
-        
-        if (parsedResult.error) {
-            console.error('Get Node Neighbors Error:', parsedResult.error);
-            throw new Error(parsedResult.error);
-        }
-        
-        return parsedResult as GraphNeighborsResult;
+        return this.processJsonResult<GraphNeighborsResult>(
+            get_node_neighbors_cached(nodeId),
+            'Get Node Neighbors'
+        );
     }
     
     public clearGraphCache(): void {
-        const result = clear_graph();
-        const parsedResult = JSON.parse(result);
-        
-        if (parsedResult.error) {
-            console.error('Clear Graph Error:', parsedResult.error);
-            throw new Error(parsedResult.error);
-        }
+        this.processJsonResult<{ status: string }>(
+            clear_graph(),
+            'Clear Graph'
+        );
     }
     
     public getGraphMetadata(): GraphMetadata {
-        const result = get_graph_metadata();
-        const parsedResult = JSON.parse(result);
-        
-        if (parsedResult.error) {
-            console.error('Get Graph Metadata Error:', parsedResult.error);
-            throw new Error(parsedResult.error);
-        }
-        
-        return parsedResult as GraphMetadata;
+        return this.processJsonResult<GraphMetadata>(
+            get_graph_metadata(),
+            'Get Graph Metadata'
+        );
     }
 
     public async initializeGraphAndCalculateCentrality(): Promise<{ graphData: GraphData, degreeCentrality: Node[] }> {
@@ -644,6 +645,46 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Update the view with new results
         if (this.centralityView) {
             await this.centralityView.setResults(results, algorithmName);
+        }
+    }
+
+    /**
+     * Creates a VaultData structure from GraphData
+     * Internal helper method used by both buildGraphFromVault and initializeGraphWithData
+     */
+    private createVaultDataFromGraph(graphData: GraphData): VaultData {
+        const notes: VaultNote[] = graphData.nodes.map(node => ({ id: node }));
+        return { 
+            notes,
+            links: graphData.edges
+        };
+    }
+
+    /**
+     * Initialize the graph with provided graph data directly.
+     * This method allows for direct initialization of the graph with externally constructed data.
+     * 
+     * @param graphData The graph data to initialize with
+     * @returns A Promise that resolves when initialization is complete
+     */
+    public async initializeGraphWithData(graphData: GraphData): Promise<void> {
+        await this.ensureWasmLoaded();
+        
+        try {
+            // Convert GraphData to VaultData format expected by Rust
+            const vaultData = this.createVaultDataFromGraph(graphData);
+            
+            // Call Rust function to build graph
+            this.processJsonResult<{ status: string }>(
+                build_graph_from_vault(JSON.stringify(vaultData)),
+                'Graph Initialization'
+            );
+            
+            // Success
+            console.log('Graph initialized with provided data');
+        } catch (error) {
+            console.error('Failed to initialize graph with provided data:', error);
+            throw error;
         }
     }
 }

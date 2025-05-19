@@ -4,7 +4,7 @@
 - TypeScript (Frontend/Plugin)
 - Rust/WASM (Backend)
 - Obsidian Plugin API
-- rustnetworkx-core for graph operations
+- rustworkx-core for graph operations
 - D3.js for visualization
 
 ## Current Technical Stack
@@ -17,10 +17,11 @@
 - Isolated module transpilation
 
 ### Backend (Rust/WASM)
-- rustnetworkx-core for graph processing
-- Optimized centrality calculations
-- Efficient memory management
+- UnGraph from rustworkx-core for undirected graph processing
+- Optimized centrality calculations for undirected graphs
+- Efficient memory management with lazy_static
 - Enhanced performance characteristics
+- Mutex-based thread safety
 
 ### Frontend (TypeScript)
 - GraphView component
@@ -37,11 +38,12 @@
 ## Architecture Patterns
 1. Graph Processing:
    ```rust
-   use rustnetworkx_core::{Graph, algorithms};
+   use rustworkx_core::petgraph::graph::UnGraph;
+   use lazy_static::lazy_static;
    
-   // Efficient graph operations
-   // Optimized centrality calculations
-   // Memory-efficient processing
+   // Undirected graph operations
+   // Symmetric centrality calculations
+   // Thread-safe memory management
    ```
 
 2. Plugin Interface:
@@ -58,12 +60,14 @@
    interface GraphAnalysisResult {
        graphData: GraphData;
        centrality: CentralityMetrics;
+       isDirected: false; // Always false now
    }
    ```
 
 ## Technical Constraints
 1. Graph Operations:
-   - rustnetworkx-core compatibility
+   - Undirected graph model
+   - Symmetric relationships
    - Memory efficiency
    - Performance optimization
    - Calculation accuracy
@@ -92,6 +96,7 @@
    - Efficient algorithms
    - Memory optimization
    - Performance focus
+   - Thread safety
 
 2. TypeScript Standards:
    - Strict type usage
@@ -100,6 +105,7 @@
    - Clean imports
 
 3. Testing:
+   - Symmetric graph validation
    - Calculation accuracy
    - Performance metrics
    - Memory profiling

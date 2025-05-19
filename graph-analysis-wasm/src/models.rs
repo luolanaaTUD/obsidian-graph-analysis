@@ -47,15 +47,19 @@ pub struct GraphNeighborsResult {
     pub neighbors: Vec<Node>,
 }
 
+/// Represents a note in the vault with its connections
+/// Since link detection is handled by Obsidian, we only need the note identifier
 #[derive(Serialize, Deserialize, Debug)]
-pub struct VaultFile {
-    pub path: String,
-    pub content: String,
+pub struct VaultNote {
+    pub id: String,
 }
 
+/// Data structure for transferring vault graph information from TypeScript to Rust
+/// Contains both notes and their connections as detected by Obsidian
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VaultData {
-    pub files: Vec<VaultFile>,
+    pub notes: Vec<VaultNote>,
+    pub links: Vec<(usize, usize)>,  // Pairs of note indices representing connections
 }
 
 // Error type for graph analysis operations
