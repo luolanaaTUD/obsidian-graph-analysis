@@ -4,7 +4,6 @@ import * as ss from 'simple-statistics';
 import { 
     SimulationGraphLink, 
     SimulationGraphNode,
-    GraphData,
     Node as GraphNode,
     GraphMetadata
 } from '../../types/types';
@@ -57,27 +56,27 @@ export class GraphView {
     // Node visualization constants
     private readonly NODE = {
         RADIUS: {
-            BASE: 4,
-            MAX: 12,
-            SCALE_FACTOR: 0.69
+            BASE: 3,
+            MAX: 9,
+            SCALE_FACTOR: 1
         },
         COLORS: {
             DEFAULT: 'var(--graph-node-color-default)',
             HIGHLIGHTED: 'var(--graph-node-color-highlighted)'
-        }
+        },
+        SIZE_CATEGORIES: 10 // Using 10 categories for optimal visual distinction while maintaining meaningful degree variations
     } as const;
 
     // Zoom behavior constants
     private readonly ZOOM = {
         OUT_SCALE_FACTOR: 600,
         IN_SCALE_FACTOR: 60,
-        CONTAINER_SCALE: 0.6 // The graph should use 60% of the minimum dimension
+        CONTAINER_SCALE: 0.8 // The graph should use 80% of the minimum dimension
     } as const;
 
     // D3 selections
     private nodesSelection: d3.Selection<SVGCircleElement, SimulationGraphNode, d3.BaseType, unknown>;
     private linksSelection: d3.Selection<SVGLineElement, SimulationGraphLink, d3.BaseType, unknown>;
-    private labelsSelection: d3.Selection<SVGTextElement, SimulationGraphNode, d3.BaseType, unknown>;
     
     // Force simulation
     private simulation: d3.Simulation<SimulationGraphNode, SimulationGraphLink>;
@@ -141,12 +140,8 @@ export class GraphView {
     // Add a new property to track the current zoom scale
     private currentZoomScale: number = 1;
 
-    // Add a label visibility constant to control when labels appear
-    private readonly LABEL = {
-        VISIBILITY: {
-            SHOW_THRESHOLD: 0.7  // Only show labels when zoomed in beyond this scale
-        }
-    } as const;
+    // Add this as a class property after the NODE constant
+    private nodeRadiusScale: d3.ScaleThreshold<number, number> | null = null;
 
     constructor(app: App) {
         this.app = app;
@@ -214,7 +209,7 @@ export class GraphView {
         // Create the main SVG group
         this.svgGroup = this.svg.append('g');
         
-        // Create groups for links, nodes, and labels
+        // Create groups for links and nodes only (remove labels group)
         const linksGroup = this.svgGroup.append('g')
             .attr('class', 'links-group')
             .style('stroke', 'var(--graph-link-color-default)')
@@ -226,18 +221,9 @@ export class GraphView {
             .style('fill', 'var(--graph-node-color-default)')
             .style('opacity', 'var(--graph-node-opacity-default)');
 
-        const labelsGroup = this.svgGroup.append('g')
-            .attr('class', 'labels-group')
-            .style('fill', 'var(--graph-label-color)')
-            .style('font-size', 'var(--graph-label-font-size)')
-            .style('opacity', 'var(--graph-label-opacity)')
-            .style('pointer-events', 'none')
-            .style('text-anchor', 'middle');
-
         // Initialize selections
         this.linksSelection = linksGroup.selectAll('line');
         this.nodesSelection = nodesGroup.selectAll('circle');
-        this.labelsSelection = labelsGroup.selectAll('text');
         
         // Initialize force simulation
         this.initializeSimulation();
@@ -318,9 +304,6 @@ export class GraphView {
             .on('end', () => {
                 this.container.removeClass('zooming');
                 this.restartSimulationGently();
-                
-                // Update label visibility after zoom ends
-                this.updateLabelVisibility();
             });
             
         // Enable zoom and pan
@@ -340,17 +323,17 @@ export class GraphView {
             // Link force connects nodes with edges (link force: 1)
             .force('link', d3.forceLink<SimulationGraphNode, SimulationGraphLink>()
                 .id(d => d.id)
-                .distance(250)) // link distance: 250
+                .distance(50)) // link distance: 250
             // Charge force creates repulsion between nodes (repel force: 10)
             .force('charge', d3.forceManyBody()
-                .strength(-1000)) // Stronger repulsion to match Obsidian's repel force of 10
+                .strength(-300)) // Stronger repulsion to match Obsidian's repel force of 10
             // Center forces to keep the graph roughly centered (center force: 0.52)
-            .force('x', d3.forceX().strength(0.052)) // Scaled down by factor of 10 to match D3's scale
-            .force('y', d3.forceY().strength(0.052)) // Scaled down by factor of 10 to match D3's scale
+            .force('x', d3.forceX().strength(0.8)) // Scaled down by factor of 10 to match D3's scale
+            .force('y', d3.forceY().strength(0.8)) // Scaled down by factor of 10 to match D3's scale
             // Simple collision detection to prevent overlap
             .force('collision', d3.forceCollide<SimulationGraphNode>()
                 .radius(d => this.getNodeRadius(d) + 1)
-                .strength(0.7))
+                .strength(0.8))
             // Standard decay parameters
             .alphaDecay(0.0228) // D3 default value
             .velocityDecay(0.4) // D3 default value
@@ -382,10 +365,9 @@ export class GraphView {
         // Cache selection references for performance
         const linksSelection = this.linksSelection;
         const nodesSelection = this.nodesSelection;
-        const labelsSelection = this.labelsSelection;
         
         // Safety check - if selections don't exist, exit early
-        if (!linksSelection || !nodesSelection || !labelsSelection) return;
+        if (!linksSelection || !nodesSelection) return;
         
         // Update link positions
         linksSelection
@@ -398,23 +380,6 @@ export class GraphView {
         nodesSelection
             .attr('cx', d => d.x || 0)
             .attr('cy', d => d.y || 0);
-
-        // For performance, only update visible labels and use a cached margin value
-        // First, get all visible labels as an array to avoid repeated filtering
-        const visibleLabels = labelsSelection.filter(function() { 
-            return d3.select(this).style('display') !== 'none';
-        });
-        
-        // Use a fixed margin value to avoid expensive DOM access on every node
-        const labelMargin = 8;
-        
-        // Only update position of visible labels
-        visibleLabels
-            .attr('x', d => (d.x || 0))
-            .attr('y', d => {
-                const radius = this.getNodeRadius(d);
-                return (d.y || 0) + radius + labelMargin;
-            });
     }
     
     private updateDimensions() {
@@ -893,24 +858,6 @@ export class GraphView {
                 .style('stroke-width', isConnected ? 'var(--graph-link-width-highlighted)' : 'var(--graph-link-width-default)')
                 .style('stroke-opacity', isConnected ? 'var(--graph-link-opacity-default)' : 'var(--graph-link-opacity-dimmed)');
         });
-
-        // Update label styles without limiting which ones are visible
-        if (this.labelsSelection) {
-            // Only manipulate labels if they're visible (based on zoom level)
-            const isZoomedIn = this.currentZoomScale >= this.LABEL.VISIBILITY.SHOW_THRESHOLD;
-            
-            if (isZoomedIn) {
-                // Update styles without changing visibility
-                this.labelsSelection.each(function(d) {
-                    const isSelected = d.id === nodeId;
-                    const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
-                    
-                    d3.select(this)
-                        .style('opacity', isConnected ? 'var(--graph-label-opacity-highlighted)' : 'var(--graph-label-opacity-dimmed)')
-                        .style('fill', isSelected ? 'var(--graph-label-color-highlighted)' : 'var(--graph-label-color)');
-                });
-            }
-        }
     }
     
     private resetHighlights() {
@@ -947,9 +894,6 @@ export class GraphView {
             .style('stroke-opacity', 'var(--graph-link-opacity-default)')
             .style('stroke-width', 'var(--graph-link-width-default)')
             .style('stroke', 'var(--graph-link-color-default)');
-
-        // Reset label visibility based on zoom level
-        this.updateLabelVisibility();
     }
     
     private setupDragBehavior() {
@@ -1149,6 +1093,9 @@ export class GraphView {
         this.nodes = graphData.nodes || [];
         this.links = graphData.links || [];
         
+        // Initialize the node radius scale
+        this.initializeNodeRadiusScale();
+        
         // Clear any existing neighbors cache as the graph data has changed
         this.cachedNodeId = null;
         this.cachedNeighbors = null;
@@ -1190,23 +1137,6 @@ export class GraphView {
                 exit => exit.remove()
             );
 
-        // Add labels with proper data binding and update handling
-        this.labelsSelection = this.svgGroup.select('.labels-group')
-            .selectAll<SVGTextElement, SimulationGraphNode>('text')
-            .data(this.nodes, d => d.id) // Use the same key function as nodes
-            .join(
-                enter => enter.append('text')
-                    .text(d => d.name)
-                    .attr('class', 'graph-label')
-                    .style('pointer-events', 'none')
-                    .style('text-anchor', 'middle'),
-                update => update.text(d => d.name), // Update text content on update
-                exit => exit.remove()
-            );
-
-        // Apply initial label visibility based on zoom level
-        this.updateLabelVisibility();
-
         // Setup event handlers
         this.setupNodeEventHandlers();
         
@@ -1244,29 +1174,66 @@ export class GraphView {
     }
     
     /**
+     * Initialize the node radius scale using Jenks natural breaks
+     * This should be called when the graph data is updated
+     */
+    private initializeNodeRadiusScale(): void {
+        if (!this.nodes.length) return;
+
+        // Collect all degree values
+        const degrees = this.nodes
+            .map(n => n.degreeCentrality)
+            .filter((d): d is number => d !== undefined);
+
+        if (degrees.length === 0) return;
+
+        // Calculate Jenks natural breaks using the number of size categories from NODE constant
+        const breaks = ss.jenks(degrees, this.NODE.SIZE_CATEGORIES);
+
+        // Create an array of radius values, evenly spaced between BASE and MAX
+        // We need one radius value for each category (length = breaks.length)
+        // because each break point defines the boundary between categories
+        const radiusSteps = Array.from({ length: breaks.length }, (_, i) => {
+            const t = i / (breaks.length - 1);
+            return this.NODE.RADIUS.BASE + (this.NODE.RADIUS.MAX - this.NODE.RADIUS.BASE) * t;
+        });
+
+        // Create the scale
+        this.nodeRadiusScale = d3.scaleThreshold<number, number>()
+            .domain(breaks.slice(1)) // Remove the first break point (minimum value)
+            .range(radiusSteps);
+
+        // Log the categorization for debugging
+        // console.log('Node size categorization:', {
+        //     breaks,
+        //     radiusSteps,
+        //     degreeRange: [Math.min(...degrees), Math.max(...degrees)]
+        // });
+    }
+
+    /**
      * Calculate node radius based on centrality and other factors
      */
     private getNodeRadius(node?: SimulationGraphNode | null): number {
         if (!node) {
             return this.NODE.RADIUS.BASE;
         }
-        
-        // Scale node size based on centrality or degree
-        if (node.degreeCentrality !== undefined && node.degreeCentrality > 0) {
-            // Find a normalized value between 0 and 1 for the centrality score
-            // We'd need to know the max centrality across all nodes for perfect normalization
-            // As a simple approach, cap at 1.0 and ensure positive values
-            const normalizedScore = Math.min(1.0, Math.max(0, node.degreeCentrality));
-            
-            // Scale the node radius between BASE_NODE_RADIUS and MAX_NODE_RADIUS
-            // Linear scaling: radius = base + (max-base) * normalized * scale_factor
-            return this.NODE.RADIUS.BASE + 
-                   (this.NODE.RADIUS.MAX - this.NODE.RADIUS.BASE) * 
-                   normalizedScore * this.NODE.RADIUS.SCALE_FACTOR;
+
+        // If we don't have a scale yet or node has no centrality data, return base size
+        if (!this.nodeRadiusScale || node.degreeCentrality === undefined) {
+            return this.NODE.RADIUS.BASE;
         }
-        
-        // Default size if no centrality data available
-        return this.NODE.RADIUS.BASE;
+
+        // Get the categorized radius based on the node's degree
+        const radius = this.nodeRadiusScale(node.degreeCentrality);
+
+        // Log the categorization for debugging
+        // console.log(`Node ${node.name}:`, {
+        //     degree: node.degreeCentrality,
+        //     radius: radius.toFixed(2)
+        // });
+
+        return radius;
     }
     
     public refreshGraphView(): void {
@@ -2063,17 +2030,6 @@ export class GraphView {
         return breaks.sort((a: number, b: number) => a - b);
     }
 
-    // private async resetToDegree() {
-    //     try {
-    //         const plugin = this.pluginService.getPlugin();
-    //         const results = plugin.calculateDegreeCentralityCached();
-    //         this.updateNodeColors(results, 'degree');
-    //     } catch (error) {
-    //         console.error('Failed to reset to degree centrality:', error);
-    //         new Notice('Failed to reset to degree centrality');
-    //     }
-    // }
-
     private updateNodeColors(results: GraphNode[], type: 'betweenness' | 'closeness' | 'eigenvector' | 'degree') {
         // Find min and max values for normalization
         const values = results.map(r => r.centrality[type] || 0);
@@ -2092,16 +2048,5 @@ export class GraphView {
                     .style('fill', color);
             }
         });
-    }
-
-    // Add a new method to manage label visibility based on zoom level
-    private updateLabelVisibility() {
-        if (!this.labelsSelection) return;
-        
-        // Only show labels when zoomed in beyond the threshold
-        const showLabels = this.currentZoomScale >= this.LABEL.VISIBILITY.SHOW_THRESHOLD;
-        
-        // Simply toggle all labels based on zoom level
-        this.labelsSelection.style('display', showLabels ? 'inline' : 'none');
     }
 } 
