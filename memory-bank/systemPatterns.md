@@ -1,7 +1,7 @@
 # System Patterns
 
 ## Architecture Overview
-The system now utilizes rustworkx-core's UnGraph for undirected graph operations, providing optimized performance and enhanced capabilities for symmetric relationship analysis.
+The system utilizes rustworkx-core's UnGraph for undirected graph operations, with enhanced visualization capabilities using Jenks natural breaks for optimal node size distribution.
 
 ## Core Components
 1. Graph Processing Layer
@@ -12,7 +12,7 @@ The system now utilizes rustworkx-core's UnGraph for undirected graph operations
    - Mutex-based concurrency
 
 2. Graph Components
-   - GraphView: UI and visualization
+   - GraphView: Enhanced visualization with optimized node sizing
    - GraphDataBuilder: Data preparation
    - Optimized data flow
    - Efficient processing
@@ -28,6 +28,10 @@ graph TD
     E[GraphView] --> A
     F[GraphDataBuilder] --> A
     
+    E --> J[Node Visualization]
+    J --> K[Size Categories]
+    J --> L[Jenks Breaks]
+    
     C --> G[Symmetric Centrality]
     C --> H[Graph Operations]
     C --> I[Thread-Safe Memory]
@@ -41,14 +45,21 @@ graph TD
    - Performance focus
    - Mutex protection
 
-2. Data Flow Pattern
+2. Visualization Pattern
+   - Centralized node constants
+   - Jenks natural breaks
+   - 10 size categories
+   - Optimal size distribution
+   - Enhanced visual distinction
+
+3. Data Flow Pattern
    - Efficient processing
    - Symmetric calculations
    - Smart memory usage
    - Fast operations
    - Safe concurrency
 
-3. Component Communication
+4. Component Communication
    - Clean interfaces
    - Efficient data transfer
    - Type safety
@@ -65,6 +76,10 @@ graph TD
     E --> F[Symmetric Centrality]
     E --> G[Graph Operations]
     E --> H[Thread-Safe Memory]
+    
+    A --> I[Node Visualization]
+    I --> J[Size Categories]
+    I --> K[Jenks Distribution]
 ```
 
 ## Implementation Strategy
@@ -75,16 +90,23 @@ graph TD
    - Performance focus
    - Mutex protection
 
-2. Operations:
+2. Visualization Layer:
+   - Centralized constants
+   - Jenks natural breaks
+   - 10 size categories
+   - Optimal distribution
+   - Enhanced distinction
+
+3. Operations:
    - Symmetric calculations
    - Thread-safe memory
    - Optimized algorithms
    - Enhanced performance
    - Safe concurrency
 
-3. Future Enhancements:
+4. Future Enhancements:
    - Additional metrics
-   - Performance optimization
-   - Memory improvements
+   - Visual improvements
+   - Memory optimization
    - New capabilities
-   - Enhanced thread safety
+   - Enhanced user feedback

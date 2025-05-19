@@ -110,3 +110,4 @@ Separated rendering logic into a dedicated method for better performance
 - repel force: 10
 - link force: 1
 - link distance: 250
+- node size 1.2
