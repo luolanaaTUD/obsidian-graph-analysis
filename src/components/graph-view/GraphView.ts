@@ -241,33 +241,39 @@ export class GraphView {
      */
     private calculateZoomLimits(): [number, number] {
         if (!this.nodes || this.nodes.length === 0) {
-            // Default values when no nodes are available
-            const defaultRadius = this.NODE.RADIUS.BASE;
-            const minZoom = this.width / (defaultRadius * this.ZOOM.OUT_SCALE_FACTOR);
-            const maxZoom = this.width / (defaultRadius * this.ZOOM.IN_SCALE_FACTOR);
-            return [minZoom, maxZoom];
+            // More conservative default values for empty graphs
+            return [0.1, 4];
         }
         
         // Calculate statistics for node sizes in the current graph
         let maxRadius = 0;
         let totalRadius = 0;
-        let nodeCount = 0;
+        let nodeCount = this.nodes.length;
         
         this.nodes.forEach(node => {
             const radius = this.getNodeRadius(node);
             maxRadius = Math.max(maxRadius, radius);
             totalRadius += radius;
-            nodeCount++;
         });
         
         // Use average node radius for min zoom (to see entire graph)
-        const avgRadius = nodeCount > 0 ? totalRadius / nodeCount : this.NODE.RADIUS.BASE;
-        // Use max node radius for max zoom (to prevent largest nodes from getting too big)
-        const largestRadius = maxRadius > 0 ? maxRadius : this.NODE.RADIUS.BASE;
+        const avgRadius = totalRadius / nodeCount;
+        
+        // Adjust scale factors based on node count
+        const baseOutScaleFactor = 600;
+        const baseInScaleFactor = 60;
+        
+        // For small graphs (< 100 nodes), use more conservative scale factors
+        const outScaleFactor = nodeCount < 100 ? baseOutScaleFactor / 2 : baseOutScaleFactor;
+        const inScaleFactor = nodeCount < 100 ? baseInScaleFactor / 2 : baseInScaleFactor;
         
         // Calculate zoom limits based on these statistics
-        const minZoom = this.width / (avgRadius * this.ZOOM.OUT_SCALE_FACTOR);
-        const maxZoom = this.width / (largestRadius * this.ZOOM.IN_SCALE_FACTOR);
+        let minZoom = this.width / (avgRadius * outScaleFactor);
+        let maxZoom = this.width / (maxRadius * inScaleFactor);
+        
+        // Ensure reasonable bounds for small graphs
+        minZoom = Math.max(0.1, Math.min(minZoom, 1.0)); // Prevent extreme min zoom
+        maxZoom = Math.max(2.0, Math.min(maxZoom, 8.0)); // Ensure reasonable max zoom
         
         return [minZoom, maxZoom];
     }
@@ -303,9 +309,10 @@ export class GraphView {
             })
             .on('end', () => {
                 this.container.removeClass('zooming');
+                
                 this.restartSimulationGently();
             });
-            
+        
         // Enable zoom and pan
         this.svg.call(this.zoom);
         
@@ -1242,13 +1249,10 @@ export class GraphView {
     }
     
     public recenterGraph(animate: boolean = true): void {
-        // Find the bounds of all nodes
+        // Exit early if we have no nodes
         if (this.nodes.length === 0) return;
         
-        // Track if we've handled orphan nodes specially
-        let orphanNodesHandled = false;
-        
-        // First pass - find the bounds
+        // Now calculate the actual bounds including node radii
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
         
@@ -1262,80 +1266,31 @@ export class GraphView {
             maxY = Math.max(maxY, node.y + radius);
         });
         
-        // Handle the special case where all nodes are at the center
-        if (Math.abs(maxX - minX) < 20 && Math.abs(maxY - minY) < 20) {
-            // We have identified a collapsed graph with very small bounds
-            orphanNodesHandled = true;
-            
-            // Redistribute nodes in a circle to create some initial space
-            const nodeCount = this.nodes.length;
-            const radius = Math.sqrt(nodeCount) * 15; // Scale radius based on node count
-            
-            this.nodes.forEach((node, i) => {
-                // Place nodes in a circle or grid formation
-                if (nodeCount <= 50) { 
-                    // Circle layout for small graphs
-                    const angle = (i / nodeCount) * 2 * Math.PI;
-                    node.x = Math.cos(angle) * radius;
-                    node.y = Math.sin(angle) * radius;
-                } else {
-                    // Grid layout for larger graphs
-                    const gridSize = Math.ceil(Math.sqrt(nodeCount));
-                    const col = i % gridSize;
-                    const row = Math.floor(i / gridSize);
-                    const gridSpacing = radius / 2;
-                    
-                    node.x = (col - gridSize/2) * gridSpacing;
-                    node.y = (row - gridSize/2) * gridSpacing;
-                }
-                
-                // Calculate new bounds with the rearranged nodes
-                const nodeRadius = this.getNodeRadius(node);
-                minX = Math.min(minX, node.x - nodeRadius);
-                minY = Math.min(minY, node.y - nodeRadius);
-                maxX = Math.max(maxX, node.x + nodeRadius);
-                maxY = Math.max(maxY, node.y + nodeRadius);
-            });
-            
-            // Restart simulation to apply new positions
-            if (this.simulation) {
-                this.simulation.alpha(1).restart();
-            }
-        }
-        
         // Only proceed if we have valid bounds
-        if (minX === Infinity || minY === Infinity) return;
+        if (!isFinite(minX) || !isFinite(minY)) return;
         
-        // Calculate width and height of the graph
+        // Calculate graph dimensions
         const graphWidth = maxX - minX;
         const graphHeight = maxY - minY;
         
         // Safety check for zero dimensions
         if (graphWidth === 0 || graphHeight === 0) return;
         
+        // Calculate scale to make graph take up CONTAINER_SCALE of minimum window dimension
         const minDimension = Math.min(this.width, this.height);
-        const scaleX = (this.ZOOM.CONTAINER_SCALE * minDimension) / graphWidth;
-        const scaleY = (this.ZOOM.CONTAINER_SCALE * minDimension) / graphHeight;
-        
-        // Use the smallest scale to ensure everything fits
-        // Prevent scaling below 0.3 to avoid negative or too small values
-        const minScale = 0.3;
-        let scale = Math.min(scaleX, scaleY);
-        if (scale < minScale) {
-            scale = minScale;
-        }
+        const targetSize = minDimension * this.ZOOM.CONTAINER_SCALE;
+        const scale = targetSize / Math.max(graphWidth, graphHeight);
         
         // Calculate center point of the graph
         const centerX = minX + graphWidth / 2;
         const centerY = minY + graphHeight / 2;
         
-        // Apply the transform with or without transition based on animate parameter
-        // Fix: translate relative to center of container's viewBox (which is centered at 0,0)
+        // Apply the transform
         const transform = d3.zoomIdentity
             .translate(-centerX * scale, -centerY * scale)
             .scale(scale);
         
-        if (animate && !orphanNodesHandled) {
+        if (animate) {
             this.svg.transition()
                 .duration(this.ANIMATION.RECENTER_DURATION)
                 .call(this.zoom.transform, transform);
