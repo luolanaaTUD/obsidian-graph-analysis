@@ -1,6 +1,6 @@
 {
   "name": "obsidian-graph-analysis",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Analyze Obsidian vault using graph algorithms to provide insights into note structure and relationships",
   "main": "dist/main.js",
   "scripts": {
