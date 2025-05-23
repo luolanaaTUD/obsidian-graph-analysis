@@ -56,9 +56,18 @@ export class GraphView {
     // Node visualization constants
     private readonly NODE = {
         RADIUS: {
-            BASE: 3,
-            MAX: 9,
-            SCALE_FACTOR: 1
+            SMALL_GRAPH: {
+                BASE: 2,
+                MAX: 4
+            },
+            MEDIUM_GRAPH: {
+                BASE: 3,
+                MAX: 6
+            },
+            LARGE_GRAPH: {
+                BASE: 3,
+                MAX: 9
+            }
         },
         COLORS: {
             DEFAULT: 'var(--graph-node-color-default)',
@@ -71,7 +80,11 @@ export class GraphView {
     private readonly ZOOM = {
         OUT_SCALE_FACTOR: 600,
         IN_SCALE_FACTOR: 60,
-        CONTAINER_SCALE: 0.8 // The graph should use 80% of the minimum dimension
+        CONTAINER_SCALE: {
+            MIN: 0.3,   // Minimum scale (30% of viewport)
+            MAX: 0.85,  // Maximum scale (85% of viewport)
+            NODE_SCALE_FACTOR: 500  // Node count that represents mid-point of scaling
+        }
     } as const;
 
     // D3 selections
@@ -1197,25 +1210,29 @@ export class GraphView {
         // Calculate Jenks natural breaks using the number of size categories from NODE constant
         const breaks = ss.jenks(degrees, this.NODE.SIZE_CATEGORIES);
 
-        // Create an array of radius values, evenly spaced between BASE and MAX
-        // We need one radius value for each category (length = breaks.length)
-        // because each break point defines the boundary between categories
+        // Create an array of radius values based on graph size
+        let minRadius: number;
+        let maxRadius: number;
+        if (this.nodes.length <= 20) {
+            minRadius = this.NODE.RADIUS.SMALL_GRAPH.BASE;
+            maxRadius = this.NODE.RADIUS.SMALL_GRAPH.MAX;
+        } else if (this.nodes.length <= 100) {
+            minRadius = this.NODE.RADIUS.MEDIUM_GRAPH.BASE;
+            maxRadius = this.NODE.RADIUS.MEDIUM_GRAPH.MAX;
+        } else {
+            minRadius = this.NODE.RADIUS.LARGE_GRAPH.BASE;
+            maxRadius = this.NODE.RADIUS.LARGE_GRAPH.MAX;
+        }
+
         const radiusSteps = Array.from({ length: breaks.length }, (_, i) => {
             const t = i / (breaks.length - 1);
-            return this.NODE.RADIUS.BASE + (this.NODE.RADIUS.MAX - this.NODE.RADIUS.BASE) * t;
+            return minRadius + (maxRadius - minRadius) * t;
         });
 
         // Create the scale
         this.nodeRadiusScale = d3.scaleThreshold<number, number>()
             .domain(breaks.slice(1)) // Remove the first break point (minimum value)
             .range(radiusSteps);
-
-        // Log the categorization for debugging
-        // console.log('Node size categorization:', {
-        //     breaks,
-        //     radiusSteps,
-        //     degreeRange: [Math.min(...degrees), Math.max(...degrees)]
-        // });
     }
 
     /**
@@ -1223,22 +1240,16 @@ export class GraphView {
      */
     private getNodeRadius(node?: SimulationGraphNode | null): number {
         if (!node) {
-            return this.NODE.RADIUS.BASE;
+            return this.NODE.RADIUS.SMALL_GRAPH.BASE;
         }
 
         // If we don't have a scale yet or node has no centrality data, return base size
         if (!this.nodeRadiusScale || node.degreeCentrality === undefined) {
-            return this.NODE.RADIUS.BASE;
+            return this.NODE.RADIUS.SMALL_GRAPH.BASE;
         }
 
         // Get the categorized radius based on the node's degree
         const radius = this.nodeRadiusScale(node.degreeCentrality);
-
-        // Log the categorization for debugging
-        // console.log(`Node ${node.name}:`, {
-        //     degree: node.degreeCentrality,
-        //     radius: radius.toFixed(2)
-        // });
 
         return radius;
     }
@@ -1276,9 +1287,12 @@ export class GraphView {
         // Safety check for zero dimensions
         if (graphWidth === 0 || graphHeight === 0) return;
         
-        // Calculate scale to make graph take up CONTAINER_SCALE of minimum window dimension
+        // Calculate optimal container scale based on graph characteristics
+        const containerScale = this.calculateOptimalContainerScale();
+        
+        // Calculate scale to make graph take up appropriate percentage of minimum window dimension
         const minDimension = Math.min(this.width, this.height);
-        const targetSize = minDimension * this.ZOOM.CONTAINER_SCALE;
+        const targetSize = minDimension * containerScale;
         const scale = targetSize / Math.max(graphWidth, graphHeight);
         
         // Calculate center point of the graph
@@ -1958,6 +1972,24 @@ export class GraphView {
             console.error(`Failed to calculate ${type} centrality:`, error);
             new Notice(`Failed to calculate ${type} centrality: ${(error as Error).message}`);
         }
+    }
+
+    /**
+     * Calculates the optimal container scale based on node count.
+     * Uses a logarithmic scale to create smooth transitions between different graph sizes.
+     * Small graphs (few nodes) will use less space, while larger graphs will use more.
+     */
+    private calculateOptimalContainerScale(): number {
+        if (!this.nodes.length) return this.ZOOM.CONTAINER_SCALE.MIN;
+
+        // Use logarithmic scaling for smooth transitions
+        const normalizedCount = Math.log(this.nodes.length + 1) / Math.log(this.ZOOM.CONTAINER_SCALE.NODE_SCALE_FACTOR + 1);
+        
+        // Calculate scale between MIN and MAX
+        const scaleRange = this.ZOOM.CONTAINER_SCALE.MAX - this.ZOOM.CONTAINER_SCALE.MIN;
+        const scale = this.ZOOM.CONTAINER_SCALE.MIN + (scaleRange * Math.min(normalizedCount, 1));
+        
+        return scale;
     }
 
     /**
