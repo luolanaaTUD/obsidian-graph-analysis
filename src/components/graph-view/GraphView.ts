@@ -83,7 +83,7 @@ export class GraphView {
         CONTAINER_SCALE: {
             MIN: 0.3,   // Minimum scale (30% of viewport)
             MAX: 0.85,  // Maximum scale (85% of viewport)
-            NODE_SCALE_FACTOR: 500  // Node count that represents mid-point of scaling
+            NODE_SCALE_FACTOR: 600  // Node count that represents mid-point of scaling
         }
     } as const;
 
@@ -150,8 +150,7 @@ export class GraphView {
     // Add color palette state
     private colorPalettes = KEPLER_COLOR_PALETTES;
 
-    // Add a new property to track the current zoom scale
-    private currentZoomScale: number = 1;
+
 
     // Add this as a class property after the NODE constant
     private nodeRadiusScale: d3.ScaleThreshold<number, number> | null = null;
@@ -167,11 +166,8 @@ export class GraphView {
     public async onload(container: HTMLElement) {
         this.container = container;
         
-        // Initialize D3 components
+        // Initialize D3 components (includes SVG setup, force simulation, and zoom behavior)
         this.initializeD3();
-        
-        // Setup zoom behavior
-        this.setupZoomBehavior();
         
         // Create control panel
         this.createControlPanel();
@@ -222,7 +218,7 @@ export class GraphView {
         // Create the main SVG group
         this.svgGroup = this.svg.append('g');
         
-        // Create groups for links and nodes only (remove labels group)
+        // Create groups for links and nodes
         const linksGroup = this.svgGroup.append('g')
             .attr('class', 'links-group')
             .style('stroke', 'var(--graph-link-color-default)')
@@ -241,7 +237,7 @@ export class GraphView {
         // Initialize force simulation
         this.initializeSimulation();
         
-        // Add zoom behavior
+        // Setup zoom behavior
         this.setupZoomBehavior();
         
         // Handle resize with ResizeObserver
@@ -309,8 +305,6 @@ export class GraphView {
                 // Update SVG group transform
                 this.svgGroup.attr('transform', event.transform);
                 
-                // Store current zoom scale for label visibility calculation
-                this.currentZoomScale = event.transform.k;
                 
                 // Request a frame to update graph elements
                 if (!this._frameRequest) {
@@ -322,15 +316,13 @@ export class GraphView {
             })
             .on('end', () => {
                 this.container.removeClass('zooming');
-                
                 this.restartSimulationGently();
             });
         
         // Enable zoom and pan
         this.svg.call(this.zoom);
         
-        // Initial transform to show the entire graph
-        this.recenterGraph();
+        // Don't call recenterGraph here - it will be called after data is loaded
     }
 
 
@@ -992,10 +984,10 @@ export class GraphView {
      */
     private highlightNode(element: SVGCircleElement, highlight: boolean) {
         const node = d3.select(element);
-        const nodeData = node.datum() as SimulationGraphNode;
+        // const nodeData = node.datum() as SimulationGraphNode;
         
         // Get the current node fill color, which could be a gradient if centrality analysis is active
-        const currentFill = node.style('fill');
+        // const currentFill = node.style('fill');
         
         // Check if any centrality analysis is active
         const isCentralityActive = Object.values(this.centralityState).some(state => state);
@@ -1162,16 +1154,17 @@ export class GraphView {
         
         // Update simulation with new data
         if (this.simulation) {
-            // Assign random initial positions to prevent all nodes starting at (0,0)
-            // which can cause the slow central collapse
-            this.nodes.forEach(node => {
-                if (!node.x && !node.y) {
-                    // Use circle packing algorithm to distribute nodes
-                    const angle = Math.random() * 2 * Math.PI;
-                    const radius = 100 + Math.random() * 200; // Distribute within a larger radius
-                    node.x = Math.cos(angle) * radius;
-                    node.y = Math.sin(angle) * radius;
-                }
+            // Assign initial positions in a circle layout
+            const radius = Math.min(this.width, this.height) / 6;
+            const angleStep = (2 * Math.PI) / this.nodes.length;
+            
+            this.nodes.forEach((node, i) => {
+                const angle = i * angleStep;
+                node.x = Math.cos(angle) * radius;
+                node.y = Math.sin(angle) * radius;
+                // Clear any fixed positions
+                node.fx = null;
+                node.fy = null;
             });
 
             // Update the simulation with our nodes and links
@@ -1181,15 +1174,29 @@ export class GraphView {
                 linkForce.links(this.links);
             }
 
+            // Center the graph immediately with initial layout
+            this.recenterGraph(false);
+
             // Start the simulation with a higher alpha for better initial layout
-            this.simulation.alpha(1).restart();
+            this.simulation
+                .alpha(1)
+                .alphaTarget(0.3) // Keep some movement
+                .restart();
             
-            // Automatically cool down the simulation after a short time
-            setTimeout(() => {
-                if (this.simulation) {
+            this.recenterGraph(true);
+
+            // After initial movement, cool down the simulation and recenter
+            this.simulation.on('tick.init', () => {
+                if (this.simulation.alpha() < 0.1) {
+                    // Remove this special tick handler
+                    this.simulation.on('tick.init', null);
+                    
+                    // Cool down simulation completely
                     this.simulation.alphaTarget(0);
+                    
+                    
                 }
-            }, 3000);
+            });
         }
     }
     
