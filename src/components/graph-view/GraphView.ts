@@ -1398,6 +1398,19 @@ export class GraphView {
             this.loadingIndicator.remove();
             this.loadingIndicator = null;
         }
+
+        // Close the centrality results view and hide the right sidebar if it's open
+        const centralityLeaf = this.app.workspace.getLeavesOfType(CENTRALITY_RESULTS_VIEW_TYPE)[0];
+        if (centralityLeaf) {
+            // Detach the centrality view
+            centralityLeaf.detach();
+            
+            // Hide the right sidebar by collapsing it
+            const rightSplit = this.app.workspace.rightSplit;
+            if (rightSplit && rightSplit.collapsed === false) {
+                rightSplit.collapse();
+            }
+        }
         
         // Clear data caches
         this.cachedNodeId = null;
@@ -1841,10 +1854,16 @@ export class GraphView {
                 // Clear the last centrality scores
                 this.lastCentralityScores = {};
 
-                // Hide the centrality results view
+                // Hide the centrality results view and collapse the right sidebar
                 const leaf = this.app.workspace.getLeavesOfType(CENTRALITY_RESULTS_VIEW_TYPE)[0];
                 if (leaf) {
                     leaf.detach();
+                    
+                    // Collapse the right sidebar
+                    const rightSplit = this.app.workspace.rightSplit;
+                    if (rightSplit && rightSplit.collapsed === false) {
+                        rightSplit.collapse();
+                    }
                 }
             } else {
                 // Deactivate other buttons and states
