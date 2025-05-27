@@ -9,6 +9,8 @@
  * 5. Tooltips & Popups
  * 6. Centrality Features
  * 7. Color Settings Panel
+ * 8. AI Summary Components
+ * 9. Graph Analysis View Status Bar Control
  *----------------------------------------*/
 
 /* 1. Variables & Imports
@@ -624,3 +626,68 @@
   background: var(--interactive-accent);
   color: var(--text-on-accent);
 }
+
+/* 8. AI Summary Components
+/*----------------------------------------*/
+/* Status bar button - using Obsidian's built-in status-bar-item class */
+.status-bar-item.plugin-graph-analysis-ai-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+  cursor: pointer;
+  padding: var(--size-2-1) var(--size-2-3);
+  border-radius: var(--radius-s);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.status-bar-item.plugin-graph-analysis-ai-summary:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.status-bar-item.plugin-graph-analysis-ai-summary .status-bar-item-icon {
+  display: flex;
+  align-items: center;
+}
+
+.status-bar-item.plugin-graph-analysis-ai-summary .status-bar-item-icon svg {
+  transition: color 0.2s ease;
+}
+
+.status-bar-item.plugin-graph-analysis-ai-summary:hover .status-bar-item-icon svg {
+  color: var(--text-normal);
+}
+
+.status-bar-item.plugin-graph-analysis-ai-summary .status-bar-item-text {
+  font-weight: var(--font-medium);
+  transition: color 0.2s ease;
+}
+
+/* AI Summary Modal - using Obsidian's built-in modal classes */
+.ai-summary-content {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: var(--size-4-4);
+  background: var(--background-secondary);
+  border-radius: var(--radius-m);
+  margin: var(--size-4-4) 0;
+  line-height: var(--line-height-normal);
+}
+
+.modal-button-container {
+  display: flex;
+  gap: var(--size-2-3);
+  justify-content: flex-end;
+  margin-top: var(--size-4-4);
+}
+
+/* 9. Graph Analysis View Status Bar Control
+/*----------------------------------------*/
+/* Hide status bar when graph analysis view is active for immersive experience.
+ * This class is added to the body when the graph view is opened/activated
+ * and removed when the view is closed/deactivated or the plugin is unloaded.
+ */
+.graph-analysis-hide-status-bar .status-bar {
+  display: none !important;
+}
+

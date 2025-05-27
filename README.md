@@ -13,6 +13,7 @@ A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using adva
   - Closeness Centrality: Measures how central notes are to your vault
 - **Smart Performance**: Efficient updates and memory management
 - **Customizable Settings**: Control analysis scope and visualization
+- **Immersive Graph View**: Status bar is automatically hidden when viewing the graph for a distraction-free experience
 
 ## Installation
 

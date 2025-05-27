@@ -4,6 +4,7 @@ import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
 import { CentralityResultsView, CENTRALITY_RESULTS_VIEW_TYPE } from './views/CentralityResultsView';
 import { GraphAnalysisSettingTab } from './settings/GraphAnalysisSettingTab';
+import { AISummaryManager } from './ai/AISummaryManager';
 
 // Import our styles 
 import './styles.css';
@@ -24,6 +25,7 @@ export default class GraphAnalysisPlugin extends Plugin {
     wasmInitialized: boolean = false;
     graphView: GraphView | null = null;
     centralityView: CentralityResultsView | null = null;
+    aiSummaryManager: AISummaryManager | null = null;
     
     private fileCreatedHandler: ((file: TFile) => void) | null = null;
     private fileDeletedHandler: ((file: TFile) => void) | null = null;
@@ -98,6 +100,26 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add settings tab
         this.addSettingTab(new GraphAnalysisSettingTab(this.app, this));
 
+        // Initialize AI Summary Manager and add status bar button
+        this.aiSummaryManager = new AISummaryManager(this.app, this.settings);
+        this.aiSummaryManager.createStatusBarButton(this.addStatusBarItem());
+
+        // Add command for AI summary
+        this.addCommand({
+            id: 'generate-ai-summary',
+            name: 'Generate AI Summary for Current Note',
+            checkCallback: (checking: boolean) => {
+                const activeFile = this.app.workspace.getActiveFile();
+                if (activeFile && activeFile.extension === 'md') {
+                    if (!checking) {
+                        this.aiSummaryManager?.generateAISummaryForCurrentNote();
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+
         // Add a ribbon icon to show the graph view
         this.addRibbonIcon('waypoints', 'Graph Analysis View', async () => {
             const existing = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
@@ -124,6 +146,10 @@ export default class GraphAnalysisPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+        // Update AI Summary Manager settings
+        if (this.aiSummaryManager) {
+            this.aiSummaryManager.updateSettings(this.settings);
+        }
     }
 
     private async initializeWasmModule() {
@@ -322,6 +348,12 @@ export default class GraphAnalysisPlugin extends Plugin {
             this.wasmLoadingNotice = null;
         }
         
+        // Clean up AI Summary Manager
+        if (this.aiSummaryManager) {
+            this.aiSummaryManager.destroy();
+            this.aiSummaryManager = null;
+        }
+        
         this.wasmInitialized = false;
         this.wasmLoadingPromise = null;
         
@@ -335,6 +367,8 @@ export default class GraphAnalysisPlugin extends Plugin {
             leaf.detach();
         }
         
+        // Ensure status bar is restored when plugin is unloaded
+        document.body.removeClass('graph-analysis-hide-status-bar');
         document.body.classList.remove('graph-view-dragging');
         document.body.classList.remove('graph-analysis-active');
     }
