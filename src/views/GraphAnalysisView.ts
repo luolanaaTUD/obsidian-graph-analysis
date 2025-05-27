@@ -17,16 +17,22 @@ export class GraphAnalysisView extends ItemView {
             if (leaf === this.leaf) {
                 // This view became active - ensure status bar is hidden
                 this.hideStatusBar();
-            } else {
-                // Another view became active - check if we should show the status bar
-                // We only show the status bar if NO graph analysis views are open anywhere
-                // This prevents the status bar from appearing when centrality results open in sidebar
-                const graphAnalysisViews = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
-                const hasOpenGraphView = graphAnalysisViews.length > 0;
                 
-                // Only show status bar if no graph analysis views are open
-                if (!hasOpenGraphView) {
+                // Only update graph if it's actually visible and ready
+                setTimeout(() => {
+                    this.centerGraphSafely();
+                }, 100); // Small delay to ensure the view is fully rendered
+            } else {
+                // Another view became active - check if the new active view is a graph analysis view
+                // This ensures status bar is only shown when NO graph analysis view is currently active
+                const activeView = this.app.workspace.getActiveViewOfType(GraphAnalysisView);
+                
+                // Show status bar only if the active view is NOT a graph analysis view
+                if (!activeView) {
                     this.showStatusBar();
+                } else {
+                    // If the active view is a graph analysis view, ensure status bar is hidden
+                    this.hideStatusBar();
                 }
             }
         };
@@ -86,15 +92,6 @@ export class GraphAnalysisView extends ItemView {
     }
     
     async onClose(): Promise<void> {
-        // Check if this is the last graph analysis view being closed
-        const graphAnalysisViews = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
-        const isLastGraphView = graphAnalysisViews.length <= 1; // <= 1 because this view is still counted
-        
-        // Only restore status bar if this is the last graph view being closed
-        if (isLastGraphView) {
-            this.showStatusBar();
-        }
-        
         if (this.graphView) {
             try {
                 this.graphView.onunload();
@@ -104,6 +101,18 @@ export class GraphAnalysisView extends ItemView {
         }
         
         this.contentEl.empty();
+        
+        // After closing, check if there's still an active graph analysis view
+        // Use setTimeout to ensure the view is fully closed before checking
+        setTimeout(() => {
+            const activeGraphView = this.app.workspace.getActiveViewOfType(GraphAnalysisView);
+            
+            // Show status bar only if no graph analysis view is currently active
+            if (!activeGraphView) {
+                this.showStatusBar();
+            }
+        }, 10);
+        
         return;
     }
     
@@ -120,16 +129,24 @@ export class GraphAnalysisView extends ItemView {
     private async centerGraphSafely(): Promise<void> {
         try {
             if (this.graphView) {
-                this.graphView.refreshGraphView();
-                console.log("Graph position updated after view activation/resize");
+                // Check if this view is currently active/visible
+                const isActive = this.app.workspace.getActiveViewOfType(GraphAnalysisView) === this;
                 
-                setTimeout(() => {
-                    try {
-                        this.graphView.restartSimulationGently();
-                    } catch (e) {
-                        console.warn("Error restarting force simulation:", e);
-                    }
-                }, 50);
+                // Only refresh the graph if this view is active and visible
+                if (isActive) {
+                    this.graphView.refreshGraphView();
+                    console.log("Graph position updated after view activation/resize");
+                    
+                    setTimeout(() => {
+                        try {
+                            if (this.graphView) {
+                                this.graphView.restartSimulationGently();
+                            }
+                        } catch (e) {
+                            console.warn("Error restarting force simulation:", e);
+                        }
+                    }, 50);
+                }
             }
         } catch (e) {
             console.warn("Error updating graph position:", e);

@@ -100,6 +100,7 @@ export class GraphView {
     private visibilityObserver: IntersectionObserver | null = null;
     private lastVisibilityChange: number = 0;
     private wasInvisible: boolean = false;
+    private isVisible: boolean = false;
     
     // Animation frame request reference
     private _frameRequest: number | null = null;
@@ -165,6 +166,9 @@ export class GraphView {
 
     public async onload(container: HTMLElement) {
         this.container = container;
+        
+        // Initialize visibility state
+        this.isVisible = true; // Assume visible when first loaded
         
         // Initialize D3 components (includes SVG setup, force simulation, and zoom behavior)
         this.initializeD3();
@@ -302,6 +306,12 @@ export class GraphView {
                 this.container.addClass('zooming');
             })
             .on('zoom', (event) => {
+                // Validate transform values before applying
+                if (!isFinite(event.transform.x) || !isFinite(event.transform.y) || !isFinite(event.transform.k)) {
+                    console.warn('Invalid transform values detected, skipping zoom update');
+                    return;
+                }
+                
                 // Update SVG group transform
                 this.svgGroup.attr('transform', event.transform);
                 
@@ -395,13 +405,22 @@ export class GraphView {
     }
     
     private updateDimensions() {
-        const rect = this.container.getBoundingClientRect();
-        this.width = rect.width;
-        this.height = rect.height;
+        // Check if container is visible before updating dimensions
+        if (!this.container || !this.container.isConnected) {
+            return;
+        }
         
-        // Update zoom limits when dimensions change
-        if (this.zoom) {
-            this.zoom.scaleExtent(this.calculateZoomLimits());
+        const rect = this.container.getBoundingClientRect();
+        
+        // Only update dimensions if they are valid and the container is visible
+        if (rect.width > 0 && rect.height > 0 && isFinite(rect.width) && isFinite(rect.height)) {
+            this.width = rect.width;
+            this.height = rect.height;
+            
+            // Update zoom limits when dimensions change
+            if (this.zoom) {
+                this.zoom.scaleExtent(this.calculateZoomLimits());
+            }
         }
     }
     
@@ -1262,6 +1281,17 @@ export class GraphView {
     }
     
     public refreshGraphView(): void {
+        // Only refresh if the container is visible and connected
+        if (!this.container || !this.container.isConnected || !this.isVisible) {
+            return;
+        }
+        
+        // Check if the container has valid dimensions before proceeding
+        const rect = this.container.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+            return;
+        }
+        
         this.updateDimensions();
         this.recenterGraph();
     }
@@ -1269,6 +1299,16 @@ export class GraphView {
     public recenterGraph(animate: boolean = true): void {
         // Exit early if we have no nodes
         if (this.nodes.length === 0) return;
+        
+        // Check if container is visible and has valid dimensions
+        if (!this.container || !this.container.isConnected) {
+            return;
+        }
+        
+        // Ensure we have valid dimensions before proceeding
+        if (!isFinite(this.width) || !isFinite(this.height) || this.width <= 0 || this.height <= 0) {
+            return;
+        }
         
         // Now calculate the actual bounds including node radii
         let minX = Infinity, minY = Infinity;
@@ -1302,14 +1342,29 @@ export class GraphView {
         const targetSize = minDimension * containerScale;
         const scale = targetSize / Math.max(graphWidth, graphHeight);
         
+        // Validate scale before proceeding
+        if (!isFinite(scale) || scale <= 0) {
+            return;
+        }
+        
         // Calculate center point of the graph
         const centerX = minX + graphWidth / 2;
         const centerY = minY + graphHeight / 2;
+        
+        // Validate center coordinates
+        if (!isFinite(centerX) || !isFinite(centerY)) {
+            return;
+        }
         
         // Apply the transform
         const transform = d3.zoomIdentity
             .translate(-centerX * scale, -centerY * scale)
             .scale(scale);
+        
+        // Final validation of transform values
+        if (!isFinite(transform.x) || !isFinite(transform.y) || !isFinite(transform.k)) {
+            return;
+        }
         
         if (animate) {
             this.svg.transition()
@@ -1334,6 +1389,7 @@ export class GraphView {
                 // Check if the graph view became visible
                 const entry = entries[0];
                 if (entry.isIntersecting && this.wasInvisible) {
+                    this.isVisible = true;
                     // Only recenter if it's been a significant time since the last visibility change
                     // This prevents unnecessary recentering during quick tab switches
                     if (now - this.lastVisibilityChange > 1000) {
@@ -1342,6 +1398,7 @@ export class GraphView {
                     }
                     this.wasInvisible = false;
                 } else if (!entry.isIntersecting) {
+                    this.isVisible = false;
                     this.wasInvisible = true;
                 }
                 

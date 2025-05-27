@@ -14,6 +14,7 @@ A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using adva
 - **Smart Performance**: Efficient updates and memory management
 - **Customizable Settings**: Control analysis scope and visualization
 - **Immersive Graph View**: Status bar is automatically hidden when viewing the graph for a distraction-free experience
+- **AI-Powered Summaries**: Generate intelligent summaries of your notes using Google Gemini AI
 
 ## Installation
 
@@ -52,6 +53,30 @@ Each centrality measure provides different insights into your notes:
 - **Betweenness Centrality**: Identifies notes that bridge different topics
 - **Closeness Centrality**: Shows how easily notes can reach others
 
+### AI Summary Feature
+
+The plugin includes an AI-powered summary feature that can generate intelligent summaries of your notes:
+
+1. **Access**: Click the "AI Summary" button in the status bar (bottom of Obsidian)
+2. **Requirements**: Configure your Google Gemini API key in plugin settings
+3. **Content Processing**: The plugin automatically cleans up markdown formatting and limits content to 1000 words for optimal AI processing
+4. **Fallback**: If no API key is configured, a simple extractive summary is provided instead
+
+#### Getting a Gemini API Key
+
+1. Visit [Google AI Studio](https://aistudio.google.com/)
+2. Sign in with your Google account
+3. Create a new API key
+4. Copy the key and paste it into the plugin settings
+
+#### Features
+
+- **Smart Content Cleanup**: Removes markdown formatting, empty lines, and limits word count
+- **Intelligent Summaries**: Uses Google Gemini AI for high-quality summaries
+- **Secure Storage**: API keys are stored securely in Obsidian settings
+- **Error Handling**: Graceful fallback to simple summaries if AI fails
+- **Copy to Clipboard**: Easy copying of generated summaries
+
 ### Settings
 
 Access plugin settings from the Obsidian settings panel under "Graph Analysis":
@@ -59,6 +84,7 @@ Access plugin settings from the Obsidian settings panel under "Graph Analysis":
 - **Exclude Folders**: Comma-separated list of folders to exclude from analysis
 - **Exclude Tags**: Comma-separated list of tags to exclude from analysis
 - **Result Limit**: Maximum number of results to display
+- **Gemini API Key**: Your Google Gemini API key for AI-powered summaries
 - **Visualization Options**: Customize the graph view appearance
 
 ## Technical Details

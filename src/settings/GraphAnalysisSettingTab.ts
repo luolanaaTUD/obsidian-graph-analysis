@@ -48,5 +48,23 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                     this.plugin.settings.resultLimit = value;
                     await this.plugin.saveSettings();
                 }));
+
+        // AI Summary Settings
+        containerEl.createEl('h3', { text: 'AI Summary Settings' });
+
+        new Setting(containerEl)
+            .setName('Gemini API Key')
+            .setDesc('Your Google Gemini API key for AI-powered summaries')
+            .addText(text => {
+                text.setPlaceholder('Enter your Gemini API key')
+                    .setValue(this.plugin.settings.geminiApiKey)
+                    .onChange(async (value) => {
+                        this.plugin.settings.geminiApiKey = value;
+                        await this.plugin.saveSettings();
+                    });
+                // Make it a password field for security
+                text.inputEl.type = 'password';
+                return text;
+            });
     }
 }

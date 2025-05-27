@@ -665,20 +665,46 @@
 
 /* AI Summary Modal - using Obsidian's built-in modal classes */
 .ai-summary-content {
+  padding: 16px 0;
+  line-height: 1.6;
   max-height: 400px;
   overflow-y: auto;
-  padding: var(--size-4-4);
-  background: var(--background-secondary);
-  border-radius: var(--radius-m);
-  margin: var(--size-4-4) 0;
-  line-height: var(--line-height-normal);
+  color: var(--text-normal);
+}
+
+.ai-summary-header {
+  color: var(--text-accent);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  margin: 16px 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ai-summary-header:first-child {
+  margin-top: 0;
+}
+
+.ai-summary-text {
+  margin: 8px 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.ai-summary-metadata {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-style: italic;
+  margin: 12px 0 4px 0;
 }
 
 .modal-button-container {
   display: flex;
-  gap: var(--size-2-3);
+  gap: 8px;
   justify-content: flex-end;
-  margin-top: var(--size-4-4);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 /* 9. Graph Analysis View Status Bar Control

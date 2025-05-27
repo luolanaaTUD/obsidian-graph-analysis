@@ -19,12 +19,14 @@ export interface GraphAnalysisSettings {
     excludeFolders: string[];
     excludeTags: string[];
     resultLimit: number;
+    geminiApiKey: string;
 }
 
 export const DEFAULT_SETTINGS: GraphAnalysisSettings = {
     excludeFolders: [],
     excludeTags: [],
-    resultLimit: 30
+    resultLimit: 30,
+    geminiApiKey: ''
 };
 
 // Vault Note (matches Rust VaultNote)

@@ -1,4 +1,4 @@
-import { App, Notice, TFile, MarkdownView, Modal, requestUrl, setIcon } from 'obsidian';
+import { App, Notice, Modal, requestUrl, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 
 export class AISummaryManager {
@@ -47,11 +47,19 @@ export class AISummaryManager {
         }
 
         try {
-            // Show loading notice
-            const loadingNotice = new Notice('🤖 Generating AI summary...', 0);
-            
-            // Get file content
+            // Get file content first to check if it's worth summarizing
             const content = await this.app.vault.read(activeFile);
+            const cleanedContent = this.cleanupContent(content);
+            const wordCount = cleanedContent.split(/\s+/).length;
+            
+            
+            // Show loading notice with word count info
+            const loadingNotice = new Notice(
+                this.settings.geminiApiKey ? 
+                `🤖 Generating AI summary for ${wordCount} words...` : 
+                '📝 Generating simple summary...', 
+                0
+            );
             
             // Generate summary using AI
             const summary = await this.callAIForSummary(content, activeFile.basename);
@@ -69,9 +77,136 @@ export class AISummaryManager {
     }
 
     private async callAIForSummary(content: string, fileName: string): Promise<string> {
-        // For now, we'll use a simple text processing approach
-        // In the future, this can be extended to use OpenAI API or other AI services
-        return this.generateSimpleSummary(content, fileName);
+        // Check if Gemini API key is configured
+        if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
+            return this.generateSimpleSummary(content, fileName);
+        }
+
+        try {
+            // Clean up and limit content
+            const cleanedContent = this.cleanupContent(content);
+            
+            // Call Gemini API
+            const summary = await this.callGeminiAPI(cleanedContent, fileName);
+            return summary;
+        } catch (error) {
+            console.error('Gemini API call failed, falling back to simple summary:', error);
+            
+            // Provide more specific error messages but still fall back to simple summary
+            let errorMessage = 'Unknown error occurred';
+            if (error instanceof Error) {
+                if (error.message.includes('401') || error.message.includes('403')) {
+                    errorMessage = 'Invalid API key. Please check your Gemini API key in settings.';
+                } else if (error.message.includes('429')) {
+                    errorMessage = 'API rate limit exceeded. Please try again later.';
+                } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                    errorMessage = 'Network error. Please check your internet connection.';
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+            
+            // Show error notice but continue with simple summary
+            new Notice(`AI summary failed: ${errorMessage}. Using simple summary instead.`);
+            return this.generateSimpleSummary(content, fileName);
+        }
+    }
+
+    private cleanupContent(content: string): string {
+        // Remove markdown syntax and clean up content
+        let cleaned = content
+            // Remove frontmatter
+            .replace(/^---[\s\S]*?---\n?/m, '')
+            // Remove empty lines
+            .replace(/^\s*$/gm, '')
+            // Remove multiple consecutive newlines
+            .replace(/\n{3,}/g, '\n\n')
+            // Remove markdown headers
+            .replace(/^#{1,6}\s+/gm, '')
+            // Remove markdown links but keep text
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            // Remove markdown bold/italic
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/\*([^*]+)\*/g, '$1')
+            // Remove markdown code blocks
+            .replace(/```[\s\S]*?```/g, '')
+            // Remove inline code
+            .replace(/`([^`]+)`/g, '$1')
+            // Remove bullet points
+            .replace(/^[\s]*[-*+]\s+/gm, '')
+            // Remove numbered lists
+            .replace(/^[\s]*\d+\.\s+/gm, '')
+            // Clean up extra whitespace
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Limit to approximately 1000 words
+        const words = cleaned.split(/\s+/);
+        if (words.length > 1000) {
+            cleaned = words.slice(0, 1000).join(' ') + '...';
+        }
+
+        return cleaned;
+    }
+
+    private async callGeminiAPI(content: string, fileName: string): Promise<string> {
+        const apiKey = this.settings.geminiApiKey;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+        const prompt = `Please provide a concise summary of the following note titled "${fileName}". 
+Focus on the main ideas, key points, and important concepts. Keep the summary informative but brief.
+
+Content:
+${content}`;
+
+        const requestBody = {
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.3,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 500,
+            }
+        };
+
+        try {
+            const response = await requestUrl({
+                url: url,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (response.status !== 200) {
+                throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
+            }
+
+            const data = response.json;
+            
+            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+                throw new Error('Invalid response format from Gemini API');
+            }
+
+            const summaryText = data.candidates[0].content.parts[0].text;
+            const wordCount = content.split(/\s+/).length;
+
+            return `**AI Summary of "${fileName}"**
+
+${summaryText}
+
+*Original word count: ${wordCount} words*
+*Generated using Google Gemini AI*`;
+
+        } catch (error) {
+            console.error('Gemini API error:', error);
+            throw error; // Re-throw to be handled by the calling method
+        }
     }
 
     private generateSimpleSummary(content: string, fileName: string): string {
@@ -87,7 +222,7 @@ export class AISummaryManager {
 ${summary}
 
 *Word count: ${wordCount} words*
-*This is a simple extractive summary. For AI-powered summaries, configure your OpenAI API key in settings.*`;
+*This is a simple extractive summary. Configure your Gemini API key in settings for AI-powered summaries.*`;
     }
 
     private displayAISummary(summary: string, originalFileName: string): void {
@@ -132,10 +267,30 @@ class AISummaryModal extends Modal {
             cls: 'modal-content ai-summary-content' 
         });
         
-        // Render markdown content
-        summaryContainer.innerHTML = this.summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                                  .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                                                  .replace(/\n/g, '<br>');
+        // Better markdown rendering
+        const lines = this.summary.split('\n');
+        lines.forEach(line => {
+            if (line.trim() === '') {
+                summaryContainer.createEl('br');
+            } else if (line.startsWith('**') && line.endsWith('**')) {
+                // Handle bold headers
+                summaryContainer.createEl('h3', {
+                    text: line.replace(/\*\*/g, ''),
+                    cls: 'ai-summary-header'
+                });
+            } else if (line.startsWith('*') && line.endsWith('*')) {
+                // Handle italic metadata
+                summaryContainer.createEl('p', {
+                    text: line.replace(/\*/g, ''),
+                    cls: 'ai-summary-metadata'
+                });
+            } else {
+                // Regular content
+                const p = summaryContainer.createEl('p', { cls: 'ai-summary-text' });
+                p.innerHTML = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                 .replace(/\*(.*?)\*/g, '<em>$1</em>');
+            }
+        });
         
         // Add buttons using Obsidian's button styling
         const buttonContainer = contentEl.createEl('div', { 
