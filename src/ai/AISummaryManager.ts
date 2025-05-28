@@ -52,14 +52,8 @@ export class AISummaryManager {
             const cleanedContent = this.cleanupContent(content);
             const wordCount = cleanedContent.split(/\s+/).length;
             
-            
             // Show loading notice with word count info
-            const loadingNotice = new Notice(
-                this.settings.geminiApiKey ? 
-                `🤖 Generating AI summary for ${wordCount} words...` : 
-                '📝 Generating simple summary...', 
-                0
-            );
+            const loadingNotice = new Notice(`Generating AI summary for ${wordCount} words...`, 0);
             
             // Generate summary using AI
             const summary = await this.callAIForSummary(content, activeFile.basename);
@@ -79,7 +73,7 @@ export class AISummaryManager {
     private async callAIForSummary(content: string, fileName: string): Promise<string> {
         // Check if Gemini API key is configured
         if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
-            return this.generateSimpleSummary(content, fileName);
+            throw new Error('Please configure your Gemini API key in settings to use AI summaries.');
         }
 
         try {
@@ -90,9 +84,9 @@ export class AISummaryManager {
             const summary = await this.callGeminiAPI(cleanedContent, fileName);
             return summary;
         } catch (error) {
-            console.error('Gemini API call failed, falling back to simple summary:', error);
+            console.error('Gemini API call failed:', error);
             
-            // Provide more specific error messages but still fall back to simple summary
+            // Provide more specific error messages
             let errorMessage = 'Unknown error occurred';
             if (error instanceof Error) {
                 if (error.message.includes('401') || error.message.includes('403')) {
@@ -106,9 +100,7 @@ export class AISummaryManager {
                 }
             }
             
-            // Show error notice but continue with simple summary
-            new Notice(`AI summary failed: ${errorMessage}. Using simple summary instead.`);
-            return this.generateSimpleSummary(content, fileName);
+            throw new Error(errorMessage);
         }
     }
 
@@ -149,12 +141,24 @@ export class AISummaryManager {
         return cleaned;
     }
 
+    private cleanupSummaryText(text: string): string {
+        return text
+            // Remove any empty lines that only contain whitespace
+            .split('\n')
+            .filter(line => line.trim() !== '')
+            .join('\n');
+    }
+
     private async callGeminiAPI(content: string, fileName: string): Promise<string> {
         const apiKey = this.settings.geminiApiKey;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
-        const prompt = `Please provide a concise summary of the following note titled "${fileName}". 
-Focus on the main ideas, key points, and important concepts. Keep the summary informative but brief.
+        const prompt = `Extract key words, identify the knowledge domain, and provide a one-sentence concise summary for the following note titled "${fileName}". 
+Please format the response exactly as follows:
+
+**Key Words:** [List 6-8 most relevant keywords or key phrases, separated by commas]
+**Knowledge Domain:** [List 2-4 relevant fields or domains this content belongs to, separated by commas]
+**Summary:** [One concise sentence that captures the main idea and key points of the note]
 
 Content:
 ${content}`;
@@ -193,40 +197,32 @@ ${content}`;
                 throw new Error('Invalid response format from Gemini API');
             }
 
-            const summaryText = data.candidates[0].content.parts[0].text;
+            const summaryText = this.cleanupSummaryText(data.candidates[0].content.parts[0].text);
             const wordCount = content.split(/\s+/).length;
 
-            return `**AI Summary of "${fileName}"**
-
-${summaryText}
+            // Format for display in modal (includes word count)
+            const displayFormat = `${summaryText}
 
 *Original word count: ${wordCount} words*
 *Generated using Google Gemini AI*`;
 
+            // Format for writing to note (callout format without word count)
+            const writeFormat = `> [!summary] AI Summary
+> ${summaryText.replace(/\n/g, '\n> ')}`;
+
+            return JSON.stringify({
+                displayFormat,
+                writeFormat
+            });
         } catch (error) {
             console.error('Gemini API error:', error);
-            throw error; // Re-throw to be handled by the calling method
+            throw error;
         }
     }
 
-    private generateSimpleSummary(content: string, fileName: string): string {
-        // Simple extractive summary as fallback
-        const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
-        const wordCount = content.split(/\s+/).length;
-        
-        // Take first few sentences and some key sentences
-        const summary = sentences.slice(0, 3).join('. ') + '.';
-        
-        return `**Summary of "${fileName}"**
-
-${summary}
-
-*Word count: ${wordCount} words*
-*This is a simple extractive summary. Configure your Gemini API key in settings for AI-powered summaries.*`;
-    }
-
     private displayAISummary(summary: string, originalFileName: string): void {
-        const modal = new AISummaryModal(this.app, summary, originalFileName);
+        const { displayFormat, writeFormat } = JSON.parse(summary);
+        const modal = new AISummaryModal(this.app, displayFormat, writeFormat, originalFileName);
         modal.open();
     }
 
@@ -243,69 +239,97 @@ ${summary}
 }
 
 class AISummaryModal extends Modal {
-    private summary: string;
+    private displaySummary: string;
+    private writeSummary: string;
     private fileName: string;
 
-    constructor(app: App, summary: string, fileName: string) {
+    constructor(app: App, displaySummary: string, writeSummary: string, fileName: string) {
         super(app);
-        this.summary = summary;
+        this.displaySummary = displaySummary;
+        this.writeSummary = writeSummary;
         this.fileName = fileName;
+    }
+
+    private async writeToNote() {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+            new Notice('No active file found');
+            return;
+        }
+
+        try {
+            const content = await this.app.vault.read(activeFile);
+            let newContent: string;
+
+            // Check if the file has frontmatter
+            if (content.startsWith('---')) {
+                const frontmatterEnd = content.indexOf('---', 3);
+                if (frontmatterEnd !== -1) {
+                    // Insert after frontmatter
+                    newContent = content.slice(0, frontmatterEnd + 3) + '\n\n' + 
+                               this.writeSummary + '\n\n' +
+                               content.slice(frontmatterEnd + 3);
+                } else {
+                    // Invalid frontmatter, insert at beginning
+                    newContent = this.writeSummary + '\n\n' + content;
+                }
+            } else {
+                // No frontmatter, insert at beginning
+                newContent = this.writeSummary + '\n\n' + content;
+            }
+
+            await this.app.vault.modify(activeFile, newContent);
+            new Notice('Summary added to note');
+            this.close();
+        } catch (error) {
+            console.error('Failed to write summary to note:', error);
+            new Notice('Failed to write summary to note');
+        }
     }
 
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
         
-        // Use Obsidian's built-in modal title class
         contentEl.createEl('h2', { 
             text: `AI Summary: ${this.fileName}`,
             cls: 'modal-title'
         });
         
-        // Use Obsidian's built-in modal content styling
         const summaryContainer = contentEl.createEl('div', { 
             cls: 'modal-content ai-summary-content' 
         });
         
-        // Better markdown rendering
-        const lines = this.summary.split('\n');
+        const lines = this.displaySummary.split('\n');
         lines.forEach(line => {
             if (line.trim() === '') {
                 summaryContainer.createEl('br');
             } else if (line.startsWith('**') && line.endsWith('**')) {
-                // Handle bold headers
                 summaryContainer.createEl('h3', {
                     text: line.replace(/\*\*/g, ''),
                     cls: 'ai-summary-header'
                 });
             } else if (line.startsWith('*') && line.endsWith('*')) {
-                // Handle italic metadata
                 summaryContainer.createEl('p', {
                     text: line.replace(/\*/g, ''),
                     cls: 'ai-summary-metadata'
                 });
             } else {
-                // Regular content
                 const p = summaryContainer.createEl('p', { cls: 'ai-summary-text' });
                 p.innerHTML = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                                  .replace(/\*(.*?)\*/g, '<em>$1</em>');
             }
         });
         
-        // Add buttons using Obsidian's button styling
         const buttonContainer = contentEl.createEl('div', { 
             cls: 'modal-button-container' 
         });
         
-        const copyButton = buttonContainer.createEl('button', { 
-            text: 'Copy to Clipboard',
+        const writeButton = buttonContainer.createEl('button', { 
+            text: 'Add to Note',
             cls: 'mod-cta'
         });
-        copyButton.addEventListener('click', () => {
-            navigator.clipboard.writeText(this.summary);
-            copyButton.textContent = 'Copied!';
-            setTimeout(() => copyButton.textContent = 'Copy to Clipboard', 2000);
-        });
+        writeButton.addEventListener('click', () => this.writeToNote());
         
         const closeButton = buttonContainer.createEl('button', { 
             text: 'Close'
