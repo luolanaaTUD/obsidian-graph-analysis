@@ -153,12 +153,13 @@ export class AISummaryManager {
         const apiKey = this.settings.geminiApiKey;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
-        const prompt = `Extract key words, identify the knowledge domain, and provide a one-sentence concise summary for the following note titled "${fileName}". 
-Please format the response exactly as follows:
+        const prompt = `Extract key words, identify the knowledge domain, and provide a one-sentence concise summary for the following note titled "${fileName}".
+        Please use same language as "${fileName}".
+        Please format the response exactly as follows:
 
-**Key Words:** [List 6-8 most relevant keywords or key phrases, separated by commas]
-**Knowledge Domain:** [List 2-4 relevant fields or domains this content belongs to, separated by commas]
-**Summary:** [One concise sentence that captures the main idea and key points of the note]
+        **Key Words:** [List 3-6 most relevant keywords or key phrases, separated by commas]
+        **Key Points:** [One concise sentence that captures the main idea and key points of the note]
+        **Knowledge Domain:** [List 2-4 relevant fields or domains this content belongs to, separated by commas]
 
 Content:
 ${content}`;
@@ -173,7 +174,7 @@ ${content}`;
                 temperature: 0.3,
                 topK: 40,
                 topP: 0.95,
-                maxOutputTokens: 500,
+                maxOutputTokens: 300,
             }
         };
 
