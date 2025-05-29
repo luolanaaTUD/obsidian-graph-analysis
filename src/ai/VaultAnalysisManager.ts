@@ -35,7 +35,7 @@ export class VaultAnalysisManager {
         });
 
         // Use brain icon for vault analysis
-        setIcon(vaultIconContainer, 'brain');
+        setIcon(vaultIconContainer, 'sun');
 
         // Add text label for vault analysis
         this.statusBarItem.createEl('span', {
@@ -49,6 +49,34 @@ export class VaultAnalysisManager {
         });
 
         return this.statusBarItem;
+    }
+
+    public createGraphViewButton(container: HTMLElement): HTMLElement {
+        // Create vault analysis button for graph view - positioned at right bottom
+        const button = container.createDiv({ cls: 'vault-analysis-icon' });
+        
+        // Use brain icon for vault analysis
+        setIcon(button, 'sun');
+        
+        // Create tooltip with description
+        const tooltipEl = button.createDiv({ cls: 'vault-analysis-icon-tooltip' });
+        
+        // Add title
+        tooltipEl.createDiv({ 
+            cls: 'tooltip-title',
+            text: 'Vault Analysis'
+        });
+        
+        // Add description
+        const description = tooltipEl.createDiv({ cls: 'tooltip-description' });
+        description.setText('AI-powered analysis of your entire vault to extract summaries, keywords, and knowledge domains from all notes.');
+        
+        // Add click handler for vault analysis
+        button.addEventListener('click', (event) => {
+            this.showVaultAnalysisMenu(event);
+        });
+
+        return button;
     }
 
     private showVaultAnalysisMenu(event: Event): void {

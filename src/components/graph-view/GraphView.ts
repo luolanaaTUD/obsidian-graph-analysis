@@ -5,10 +5,12 @@ import {
     SimulationGraphLink, 
     SimulationGraphNode,
     Node as GraphNode,
-    GraphMetadata
+    GraphMetadata,
+    GraphAnalysisSettings
 } from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
+import { VaultAnalysisManager } from '../../ai/VaultAnalysisManager';
 import { CENTRALITY_RESULTS_VIEW_TYPE } from '../../views/CentralityResultsView';
 import {
     KEPLER_COLOR_PALETTES,
@@ -36,6 +38,7 @@ export class GraphView {
     // Core components
     private graphDataBuilder: GraphDataBuilder;
     private pluginService: PluginService;
+    private vaultAnalysisManager: VaultAnalysisManager;
     
     // Centrality state tracking
     private readonly centralityTypes = ['betweenness', 'closeness', 'eigenvector'] as const;
@@ -156,12 +159,13 @@ export class GraphView {
     // Add this as a class property after the NODE constant
     private nodeRadiusScale: d3.ScaleThreshold<number, number> | null = null;
 
-    constructor(app: App) {
+    constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         
         // Initialize core modules
         this.pluginService = new PluginService(app);
         this.graphDataBuilder = new GraphDataBuilder(app);
+        this.vaultAnalysisManager = new VaultAnalysisManager(app, settings);
     }
 
     public async onload(container: HTMLElement) {
@@ -1296,6 +1300,10 @@ export class GraphView {
         this.recenterGraph();
     }
     
+    public updateSettings(settings: GraphAnalysisSettings): void {
+        this.vaultAnalysisManager.updateSettings(settings);
+    }
+    
     public recenterGraph(animate: boolean = true): void {
         // Exit early if we have no nodes
         if (this.nodes.length === 0) return;
@@ -1533,6 +1541,8 @@ export class GraphView {
         // @ts-ignore - explicitly break circular references
         this.pluginService = null;
         // @ts-ignore - explicitly break circular references
+        this.vaultAnalysisManager = null;
+        // @ts-ignore - explicitly break circular references
         this.app = null;
     }
 
@@ -1606,7 +1616,7 @@ export class GraphView {
     }
 
     private createControlPanel() {
-        // Create control panel container
+        // Create control panel container for centrality buttons (right middle)
         this.controlPanel = this.container.createDiv({ cls: 'centrality-control-panel' });
         
         // Create color settings button
@@ -1616,6 +1626,10 @@ export class GraphView {
         this.centralityTypes.forEach(type => {
             this.createCentralityButton(type);
         });
+        
+        // Create vault analysis icon positioned at right bottom of canvas
+        const vaultAnalysisContainer = this.container.createDiv({ cls: 'vault-analysis-container' });
+        this.vaultAnalysisManager.createGraphViewButton(vaultAnalysisContainer);
     }
 
     private createColorSettingsButton() {

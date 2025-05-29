@@ -118,9 +118,8 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.aiSummaryManager = new AISummaryManager(this.app, this.settings);
         this.aiSummaryManager.createStatusBarButton(this.addStatusBarItem());
 
-        // Initialize Vault Analysis Manager and add status bar button
+        // Initialize Vault Analysis Manager (no status bar button - now in graph view)
         this.vaultAnalysisManager = new VaultAnalysisManager(this.app, this.settings);
-        this.vaultAnalysisManager.createStatusBarButton(this.addStatusBarItem());
 
         // Add command for AI summary
         this.addCommand({
@@ -202,6 +201,13 @@ export default class GraphAnalysisPlugin extends Plugin {
         if (this.exclusionUtils) {
             this.exclusionUtils.updateSettings(this.settings);
         }
+        // Update GraphAnalysisView settings
+        const graphViews = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
+        graphViews.forEach(leaf => {
+            if (leaf.view instanceof GraphAnalysisView) {
+                leaf.view.updateSettings();
+            }
+        });
     }
 
     private async initializeWasmModule() {
