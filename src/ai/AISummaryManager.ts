@@ -1,4 +1,4 @@
-import { App, Notice, Modal, requestUrl, setIcon } from 'obsidian';
+import { App, Notice, Modal, requestUrl, setIcon, TFile } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 
 export class AISummaryManager {
@@ -164,7 +164,7 @@ export class AISummaryManager {
 Content:
 ${content}`;
 
-        const requestBody = {
+        const requestBody = { 
             contents: [{
                 parts: [{
                     text: prompt

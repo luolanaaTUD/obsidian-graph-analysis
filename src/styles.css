@@ -11,6 +11,7 @@
  * 7. Color Settings Panel
  * 8. AI Summary Components
  * 9. Graph Analysis View Status Bar Control
+ * 10. Vault Analysis Components
  *----------------------------------------*/
 
 /* 1. Variables & Imports
@@ -777,5 +778,216 @@
  */
 .graph-analysis-hide-status-bar .status-bar {
   display: none !important;
+}
+
+/*----------------------------------------
+ * 10. Vault Analysis Components
+ *----------------------------------------*/
+
+/* Vault Analysis Status Bar Button */
+.status-bar-item.plugin-graph-analysis-vault-analysis {
+    cursor: pointer;
+    padding: 4px 8px;
+    margin-left: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    background-color: var(--background-modifier-hover);
+}
+
+.status-bar-item.plugin-graph-analysis-vault-analysis:hover {
+    background-color: var(--background-modifier-active);
+    color: var(--text-accent);
+}
+
+.status-bar-item.plugin-graph-analysis-vault-analysis .status-bar-item-icon {
+    margin-right: 4px;
+}
+
+.status-bar-item.plugin-graph-analysis-vault-analysis .status-bar-item-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.status-bar-item.plugin-graph-analysis-vault-analysis:hover .status-bar-item-icon svg {
+    color: var(--text-accent);
+}
+
+.status-bar-item.plugin-graph-analysis-vault-analysis .status-bar-item-text {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Vault Analysis Modal Styles */
+.vault-analysis-summary {
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: var(--background-secondary);
+    border-radius: 6px;
+}
+
+.vault-analysis-summary p {
+    margin: 4px 0;
+    color: var(--text-muted);
+    font-size: var(--font-ui-small);
+}
+
+.vault-analysis-search {
+    margin-bottom: 16px;
+}
+
+.vault-analysis-search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: var(--font-ui-medium);
+}
+
+.vault-analysis-search-input:focus {
+    outline: none;
+    border-color: var(--text-accent);
+    box-shadow: 0 0 0 2px var(--text-accent-hover);
+}
+
+.vault-analysis-results {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background-color: var(--background-primary);
+}
+
+.vault-analysis-result-item {
+    padding: 16px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    transition: background-color 0.2s ease;
+}
+
+.vault-analysis-result-item:last-child {
+    border-bottom: none;
+}
+
+.vault-analysis-result-item:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.result-title {
+    margin: 0 0 8px 0;
+    color: var(--text-accent);
+    font-size: var(--font-ui-medium);
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.result-title:hover {
+    color: var(--text-accent-hover);
+}
+
+.result-summary {
+    margin: 8px 0;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+    line-height: 1.4;
+}
+
+.result-keywords {
+    margin: 6px 0;
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    font-style: italic;
+}
+
+.result-domain {
+    margin: 6px 0;
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+}
+
+.result-meta {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-faint);
+    font-size: var(--font-ui-smaller);
+}
+
+.result-word-count {
+    font-weight: 500;
+}
+
+.result-date {
+    opacity: 0.8;
+}
+
+.no-results {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Vault Analysis Info Modal */
+.vault-analysis-info {
+    line-height: 1.5;
+}
+
+.vault-analysis-info p {
+    margin: 8px 0;
+    color: var(--text-normal);
+}
+
+.vault-analysis-info ul {
+    margin: 12px 0;
+    padding-left: 20px;
+}
+
+.vault-analysis-info li {
+    margin: 4px 0;
+    color: var(--text-normal);
+}
+
+.vault-analysis-info h3 {
+    margin: 16px 0 8px 0;
+    color: var(--text-accent);
+    font-size: var(--font-ui-medium);
+    font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .vault-analysis-results {
+        max-height: 300px;
+    }
+    
+    .vault-analysis-result-item {
+        padding: 12px;
+    }
+    
+    .result-title {
+        font-size: var(--font-ui-small);
+    }
+    
+    .result-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
+
+/* Dark mode optimizations */
+.theme-dark .vault-analysis-summary {
+    background-color: var(--background-secondary-alt);
+}
+
+.theme-dark .vault-analysis-search-input {
+    background-color: var(--background-secondary);
+}
+
+.theme-dark .vault-analysis-results {
+    background-color: var(--background-secondary);
 }
 

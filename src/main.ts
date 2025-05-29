@@ -5,6 +5,7 @@ import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalys
 import { CentralityResultsView, CENTRALITY_RESULTS_VIEW_TYPE } from './views/CentralityResultsView';
 import { GraphAnalysisSettingTab } from './settings/GraphAnalysisSettingTab';
 import { AISummaryManager } from './ai/AISummaryManager';
+import { VaultAnalysisManager } from './ai/VaultAnalysisManager';
 import { ExclusionUtils } from './utils/ExclusionUtils';
 
 // Import our styles 
@@ -27,6 +28,7 @@ export default class GraphAnalysisPlugin extends Plugin {
     graphView: GraphView | null = null;
     centralityView: CentralityResultsView | null = null;
     aiSummaryManager: AISummaryManager | null = null;
+    vaultAnalysisManager: VaultAnalysisManager | null = null;
     exclusionUtils: ExclusionUtils | null = null;
     
     private fileCreatedHandler: ((file: TFile) => void) | null = null;
@@ -116,6 +118,10 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.aiSummaryManager = new AISummaryManager(this.app, this.settings);
         this.aiSummaryManager.createStatusBarButton(this.addStatusBarItem());
 
+        // Initialize Vault Analysis Manager and add status bar button
+        this.vaultAnalysisManager = new VaultAnalysisManager(this.app, this.settings);
+        this.vaultAnalysisManager.createStatusBarButton(this.addStatusBarItem());
+
         // Add command for AI summary
         this.addCommand({
             id: 'generate-ai-summary',
@@ -129,6 +135,32 @@ export default class GraphAnalysisPlugin extends Plugin {
                     return true;
                 }
                 return false;
+            }
+        });
+
+        // Add command for vault analysis
+        this.addCommand({
+            id: 'generate-vault-analysis',
+            name: 'Generate AI Analysis for Entire Vault',
+            callback: () => {
+                if (this.vaultAnalysisManager) {
+                    this.vaultAnalysisManager.generateVaultAnalysis();
+                } else {
+                    new Notice('Vault Analysis Manager not initialized');
+                }
+            }
+        });
+
+        // Add command to view vault analysis results
+        this.addCommand({
+            id: 'view-vault-analysis',
+            name: 'View Vault Analysis Results',
+            callback: () => {
+                if (this.vaultAnalysisManager) {
+                    this.vaultAnalysisManager.viewVaultAnalysisResults();
+                } else {
+                    new Notice('Vault Analysis Manager not initialized');
+                }
             }
         });
 
@@ -161,6 +193,10 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Update AI Summary Manager settings
         if (this.aiSummaryManager) {
             this.aiSummaryManager.updateSettings(this.settings);
+        }
+        // Update Vault Analysis Manager settings
+        if (this.vaultAnalysisManager) {
+            this.vaultAnalysisManager.updateSettings(this.settings);
         }
         // Update exclusion utils settings
         if (this.exclusionUtils) {
@@ -368,6 +404,12 @@ export default class GraphAnalysisPlugin extends Plugin {
         if (this.aiSummaryManager) {
             this.aiSummaryManager.destroy();
             this.aiSummaryManager = null;
+        }
+        
+        // Clean up Vault Analysis Manager
+        if (this.vaultAnalysisManager) {
+            this.vaultAnalysisManager.destroy();
+            this.vaultAnalysisManager = null;
         }
         
         this.wasmInitialized = false;

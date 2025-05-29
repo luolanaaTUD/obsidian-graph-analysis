@@ -77,6 +77,45 @@ The plugin includes an AI-powered summary feature that can generate intelligent 
 - **Error Handling**: Graceful fallback to simple summaries if AI fails
 - **Copy to Clipboard**: Easy copying of generated summaries
 
+### Vault Analysis Feature
+
+The plugin includes a comprehensive vault analysis feature that provides deep insights into your entire Obsidian vault:
+
+1. **Access Methods**:
+   - Click the "Vault Analysis" button in the status bar
+   - Use the command palette: "Generate AI Analysis for Entire Vault"
+   - Or view existing results: "View Vault Analysis Results"
+
+2. **What It Analyzes**:
+   - **Summary**: One-sentence summary of each note's main concept
+   - **Keywords**: 3-6 key terms extracted from each note
+   - **Knowledge Domains**: 2-4 academic or professional fields the note belongs to
+   - **Metadata**: Creation date, modification date, word count, and file path
+
+3. **Intelligent Processing**:
+   - Respects your folder and tag exclusion settings
+   - Skips notes with fewer than 10 words
+   - Processes files in batches to respect API rate limits
+   - Provides detailed progress updates during analysis
+
+4. **Results Management**:
+   - **Search & Filter**: Find notes by title, keywords, or knowledge domain
+   - **Interactive Navigation**: Click note titles to open them directly
+   - **Data Persistence**: Results saved to `data/vault-analysis.json`
+
+#### Vault Analysis Benefits
+
+- **Knowledge Discovery**: Identify knowledge gaps and domain coverage
+- **Content Organization**: Better understand your vault's structure
+- **Research Insights**: Find related topics and areas of focus
+- **Second Brain Enhancement**: Get AI-powered insights into your thinking patterns
+
+#### Usage Tips
+
+- Run vault analysis periodically to track how your knowledge base evolves
+- Use the search function to find notes related to specific topics
+- Combine with exclusion settings to focus on specific areas of your vault
+
 ### Settings
 
 Access plugin settings from the Obsidian settings panel under "Graph Analysis":
