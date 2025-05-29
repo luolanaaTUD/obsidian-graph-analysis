@@ -1,5 +1,6 @@
 import { ItemView, WorkspaceLeaf, TFile } from 'obsidian';
 import { Node } from '../types/types';
+import { GRAPH_ANALYSIS_VIEW_TYPE } from './GraphAnalysisView';
 
 export const CENTRALITY_RESULTS_VIEW_TYPE = 'centrality-results-view';
 
@@ -21,6 +22,12 @@ export class CentralityResultsView extends ItemView {
 
     getIcon(): string {
         return 'waypoints';
+    }
+
+    async onOpen(): Promise<void> {
+        // Ensure status bar is hidden when centrality results view is opened
+        // This provides consistency with the graph analysis view behavior
+        this.updateStatusBarForGraphViews();
     }
 
     async setResults(results: Node[], algorithm: string): Promise<void> {
@@ -89,5 +96,30 @@ export class CentralityResultsView extends ItemView {
 
     async onClose(): Promise<void> {
         this.contentEl.empty();
+        
+        // Update status bar visibility when closing centrality view
+        // Check if any graph analysis views are still active
+        setTimeout(() => {
+            this.updateStatusBarForGraphViews();
+        }, 10);
+    }
+
+    /**
+     * Helper method to manage status bar visibility for graph-related views
+     * Hides status bar if any graph analysis or centrality view is active
+     */
+    private updateStatusBarForGraphViews(): void {
+        const activeView = this.app.workspace.getActiveViewOfType(ItemView);
+        const activeViewType = activeView?.getViewType();
+        
+        // Hide status bar if this centrality view or any graph analysis view is active
+        const shouldHideStatusBar = activeViewType === CENTRALITY_RESULTS_VIEW_TYPE || 
+                                   activeViewType === GRAPH_ANALYSIS_VIEW_TYPE;
+        
+        if (shouldHideStatusBar) {
+            document.body.addClass('graph-analysis-hide-status-bar');
+        } else {
+            document.body.removeClass('graph-analysis-hide-status-bar');
+        }
     }
 } 

@@ -1,39 +1,51 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { GraphView } from '../components/graph-view/GraphView';
+import { CENTRALITY_RESULTS_VIEW_TYPE } from './CentralityResultsView';
 import GraphAnalysisPlugin from '../main';
 
 export const GRAPH_ANALYSIS_VIEW_TYPE = 'graph-analysis-view';
 
+/**
+ * GraphAnalysisView manages the graph visualization and implements optimized status bar behavior.
+ * 
+ * Status Bar Logic (Complete Rules):
+ * 1. When a note page is active, status bar is visible (like Obsidian default)
+ * 2. Only when the graph view is active (user opened it and is staying at this view), status bar is hidden
+ * 3. When user views a note page while graph view is open but not active, status bar shows
+ * 4. When centrality result view is active (after pressing centrality button), status bar is hidden 
+ *    since this view belongs to graph view functionality
+ * 
+ * Behavior Examples:
+ * - User opens graph view → Status bar hides
+ * - User switches from graph to note → Status bar shows  
+ * - User has graph open in right pane, note active in left → Status bar shows
+ * - User presses centrality button (opens results view) → Status bar stays hidden
+ * - User switches from centrality results to note → Status bar shows
+ * - User closes all graph-related views → Status bar shows
+ * 
+ * This provides an immersive graph experience when needed while maintaining normal Obsidian
+ * behavior for note editing and viewing.
+ */
 export class GraphAnalysisView extends ItemView {
     private graphView: GraphView;
     private activeLeafChangeHandler: (leaf: WorkspaceLeaf | null) => void;
     
     constructor(leaf: WorkspaceLeaf, private plugin: GraphAnalysisPlugin) {
         super(leaf);
-        this.graphView = new GraphView(this.app);
+        this.graphView = new GraphView(this.app, this.plugin.settings);
         
-        // Create the event handler
+        // Create the optimized event handler
         this.activeLeafChangeHandler = (leaf: WorkspaceLeaf | null) => {
+            // Update status bar visibility based on current workspace state
+            // This handles all scenarios: graph view active, note active, or other views active
+            this.updateStatusBarVisibility();
+            
+            // If this specific graph view became active, update the graph display
             if (leaf === this.leaf) {
-                // This view became active - ensure status bar is hidden
-                this.hideStatusBar();
-                
                 // Only update graph if it's actually visible and ready
                 setTimeout(() => {
                     this.centerGraphSafely();
                 }, 100); // Small delay to ensure the view is fully rendered
-            } else {
-                // Another view became active - check if the new active view is a graph analysis view
-                // This ensures status bar is only shown when NO graph analysis view is currently active
-                const activeView = this.app.workspace.getActiveViewOfType(GraphAnalysisView);
-                
-                // Show status bar only if the active view is NOT a graph analysis view
-                if (!activeView) {
-                    this.showStatusBar();
-                } else {
-                    // If the active view is a graph analysis view, ensure status bar is hidden
-                    this.hideStatusBar();
-                }
             }
         };
     }
@@ -55,8 +67,15 @@ export class GraphAnalysisView extends ItemView {
         container.empty();
         container.classList.add('graph-analysis-view-container');
         
-        // Hide status bar when graph view is opened
-        this.hideStatusBar();
+        // Wait for workspace to be ready before managing status bar
+        if (this.app.workspace.layoutReady) {
+            this.updateStatusBarVisibility();
+        } else {
+            // If workspace isn't ready yet, wait for it and then update
+            this.app.workspace.onLayoutReady(() => {
+                this.updateStatusBarVisibility();
+            });
+        }
         
         // Initialize the graph view
         await this.graphView.onload(container);
@@ -102,15 +121,9 @@ export class GraphAnalysisView extends ItemView {
         
         this.contentEl.empty();
         
-        // After closing, check if there's still an active graph analysis view
-        // Use setTimeout to ensure the view is fully closed before checking
+        // Update status bar visibility after a brief delay to allow workspace state to stabilize
         setTimeout(() => {
-            const activeGraphView = this.app.workspace.getActiveViewOfType(GraphAnalysisView);
-            
-            // Show status bar only if no graph analysis view is currently active
-            if (!activeGraphView) {
-                this.showStatusBar();
-            }
+            this.updateStatusBarVisibility();
         }, 10);
         
         return;
@@ -124,6 +137,44 @@ export class GraphAnalysisView extends ItemView {
     private showStatusBar(): void {
         // Remove class from body to show status bar
         document.body.removeClass('graph-analysis-hide-status-bar');
+    }
+    
+    /**
+     * Determines whether the status bar should be visible based on the current workspace state
+     * Returns true if status bar should be visible, false if it should be hidden
+     */
+    private shouldShowStatusBar(): boolean {
+        const activeView = this.app.workspace.getActiveViewOfType(ItemView);
+        
+        // If no active view, default to showing status bar
+        if (!activeView) {
+            return true;
+        }
+        
+        const activeViewType = activeView.getViewType();
+        
+        // Hide status bar if graph analysis view or centrality results view is currently active
+        // Both belong to the graph analysis functionality and should provide immersive experience
+        return activeViewType !== GRAPH_ANALYSIS_VIEW_TYPE && 
+               activeViewType !== CENTRALITY_RESULTS_VIEW_TYPE;
+    }
+    
+    /**
+     * Updates status bar visibility based on current workspace state
+     * This method can be called to ensure consistent status bar behavior
+     */
+    private updateStatusBarVisibility(): void {
+        const shouldShow = this.shouldShowStatusBar();
+        const currentlyHidden = document.body.hasClass('graph-analysis-hide-status-bar');
+        
+        // Only make changes if the state needs to change (avoids unnecessary DOM manipulation)
+        if (shouldShow && currentlyHidden) {
+            this.showStatusBar();
+            // Uncomment for debugging: console.log('GraphAnalysisView: Status bar shown');
+        } else if (!shouldShow && !currentlyHidden) {
+            this.hideStatusBar();
+            // Uncomment for debugging: console.log('GraphAnalysisView: Status bar hidden');
+        }
     }
     
     private async centerGraphSafely(): Promise<void> {
@@ -151,5 +202,15 @@ export class GraphAnalysisView extends ItemView {
         } catch (e) {
             console.warn("Error updating graph position:", e);
         }
+    }
+    
+    public updateSettings(): void {
+        if (this.graphView) {
+            this.graphView.updateSettings(this.plugin.settings);
+        }
+    }
+    
+    public getGraphView(): GraphView {
+        return this.graphView;
     }
 }
