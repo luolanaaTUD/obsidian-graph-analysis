@@ -1,4 +1,4 @@
-import { App, Notice, Modal, requestUrl, setIcon, TFile } from 'obsidian';
+import { App, Notice, Modal, requestUrl, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 
 export class AISummaryManager {

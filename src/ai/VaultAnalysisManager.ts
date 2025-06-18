@@ -759,6 +759,8 @@ Notes to analyze:
 
 class VaultAnalysisModal extends Modal {
     private analysisData: VaultAnalysisData;
+    private currentView: string = 'semantic';
+    private contentContainer: HTMLElement;
 
     constructor(app: App, analysisData: VaultAnalysisData) {
         super(app);
@@ -766,16 +768,108 @@ class VaultAnalysisModal extends Modal {
     }
 
     onOpen() {
-        const { contentEl } = this;
+        const { contentEl, modalEl } = this;
         contentEl.empty();
         
-        contentEl.createEl('h2', { 
-            text: 'Vault Analysis Results',
-            cls: 'modal-title'
+        // Set landscape layout dimensions
+        modalEl.style.width = '90vw';
+        modalEl.style.height = '80vh';
+        modalEl.style.maxWidth = '900px';
+        modalEl.style.maxHeight = '800px';
+        
+        // Create header with navigation
+        this.createHeader(contentEl);
+        
+        // Create main content container
+        this.contentContainer = contentEl.createEl('div', { 
+            cls: 'vault-analysis-content-container' 
         });
         
+        // Load initial view
+        this.loadView('semantic');
+    }
+
+    private createHeader(container: HTMLElement): void {
+        const headerContainer = container.createEl('div', { 
+            cls: 'vault-analysis-header' 
+        });
+        
+        // Title
+        headerContainer.createEl('h2', { 
+            text: 'Vault Analysis',
+            cls: 'vault-analysis-main-title'
+        });
+        
+        // Navigation tabs
+        const navContainer = headerContainer.createEl('div', { 
+            cls: 'vault-analysis-nav' 
+        });
+        
+        const tabs = [
+            { id: 'semantic', label: 'Semantic Analysis', icon: 'search' },
+            { id: 'structure', label: 'Knowledge Structure', icon: 'git-branch' },
+            { id: 'evolution', label: 'Knowledge Evolution', icon: 'trending-up' },
+            { id: 'actions', label: 'Recommended Actions', icon: 'lightbulb' }
+        ];
+        
+        tabs.forEach(tab => {
+            const tabButton = navContainer.createEl('button', {
+                cls: `vault-analysis-tab${this.currentView === tab.id ? ' active' : ''}`,
+                text: tab.label
+            });
+            
+            // Add icon
+            const icon = tabButton.createEl('span', { cls: 'tab-icon' });
+            setIcon(icon, tab.icon);
+            tabButton.prepend(icon);
+            
+            tabButton.addEventListener('click', () => {
+                this.switchView(tab.id);
+            });
+        });
+    }
+
+    private switchView(viewId: string): void {
+        this.currentView = viewId;
+        
+        // Update active tab
+        const tabs = this.contentEl.querySelectorAll('.vault-analysis-tab');
+        tabs.forEach(tab => {
+            tab.removeClass('active');
+        });
+        const activeTab = this.contentEl.querySelector(`.vault-analysis-tab:nth-child(${['semantic', 'structure', 'evolution', 'actions'].indexOf(viewId) + 1})`);
+        if (activeTab) {
+            activeTab.addClass('active');
+        }
+        
+        // Load new view content
+        this.loadView(viewId);
+    }
+
+    private loadView(viewId: string): void {
+        this.contentContainer.empty();
+        
+        switch (viewId) {
+            case 'semantic':
+                this.loadSemanticAnalysisView();
+                break;
+            case 'structure':
+                this.loadKnowledgeStructureView();
+                break;
+            case 'evolution':
+                this.loadKnowledgeEvolutionView();
+                break;
+            case 'actions':
+                this.loadRecommendedActionsView();
+                break;
+            default:
+                this.loadSemanticAnalysisView();
+        }
+    }
+
+    private loadSemanticAnalysisView(): void {
         // Summary section
-        const summaryContainer = contentEl.createEl('div', { 
+        const summaryContainer = this.contentContainer.createEl('div', { 
             cls: 'vault-analysis-summary' 
         });
         
@@ -799,7 +893,7 @@ class VaultAnalysisModal extends Modal {
         }
 
         // Search functionality
-        const searchContainer = contentEl.createEl('div', { 
+        const searchContainer = this.contentContainer.createEl('div', { 
             cls: 'vault-analysis-search' 
         });
         
@@ -810,7 +904,7 @@ class VaultAnalysisModal extends Modal {
         });
         
         // Results container
-        const resultsContainer = contentEl.createEl('div', { 
+        const resultsContainer = this.contentContainer.createEl('div', { 
             cls: 'vault-analysis-results' 
         });
         
@@ -892,7 +986,7 @@ class VaultAnalysisModal extends Modal {
         displayResults(this.analysisData.results);
         
         // Search functionality
-        searchInput.addEventListener('input', (e) => {
+        searchInput.addEventListener('input', (e: Event) => {
             const searchTerm = (e.target as HTMLInputElement).value.toLowerCase();
             
             if (!searchTerm) {
@@ -911,7 +1005,7 @@ class VaultAnalysisModal extends Modal {
         });
         
         // Close button
-        const buttonContainer = contentEl.createEl('div', { 
+        const buttonContainer = this.contentContainer.createEl('div', { 
             cls: 'modal-button-container' 
         });
         
@@ -920,6 +1014,100 @@ class VaultAnalysisModal extends Modal {
             cls: 'mod-cta'
         });
         closeButton.addEventListener('click', () => this.close());
+    }
+
+    private loadKnowledgeStructureView(): void {
+        const placeholderContainer = this.contentContainer.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
+        });
+        
+        placeholderContainer.createEl('h3', {
+            text: 'Knowledge Structure Analysis'
+        });
+        
+        placeholderContainer.createEl('p', {
+            text: 'This view will show the structural relationships between your notes, including:'
+        });
+        
+        const featureList = placeholderContainer.createEl('ul');
+        const features = [
+            'Note clustering by knowledge domains',
+            'Connection strength analysis',
+            'Knowledge gaps identification',
+            'Topic hierarchies and relationships'
+        ];
+        
+        features.forEach(feature => {
+            featureList.createEl('li', { text: feature });
+        });
+        
+        placeholderContainer.createEl('p', {
+            text: 'This feature is coming soon!',
+            cls: 'coming-soon'
+        });
+    }
+
+    private loadKnowledgeEvolutionView(): void {
+        const placeholderContainer = this.contentContainer.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
+        });
+        
+        placeholderContainer.createEl('h3', {
+            text: 'Knowledge Evolution Analysis'
+        });
+        
+        placeholderContainer.createEl('p', {
+            text: 'This view will track how your knowledge has evolved over time, including:'
+        });
+        
+        const featureList = placeholderContainer.createEl('ul');
+        const features = [
+            'Timeline of knowledge development',
+            'Topic emergence and decline patterns',
+            'Note creation and modification trends',
+            'Learning trajectory visualization'
+        ];
+        
+        features.forEach(feature => {
+            featureList.createEl('li', { text: feature });
+        });
+        
+        placeholderContainer.createEl('p', {
+            text: 'This feature is coming soon!',
+            cls: 'coming-soon'
+        });
+    }
+
+    private loadRecommendedActionsView(): void {
+        const placeholderContainer = this.contentContainer.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
+        });
+        
+        placeholderContainer.createEl('h3', {
+            text: 'Recommended Actions'
+        });
+        
+        placeholderContainer.createEl('p', {
+            text: 'This view will provide AI-powered recommendations for improving your vault, including:'
+        });
+        
+        const featureList = placeholderContainer.createEl('ul');
+        const features = [
+            'Notes that could benefit from more connections',
+            'Orphaned notes that need integration',
+            'Similar notes that could be merged or linked',
+            'Knowledge areas that need more development',
+            'Suggested tags and organization improvements'
+        ];
+        
+        features.forEach(feature => {
+            featureList.createEl('li', { text: feature });
+        });
+        
+        placeholderContainer.createEl('p', {
+            text: 'This feature is coming soon!',
+            cls: 'coming-soon'
+        });
     }
 
     onClose() {

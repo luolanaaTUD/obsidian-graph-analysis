@@ -818,6 +818,127 @@
 }
 
 /* Vault Analysis Modal Styles */
+
+/* Landscape Modal Layout */
+.vault-analysis-header {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--background-modifier-border);
+    margin-bottom: 16px;
+}
+
+.vault-analysis-main-title {
+    margin: 0;
+    color: var(--text-accent);
+    font-size: var(--font-ui-large);
+    font-weight: 600;
+}
+
+.vault-analysis-nav {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.vault-analysis-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background-color: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: var(--font-ui-small);
+    font-weight: 500;
+    box-shadow: none !important;
+    outline: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+}
+
+.vault-analysis-tab:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+    border-color: var(--text-accent);
+    box-shadow: none !important;
+    outline: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+}
+
+.vault-analysis-tab.active {
+    background-color: var(--text-accent);
+    color: var(--text-on-accent);
+    border-color: var(--text-accent);
+    box-shadow: none !important;
+    outline: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+}
+
+.vault-analysis-tab:focus {
+    box-shadow: none !important;
+    outline: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+}
+
+.vault-analysis-tab .tab-icon {
+    display: flex;
+    align-items: center;
+}
+
+.vault-analysis-tab .tab-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.vault-analysis-content-container {
+    flex: 1;
+    overflow-y: auto;
+    max-height: calc(80vh - 140px);
+}
+
+.vault-analysis-placeholder {
+    padding: 32px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.vault-analysis-placeholder h3 {
+    color: var(--text-accent);
+    margin-bottom: 16px;
+    font-size: var(--font-ui-medium);
+}
+
+.vault-analysis-placeholder p {
+    margin: 12px 0;
+    line-height: 1.5;
+}
+
+.vault-analysis-placeholder ul {
+    text-align: left;
+    max-width: 400px;
+    margin: 16px auto;
+}
+
+.vault-analysis-placeholder li {
+    margin: 8px 0;
+    color: var(--text-normal);
+}
+
+.vault-analysis-placeholder .coming-soon {
+    font-style: italic;
+    color: var(--text-accent);
+    font-weight: 500;
+    margin-top: 24px;
+}
+
 .vault-analysis-summary {
     margin-bottom: 16px;
     padding: 12px;

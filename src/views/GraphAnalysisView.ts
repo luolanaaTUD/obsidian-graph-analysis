@@ -186,7 +186,7 @@ export class GraphAnalysisView extends ItemView {
                 // Only refresh the graph if this view is active and visible
                 if (isActive) {
                     this.graphView.refreshGraphView();
-                    console.log("Graph position updated after view activation/resize");
+                    // console.log("Graph position updated after view activation/resize");
                     
                     setTimeout(() => {
                         try {
