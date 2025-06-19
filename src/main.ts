@@ -9,7 +9,7 @@ import { VaultAnalysisManager } from './ai/VaultAnalysisManager';
 import { ExclusionUtils } from './utils/ExclusionUtils';
 
 // Import our styles 
-import './styles.css';
+import './styles/styles.css';
 
 // The WASM module code will be injected at the top of this file during build
 declare function build_graph_from_vault(vault_data_json: string): string;
