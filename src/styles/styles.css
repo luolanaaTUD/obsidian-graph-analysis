@@ -13,12 +13,13 @@
  * 9. Graph Analysis View Status Bar Control
  * 10. Vault Analysis Components
  * 11. Calendar Chart Components
+ * 12. Knowledge Evolution Analysis Components
  *----------------------------------------*/
 
 /* 1. Variables & Imports
 /*----------------------------------------*/
-@import './styles/theme.css';
-@import './styles/calendar-chart.css';
+@import './theme.css';
+@import './calendar-chart.css';
 
 /* 2. Base Container Styles
 /*----------------------------------------*/
@@ -1212,5 +1213,533 @@
 
 .vault-analysis-icon:hover .vault-analysis-icon-tooltip {
   opacity: 1;
+}
+
+/* 12. Knowledge Evolution Analysis Components
+/*----------------------------------------*/
+
+.knowledge-evolution-container {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.evolution-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.evolution-loading h3 {
+  color: var(--text-accent);
+  margin-bottom: 12px;
+  font-size: var(--font-ui-medium);
+}
+
+.evolution-loading p {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.evolution-error {
+  padding: 20px;
+  text-align: center;
+  border: 1px solid var(--background-modifier-border-hover);
+  border-radius: var(--radius-m);
+  background-color: var(--background-secondary);
+}
+
+.evolution-error h4 {
+  color: var(--text-error);
+  margin-bottom: 8px;
+}
+
+.evolution-error p {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+/* Knowledge Calendar Wrapper */
+.knowledge-calendar-wrapper {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: var(--radius-m);
+  background-color: var(--background-secondary);
+}
+
+/* Timeline Section */
+.evolution-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.timeline-period {
+  padding: 16px;
+  border-radius: var(--radius-m);
+  background-color: var(--background-secondary);
+  border-left: 4px solid var(--text-accent);
+}
+
+.timeline-period-header {
+  margin-bottom: 12px;
+}
+
+.timeline-period-title {
+  color: var(--text-accent);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  margin: 0;
+}
+
+.timeline-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.timeline-domain-item {
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  border: 1px solid var(--background-modifier-border);
+}
+
+/* Topic Patterns Section */
+.topic-patterns {
+  margin-top: 16px;
+}
+
+.patterns-summary {
+  background-color: var(--background-secondary);
+  padding: 16px;
+  border-radius: var(--radius-m);
+  margin-bottom: 16px;
+}
+
+.patterns-summary p {
+  margin: 0;
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+}
+
+.introduction-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.introduction-period {
+  padding: 12px 16px;
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-m);
+  border-left: 3px solid var(--color-accent);
+}
+
+.introduction-period-title {
+  color: var(--text-accent);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  margin: 0 0 8px 0;
+}
+
+.introduced-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.introduced-domain {
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  padding: 3px 8px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  border: 1px solid var(--color-accent-2);
+}
+
+/* Focus Shifts Section */
+.focus-shifts {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.no-shifts-message {
+  padding: 20px;
+  text-align: center;
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-m);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.focus-shift {
+  padding: 16px;
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-m);
+  border-left: 4px solid var(--color-orange);
+}
+
+.shift-period-title {
+  color: var(--text-accent);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  margin: 0 0 12px 0;
+}
+
+.shift-section {
+  margin-bottom: 12px;
+}
+
+.shift-section:last-child {
+  margin-bottom: 0;
+}
+
+.shift-section h5 {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  margin: 0 0 6px 0;
+}
+
+.shift-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shift-domain {
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+}
+
+.shift-domain.new-domain {
+  background-color: var(--color-green);
+  color: var(--text-on-accent);
+}
+
+.shift-domain.increased-focus {
+  background-color: var(--color-blue);
+  color: var(--text-on-accent);
+}
+
+.shift-domain.decreased-focus {
+  background-color: var(--color-orange);
+  color: var(--text-on-accent);
+}
+
+/* Learning Velocity Section */
+.learning-velocity {
+  margin-top: 16px;
+}
+
+.velocity-summary {
+  background-color: var(--background-secondary);
+  padding: 16px;
+  border-radius: var(--radius-m);
+  margin-bottom: 16px;
+  border-left: 4px solid var(--color-green);
+}
+
+.velocity-metric {
+  margin-bottom: 8px;
+  color: var(--text-normal);
+}
+
+.velocity-metric:last-child {
+  margin-bottom: 0;
+}
+
+.velocity-metric strong {
+  color: var(--text-accent);
+}
+
+.velocity-monthly {
+  margin-top: 16px;
+}
+
+.velocity-monthly h4 {
+  color: var(--text-accent);
+  font-size: var(--font-ui-medium);
+  margin: 0 0 12px 0;
+}
+
+.velocity-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.velocity-month {
+  background-color: var(--background-secondary);
+  padding: 12px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.velocity-month-header {
+  color: var(--text-accent);
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-small);
+  margin-bottom: 8px;
+}
+
+.velocity-month-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.velocity-stat {
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  border: 1px solid var(--background-modifier-border);
+}
+
+/* Responsive Design for Knowledge Evolution */
+@media (max-width: 768px) {
+  .velocity-list {
+    grid-template-columns: 1fr;
+  }
+  
+  .timeline-domains,
+  .introduced-domains,
+  .shift-domains {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .velocity-month-stats {
+    flex-direction: column;
+  }
+}
+
+/* Dark theme adjustments */
+.theme-dark .timeline-period,
+.theme-dark .introduction-period,
+.theme-dark .focus-shift,
+.theme-dark .velocity-summary,
+.theme-dark .velocity-month,
+.theme-dark .patterns-summary,
+.theme-dark .knowledge-calendar-wrapper {
+  background-color: var(--background-primary-alt);
+}
+
+.theme-dark .timeline-domain-item,
+.theme-dark .introduced-domain,
+.theme-dark .velocity-stat {
+  background-color: var(--background-secondary);
+  border-color: var(--background-modifier-border-hover);
+}
+
+/* AI Insights Components */
+.ai-insights-container {
+  background: linear-gradient(135deg, 
+    var(--background-secondary) 0%, 
+    var(--background-primary-alt) 100%);
+  border: 1px solid var(--text-accent-hover);
+  border-radius: var(--radius-m);
+  padding: 16px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-insights-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, 
+    var(--text-accent) 0%, 
+    var(--color-purple) 50%, 
+    var(--text-accent) 100%);
+}
+
+.ai-insights-title {
+  color: var(--text-accent);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-insights-text {
+  color: var(--text-normal);
+  line-height: 1.6;
+  font-size: var(--font-ui-small);
+  text-align: justify;
+}
+
+.ai-insights-text br {
+  margin-bottom: 8px;
+}
+
+/* Enhanced styling for dark theme */
+.theme-dark .ai-insights-container {
+  background: linear-gradient(135deg, 
+    var(--background-primary-alt) 0%, 
+    var(--background-modifier-border) 100%);
+  border-color: var(--text-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .ai-insights-container::before {
+  background: linear-gradient(90deg, 
+    var(--text-accent) 0%, 
+    var(--color-purple) 50%, 
+    var(--color-blue) 100%);
+}
+
+/* Loading state for AI insights */
+.ai-insights-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-m);
+  margin-bottom: 16px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.ai-insights-loading::before {
+  content: '🧠';
+  font-size: 20px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Analysis Button Section */
+.analysis-button-section {
+    text-align: center;
+    padding: 24px;
+    background: var(--background-secondary);
+    border-radius: 12px;
+    margin: 16px 0;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.analysis-button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.analysis-trigger-button {
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--interactive-accent) 100%);
+    color: var(--text-on-accent);
+    border: none;
+    padding: 16px 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 200px;
+}
+
+.analysis-trigger-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    background: linear-gradient(135deg, var(--interactive-accent) 0%, var(--color-accent) 100%);
+}
+
+.analysis-trigger-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.analysis-button-description {
+    color: var(--text-muted);
+    font-size: 14px;
+    max-width: 400px;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Structured Analysis Visualizations */
+.timeline-visualization,
+.topic-visualization,
+.focus-visualization,
+.velocity-visualization {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--background-primary);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.timeline-phase,
+.topic-period,
+.focus-shift,
+.velocity-metric {
+    padding: 8px 12px;
+    margin: 4px 0;
+    background: var(--background-secondary);
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.timeline-phase strong,
+.topic-period strong,
+.focus-shift strong,
+.velocity-metric strong {
+    color: var(--text-accent);
+    font-weight: 600;
+}
+
+/* Cached analysis buttons */
+.analysis-button-container button + button {
+    margin-left: 12px;
+}
+
+.analysis-button-container button[style*="background"] {
+    background: var(--interactive-accent-hover) !important;
+}
+
+/* Enhanced structured content display */
+.ai-insights-text h1,
+.ai-insights-text h2,
+.ai-insights-text h3,
+.ai-insights-text h4 {
+    color: var(--text-on-accent) !important;
+    margin: 12px 0 8px 0;
+    font-weight: 600;
+}
+
+.ai-insights-text ul,
+.ai-insights-text ol {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.ai-insights-text li {
+    margin: 4px 0;
+    line-height: 1.5;
 }
 

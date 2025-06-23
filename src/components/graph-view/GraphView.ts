@@ -10,7 +10,7 @@ import {
 } from '../../types/types';
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
-import { VaultAnalysisManager } from '../../ai/VaultAnalysisManager';
+import { VaultSemanticAnalysisManager } from '../../ai/VaultSemanticAnalysisManager';
 import { CENTRALITY_RESULTS_VIEW_TYPE } from '../../views/CentralityResultsView';
 import {
     KEPLER_COLOR_PALETTES,
@@ -38,7 +38,7 @@ export class GraphView {
     // Core components
     private graphDataBuilder: GraphDataBuilder;
     private pluginService: PluginService;
-    private vaultAnalysisManager: VaultAnalysisManager;
+    private vaultAnalysisManager: VaultSemanticAnalysisManager;
     
     // Centrality state tracking
     private readonly centralityTypes = ['betweenness', 'closeness', 'eigenvector'] as const;
@@ -165,7 +165,7 @@ export class GraphView {
         // Initialize core modules
         this.pluginService = new PluginService(app);
         this.graphDataBuilder = new GraphDataBuilder(app);
-        this.vaultAnalysisManager = new VaultAnalysisManager(app, settings);
+        this.vaultAnalysisManager = new VaultSemanticAnalysisManager(app, settings);
     }
 
     public async onload(container: HTMLElement) {

@@ -1,35 +1,20 @@
 import { App, Modal, setIcon } from 'obsidian';
 import { KnowledgeCalendarChart } from '../components/calendar-chart/KnowledgeCalendarChart';
-
-// Import types from the main manager file
-export interface TokenUsage {
-    promptTokens: number;
-    candidatesTokens: number;
-    totalTokens: number;
-}
-
-export interface VaultAnalysisResult {
-    id: string;
-    title: string;
-    summary: string;
-    keywords: string;
-    knowledgeDomain: string;
-    created: string;
-    modified: string;
-    path: string;
-    wordCount: number;
-}
-
-export interface VaultAnalysisData {
-    generatedAt: string;
-    totalFiles: number;
-    apiProvider: string;
-    tokenUsage: TokenUsage;
-    results: VaultAnalysisResult[];
-}
+import { 
+    KnowledgeEvolutionAnalysisManager, 
+    KnowledgeEvolutionData,
+    VaultAnalysisData,
+    VaultAnalysisResult,
+    TokenUsage,
+    TimelineAnalysis,
+    TopicPatternsAnalysis,
+    FocusShiftAnalysis,
+    LearningVelocityAnalysis,
+    EvolutionInsight
+} from '../ai/KnowledgeEvolutionAnalysisManager';
 
 // Import type for the manager
-export interface VaultAnalysisManager {
+export interface VaultSemanticAnalysisManager {
     generateVaultAnalysis(): Promise<void>;
 }
 
@@ -38,14 +23,25 @@ export class VaultAnalysisModal extends Modal {
     private currentView: string = 'semantic';
     private contentContainer: HTMLElement;
     private hasExistingData: boolean;
-    private vaultAnalysisManager: VaultAnalysisManager;
+    private vaultSemanticAnalysisManager: VaultSemanticAnalysisManager;
+    private knowledgeEvolutionManager: KnowledgeEvolutionAnalysisManager;
     private settings: { excludeFolders: string[]; excludeTags: string[] };
+    private analysisResultsContainer: HTMLElement | null = null;
+    private knowledgeEvolutionData: KnowledgeEvolutionData | null = null;
 
-    constructor(app: App, analysisData: VaultAnalysisData | null, hasExistingData: boolean, vaultAnalysisManager: VaultAnalysisManager, settings: { excludeFolders: string[]; excludeTags: string[] } = { excludeFolders: [], excludeTags: [] }) {
+    constructor(
+        app: App, 
+        analysisData: VaultAnalysisData | null, 
+        hasExistingData: boolean, 
+        vaultSemanticAnalysisManager: VaultSemanticAnalysisManager,
+        knowledgeEvolutionManager: KnowledgeEvolutionAnalysisManager,
+        settings: { excludeFolders: string[]; excludeTags: string[] } = { excludeFolders: [], excludeTags: [] }
+    ) {
         super(app);
         this.analysisData = analysisData;
         this.hasExistingData = hasExistingData;
-        this.vaultAnalysisManager = vaultAnalysisManager;
+        this.vaultSemanticAnalysisManager = vaultSemanticAnalysisManager;
+        this.knowledgeEvolutionManager = knowledgeEvolutionManager;
         this.settings = settings;
     }
 
@@ -364,7 +360,7 @@ export class VaultAnalysisModal extends Modal {
         
         actionButton.addEventListener('click', async () => {
             this.close();
-            await this.vaultAnalysisManager.generateVaultAnalysis();
+            await this.vaultSemanticAnalysisManager.generateVaultAnalysis();
         });
     }
 
@@ -428,81 +424,291 @@ export class VaultAnalysisModal extends Modal {
     }
 
     private async loadKnowledgeEvolutionView(): Promise<void> {
-        // Create the calendar section using consistent layout
-        const calendarSection = this.contentContainer.createEl('div', { 
+        // Create the main container with a scrollable layout
+        const evolutionContainer = this.contentContainer.createEl('div', { 
+            cls: 'knowledge-evolution-container' 
+        });
+        
+        // Add CSS for proper scrolling
+        evolutionContainer.style.overflow = 'auto';
+        evolutionContainer.style.height = '100%';
+        evolutionContainer.style.paddingRight = '10px';
+
+        if (!this.hasExistingData || !this.analysisData) {
+            this.showEvolutionEmptyState(evolutionContainer);
+            return;
+        }
+
+        // 1. Calendar Section (shown by default)
+        await this.createCalendarSection(evolutionContainer);
+        
+        // 2. Check for cached analysis and display directly if available
+        this.knowledgeEvolutionData = await this.knowledgeEvolutionManager.loadCachedKnowledgeEvolution();
+        
+        if (this.knowledgeEvolutionData) {
+            // Show cached analysis directly
+            await this.displayCachedAnalysis(evolutionContainer);
+            
+            // Show Update Analysis button below the results
+            await this.createUpdateAnalysisButtonSection(evolutionContainer);
+        } else {
+            // Show Generate Analysis button
+            await this.createAnalysisButtonSection(evolutionContainer);
+        }
+    }
+
+    private showEvolutionEmptyState(container: HTMLElement): void {
+        const emptyState = container.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
+        });
+        
+        emptyState.createEl('h3', {
+            text: 'Knowledge Evolution Analysis',
+            cls: 'vault-analysis-section-title'
+        });
+        
+        emptyState.createEl('p', {
+            text: 'Knowledge Evolution Analysis requires AI-powered vault analysis to be completed first.',
+            cls: 'analysis-required'
+        });
+        
+        const featureList = emptyState.createEl('ul');
+        const features = [
+            'Knowledge Development Timeline - track how your understanding evolved',
+            'Topic Introduction Patterns - see when different subjects entered your system',
+            'Focus Shift Analysis - compare current interests vs historical patterns',
+            'Learning Velocity - analyze the pace of knowledge acquisition over time'
+        ];
+        
+        features.forEach(feature => {
+            featureList.createEl('li', { text: feature });
+        });
+
+        // Action buttons section
+        const actionsSection = container.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
+
+        actionsSection.createEl('h3', {
+            text: 'Actions',
+            cls: 'vault-analysis-section-title'
+        });
+
+        const originalContentContainer = this.contentContainer;
+        this.contentContainer = actionsSection;
+        this.createActionButtons();
+        this.contentContainer = originalContentContainer;
+    }
+
+    private async createCalendarSection(container: HTMLElement): Promise<void> {
+        const calendarSection = container.createEl('div', { 
             cls: 'vault-analysis-section' 
         });
 
         calendarSection.createEl('h3', {
-            text: 'Knowledge Calendar',
+            text: 'Knowledge Evolution Calendar',
             cls: 'vault-analysis-section-title'
         });
 
-        // Create the calendar chart container
         const chartContainer = calendarSection.createEl('div', { 
-            cls: 'knowledge-evolution-container' 
+            cls: 'knowledge-calendar-wrapper' 
         });
 
-        // Add loading state
-        const loadingContainer = chartContainer.createEl('div', { 
-            cls: 'calendar-chart-loading' 
+        // Create calendar chart with settings
+        const calendarChart = new KnowledgeCalendarChart(
+            this.app,
+            chartContainer,
+            { cellSize: 11 },
+            this.settings.excludeFolders,
+            this.settings.excludeTags
+        );
+
+        // Render the calendar chart
+        await calendarChart.render();
+    }
+
+    private async createUpdateAnalysisButtonSection(container: HTMLElement): Promise<void> {
+        const buttonSection = container.createEl('div', { 
+            cls: 'vault-analysis-section analysis-button-section' 
         });
-        loadingContainer.createEl('p', { text: 'Generating knowledge evolution calendar...' });
+
+        buttonSection.createEl('h3', {
+            text: 'Update Analysis',
+            cls: 'vault-analysis-section-title'
+        });
+
+        const buttonContainer = buttonSection.createEl('div', { 
+            cls: 'analysis-button-container' 
+        });
+
+        const updateButton = buttonContainer.createEl('button', {
+            cls: 'analysis-trigger-button',
+            text: '🔄 Update Analysis'
+        });
+        
+        updateButton.style.background = 'var(--interactive-accent-hover)';
+
+        const description = buttonContainer.createEl('p', {
+            cls: 'analysis-button-description',
+            text: `Analysis generated on ${new Date(this.knowledgeEvolutionData!.generatedAt).toLocaleDateString()}. Click to update with new AI analysis.`
+        });
+
+        updateButton.addEventListener('click', async () => {
+            await this.triggerAIAnalysis(buttonSection, true);
+        });
+    }
+
+    private async createAnalysisButtonSection(container: HTMLElement): Promise<void> {
+        const buttonSection = container.createEl('div', { 
+            cls: 'vault-analysis-section analysis-button-section' 
+        });
+
+        buttonSection.createEl('h3', {
+            text: 'AI-Powered Knowledge Analysis',
+            cls: 'vault-analysis-section-title'
+        });
+
+        const buttonContainer = buttonSection.createEl('div', { 
+            cls: 'analysis-button-container' 
+        });
+
+        // Show "Generate Analysis" button
+        const analysisButton = buttonContainer.createEl('button', {
+            cls: 'analysis-trigger-button',
+            text: '🧠 Generate AI Analysis'
+        });
+
+        const description = buttonContainer.createEl('p', {
+            cls: 'analysis-button-description',
+            text: 'Generate comprehensive AI insights about your knowledge evolution, topic patterns, focus shifts, and learning velocity.'
+        });
+
+        // Store reference to the container for later use
+        this.analysisResultsContainer = container;
+
+        analysisButton.addEventListener('click', async () => {
+            await this.triggerAIAnalysis(buttonSection, false);
+        });
+    }
+
+    private async triggerAIAnalysis(buttonSection: HTMLElement, isUpdate: boolean = false): Promise<void> {
+        // Show loading state
+        const loadingContainer = buttonSection.createEl('div', { 
+            cls: 'evolution-loading' 
+        });
+        loadingContainer.createEl('h3', { 
+            text: isUpdate ? 'Updating Knowledge Evolution Analysis...' : 'Analyzing Knowledge Evolution...' 
+        });
+        loadingContainer.createEl('p', { text: 'Processing AI analysis data to generate insights...' });
 
         try {
-            // Create calendar chart with settings
-            const calendarChart = new KnowledgeCalendarChart(
-                this.app,
-                chartContainer,
-                {
-                    cellSize: 11
-                },
-                this.settings.excludeFolders,
-                this.settings.excludeTags
-            );
-
+            // Generate AI-powered evolution analysis and cache it
+            const evolutionData = await this.knowledgeEvolutionManager.generateAndCacheEvolutionAnalysis();
+            this.knowledgeEvolutionData = evolutionData;
+            
             // Remove loading state
             loadingContainer.remove();
-
-            // Render the calendar chart
-            await calendarChart.render();
-
-            // Add disclaimer section
-            const disclaimerSection = this.contentContainer.createEl('div', { 
-                cls: 'vault-analysis-section'
-            });
             
-            disclaimerSection.createEl('h3', {
-                text: 'About This Data',
-                cls: 'vault-analysis-section-title'
-            });
-            
-            const disclaimer = disclaimerSection.createEl('p', {
-                cls: 'calendar-disclaimer-text'
-            });
-            disclaimer.innerHTML = `
-                <strong>Note:</strong> This calendar shows your writing activity based on file modification times and word counts. 
-                The chart automatically displays all years with activity data. The intensity of each day represents the 
-                total words written across all modified files on that day.
-            `;
+            // Display the cached analysis
+            await this.displayCachedAnalysis(buttonSection);
 
         } catch (error) {
-            console.error('Error creating calendar chart:', error);
-            
-            // Remove loading state and show error
+            console.error('Error generating evolution analysis:', error);
             loadingContainer.remove();
             
-            const errorContainer = chartContainer.createEl('div', { 
-                cls: 'calendar-chart-error' 
+            const errorContainer = buttonSection.createEl('div', { 
+                cls: 'evolution-error' 
             });
-            errorContainer.createEl('h4', { text: 'Error Loading Calendar' });
+            errorContainer.createEl('h4', { text: 'Error Loading Evolution Analysis' });
             errorContainer.createEl('p', { 
-                text: 'There was an issue generating the knowledge evolution calendar. Please check the console for details.' 
+                text: 'There was an issue analyzing your knowledge evolution. Please check the console for details.' 
             });
-
-            // Action buttons for fallback
-            this.createActionButtons();
         }
+    }
+
+    private async displayCachedAnalysis(container: HTMLElement): Promise<void> {
+        if (!this.knowledgeEvolutionData) return;
+
+        const data = this.knowledgeEvolutionData.analysis;
+        
+        // Create analysis sections with structured data
+        this.createStructuredAnalysisSection(container, 'Knowledge Development Timeline', data.timeline);
+        this.createStructuredAnalysisSection(container, 'Topic Introduction Patterns', data.topicPatterns);
+        this.createStructuredAnalysisSection(container, 'Focus Shift Analysis', data.focusShift);
+        this.createStructuredAnalysisSection(container, 'Learning Velocity Analysis', data.learningVelocity);
+    }
+
+    private createStructuredAnalysisSection(container: HTMLElement, title: string, analysisData: any): void {
+        const section = container.createEl('div', { cls: 'vault-analysis-section' });
+        
+        section.createEl('h3', {
+            text: title,
+            cls: 'vault-analysis-section-title'
+        });
+        
+        // AI Insights Section
+        const insightsContainer = section.createEl('div', { cls: 'ai-insights-container' });
+        insightsContainer.createEl('h4', { 
+            text: '🧠 AI Analysis',
+            cls: 'ai-insights-title'
+        });
+        
+        const insightsText = insightsContainer.createEl('div', { 
+            cls: 'ai-insights-text'
+        });
+        
+        // Display the narrative content
+        if (analysisData.narrative || analysisData.exploration || analysisData.trends) {
+            const narrative = analysisData.narrative || analysisData.exploration || analysisData.trends;
+            insightsText.innerHTML = narrative.content.replace(/\n/g, '<br>');
+        }
+        
+        // Add structured data visualizations based on analysis type
+        if (title.includes('Timeline') && analysisData.phases) {
+            this.addTimelineVisualization(section, analysisData.phases);
+        } else if (title.includes('Topic') && analysisData.introductionTimeline) {
+            this.addTopicVisualization(section, analysisData.introductionTimeline);
+        } else if (title.includes('Focus') && analysisData.shifts) {
+            this.addFocusShiftVisualization(section, analysisData.shifts);
+        } else if (title.includes('Velocity') && analysisData.metrics) {
+            this.addVelocityVisualization(section, analysisData.metrics);
+        }
+    }
+
+    // Visualization helper methods (simplified for now)
+    private addTimelineVisualization(section: HTMLElement, phases: any[]): void {
+        const viz = section.createEl('div', { cls: 'timeline-visualization' });
+        phases.forEach(phase => {
+            const phaseEl = viz.createEl('div', { cls: 'timeline-phase' });
+            phaseEl.innerHTML = `<strong>${phase.period}</strong>: ${phase.description}`;
+        });
+    }
+
+    private addTopicVisualization(section: HTMLElement, timeline: any[]): void {
+        const viz = section.createEl('div', { cls: 'topic-visualization' });
+        timeline.forEach(item => {
+            if (item.newDomains.length > 0) {
+                const itemEl = viz.createEl('div', { cls: 'topic-period' });
+                itemEl.innerHTML = `<strong>${item.period}</strong>: ${item.newDomains.join(', ')}`;
+            }
+        });
+    }
+
+    private addFocusShiftVisualization(section: HTMLElement, shifts: any[]): void {
+        const viz = section.createEl('div', { cls: 'focus-visualization' });
+        shifts.forEach(shift => {
+            const shiftEl = viz.createEl('div', { cls: 'focus-shift' });
+            shiftEl.innerHTML = `<strong>${shift.period}</strong>: ${shift.newAreas.length} new areas, ${shift.decreasedFocus.length} reduced`;
+        });
+    }
+
+    private addVelocityVisualization(section: HTMLElement, metrics: any[]): void {
+        const viz = section.createEl('div', { cls: 'velocity-visualization' });
+        metrics.forEach(metric => {
+            const metricEl = viz.createEl('div', { cls: 'velocity-metric' });
+            const trend = metric.trendIndicator === 'up' ? '📈' : metric.trendIndicator === 'down' ? '📉' : '➡️';
+            metricEl.innerHTML = `<strong>${metric.period}</strong>: ${metric.notesCreated} notes, ${metric.wordsWritten} words ${trend}`;
+        });
     }
 
     private loadRecommendedActionsView(): void {

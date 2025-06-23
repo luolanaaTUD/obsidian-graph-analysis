@@ -5,7 +5,7 @@ import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalys
 import { CentralityResultsView, CENTRALITY_RESULTS_VIEW_TYPE } from './views/CentralityResultsView';
 import { GraphAnalysisSettingTab } from './settings/GraphAnalysisSettingTab';
 import { AISummaryManager } from './ai/AISummaryManager';
-import { VaultAnalysisManager } from './ai/VaultAnalysisManager';
+import { VaultSemanticAnalysisManager } from './ai/VaultSemanticAnalysisManager';
 import { ExclusionUtils } from './utils/ExclusionUtils';
 
 // Import our styles 
@@ -28,7 +28,7 @@ export default class GraphAnalysisPlugin extends Plugin {
     graphView: GraphView | null = null;
     centralityView: CentralityResultsView | null = null;
     aiSummaryManager: AISummaryManager | null = null;
-    vaultAnalysisManager: VaultAnalysisManager | null = null;
+    vaultAnalysisManager: VaultSemanticAnalysisManager | null = null;
     exclusionUtils: ExclusionUtils | null = null;
     
     private fileCreatedHandler: ((file: TFile) => void) | null = null;
@@ -119,7 +119,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.aiSummaryManager.createStatusBarButton(this.addStatusBarItem());
 
         // Initialize Vault Analysis Manager (no status bar button - now in graph view)
-        this.vaultAnalysisManager = new VaultAnalysisManager(this.app, this.settings);
+        this.vaultAnalysisManager = new VaultSemanticAnalysisManager(this.app, this.settings);
 
         // Add command for AI summary
         this.addCommand({

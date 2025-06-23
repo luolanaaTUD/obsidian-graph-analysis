@@ -1,34 +1,14 @@
 import { App, Notice, requestUrl, TFile, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { VaultAnalysisModal, VaultAnalysisInfoModal } from '../views/VaultAnalysisModals';
+import { 
+    KnowledgeEvolutionAnalysisManager, 
+    TokenUsage, 
+    VaultAnalysisResult, 
+    VaultAnalysisData 
+} from './KnowledgeEvolutionAnalysisManager';
 
-export interface TokenUsage {
-    promptTokens: number;
-    candidatesTokens: number;
-    totalTokens: number;
-}
-
-export interface VaultAnalysisResult {
-    id: string;
-    title: string;
-    summary: string;
-    keywords: string;
-    knowledgeDomain: string;
-    created: string;
-    modified: string;
-    path: string;
-    wordCount: number;
-}
-
-export interface VaultAnalysisData {
-    generatedAt: string;
-    totalFiles: number;
-    apiProvider: string;
-    tokenUsage: TokenUsage;
-    results: VaultAnalysisResult[];
-}
-
-export class VaultAnalysisManager {
+export class VaultSemanticAnalysisManager {
     private app: App;
     private settings: GraphAnalysisSettings;
     private statusBarItem: HTMLElement | null = null;
@@ -486,7 +466,8 @@ export class VaultAnalysisManager {
             }
             
             // Always display modal, passing whether we have existing data
-            const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this);
+            const knowledgeEvolutionManager = new KnowledgeEvolutionAnalysisManager(this.app, this.settings);
+            const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this, knowledgeEvolutionManager, this.settings);
             modal.open();
         } catch (error) {
             console.error('Failed to load vault analysis results:', error);
