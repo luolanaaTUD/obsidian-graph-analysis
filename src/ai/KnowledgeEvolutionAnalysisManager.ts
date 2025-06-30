@@ -106,6 +106,13 @@ export interface VaultAnalysisResult {
     modified: string;
     path: string;
     wordCount: number;
+    // Graph metrics - added for enhanced analysis
+    graphMetrics?: {
+        degreeCentrality?: number;
+        betweennessCentrality?: number;
+        closenessCentrality?: number;
+        eigenvectorCentrality?: number;
+    };
 }
 
 export interface VaultAnalysisData {

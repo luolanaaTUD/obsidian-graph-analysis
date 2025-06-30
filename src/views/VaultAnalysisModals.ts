@@ -4,14 +4,7 @@ import {
     KnowledgeEvolutionAnalysisManager, 
     KnowledgeEvolutionData,
     VaultAnalysisData,
-    VaultAnalysisResult,
-    TokenUsage,
-    TimelineAnalysis,
-    TopicPatternsAnalysis,
-    FocusShiftAnalysis,
-    LearningVelocityAnalysis,
-    EvolutionInsight
-} from '../ai/KnowledgeEvolutionAnalysisManager';
+    VaultAnalysisResult} from '../ai/KnowledgeEvolutionAnalysisManager';
 
 // Import type for the manager
 export interface VaultSemanticAnalysisManager {
@@ -87,7 +80,7 @@ export class VaultAnalysisModal extends Modal {
         const titleIcon = headerRow.createEl('div', { 
             cls: 'vault-analysis-main-icon'
         });
-        setIcon(titleIcon, 'sun');
+        setIcon(titleIcon, 'waypoints');
         
         // Navigation tabs
         const navContainer = headerRow.createEl('div', { 
@@ -277,6 +270,30 @@ export class VaultAnalysisModal extends Modal {
                     text: `Knowledge Domain: ${result.knowledgeDomain}`,
                     cls: 'result-domain'
                 });
+                
+                // Display graph metrics if available
+                if (result.graphMetrics) {
+                    const metrics = [
+                        { key: 'degreeCentrality', label: 'Degree' },
+                        { key: 'betweennessCentrality', label: 'Betweenness' },
+                        { key: 'closenessCentrality', label: 'Closeness' },
+                        { key: 'eigenvectorCentrality', label: 'Eigenvector' }
+                    ];
+                    
+                    const metricValues = metrics
+                        .map(metric => {
+                            const value = result.graphMetrics![metric.key as keyof typeof result.graphMetrics];
+                            return value !== undefined && value !== null ? `${metric.label}-${value.toFixed(3)}` : null;
+                        })
+                        .filter(Boolean);
+                    
+                    if (metricValues.length > 0) {
+                        resultItem.createEl('p', {
+                            text: `Graph Centrality Metrics: ${metricValues.join(', ')}`,
+                            cls: 'result-domain'
+                        });
+                    }
+                }
                 
                 const metaContainer = resultItem.createEl('div', {
                     cls: 'result-meta'
@@ -548,10 +565,6 @@ export class VaultAnalysisModal extends Modal {
         
         updateButton.style.background = 'var(--interactive-accent-hover)';
 
-        const description = buttonContainer.createEl('p', {
-            cls: 'analysis-button-description',
-            text: `Analysis generated on ${new Date(this.knowledgeEvolutionData!.generatedAt).toLocaleDateString()}. Click to update with new AI analysis.`
-        });
 
         updateButton.addEventListener('click', async () => {
             await this.triggerAIAnalysis(buttonSection, true);
@@ -578,10 +591,6 @@ export class VaultAnalysisModal extends Modal {
             text: '🧠 Generate AI Analysis'
         });
 
-        const description = buttonContainer.createEl('p', {
-            cls: 'analysis-button-description',
-            text: 'Generate comprehensive AI insights about your knowledge evolution, topic patterns, focus shifts, and learning velocity.'
-        });
 
         // Store reference to the container for later use
         this.analysisResultsContainer = container;

@@ -7,15 +7,21 @@ import {
     VaultAnalysisResult, 
     VaultAnalysisData 
 } from './KnowledgeEvolutionAnalysisManager';
+import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
+import { PluginService } from '../services/PluginService';
 
 export class VaultSemanticAnalysisManager {
     private app: App;
     private settings: GraphAnalysisSettings;
     private statusBarItem: HTMLElement | null = null;
+    private graphDataBuilder: GraphDataBuilder;
+    private pluginService: PluginService;
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         this.settings = settings;
+        this.graphDataBuilder = new GraphDataBuilder(app);
+        this.pluginService = new PluginService(app);
     }
 
     public createGraphViewButton(container: HTMLElement): HTMLElement {
@@ -36,17 +42,149 @@ export class VaultSemanticAnalysisManager {
         
         // Add description
         const description = tooltipEl.createDiv({ cls: 'tooltip-description' });
-        description.setText('AI-powered analysis of your entire vault to extract summaries, keywords, and knowledge domains from all notes.');
+        description.setText('AI-powered analysis of your entire vault to extract summaries, keywords, knowledge domains, and graph centrality metrics. Shift+click to force refresh graph metrics.');
         
         // Add click handler for vault analysis - directly open results modal
-        button.addEventListener('click', (event) => {
-            this.viewVaultAnalysisResults();
+        button.addEventListener('click', async (event) => {
+            // Check if shift is held to force graph metrics enhancement
+            if (event.shiftKey) {
+                try {
+                    const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
+                    const enhanced = await this.enhanceWithGraphMetrics();
+                    enhanceNotice.hide();
+                    
+                    if (enhanced) {
+                        new Notice('✅ Vault analysis enhanced with graph metrics!');
+                    } else {
+                        new Notice('ℹ️ No existing vault analysis found. Generate analysis first.');
+                    }
+                } catch (error) {
+                    new Notice(`❌ Failed to enhance: ${(error as Error).message}`);
+                }
+            } else {
+                this.viewVaultAnalysisResults();
+            }
         });
 
         return button;
     }
 
+    /**
+     * Calculate graph metrics for all nodes in the vault
+     * Returns a map from file path to graph metrics
+     */
+    private async calculateGraphMetrics(): Promise<Map<string, VaultAnalysisResult['graphMetrics']>> {
+        const metricsMap = new Map<string, VaultAnalysisResult['graphMetrics']>();
+        
+        try {
+            // Build graph data and get degree centrality
+            const { graphData } = await this.graphDataBuilder.buildGraphData();
+            
+            // Calculate all centrality types
+            const degreeCentrality = this.pluginService.calculateDegreeCentrality();
+            const betweennessCentrality = this.pluginService.calculateBetweennessCentrality();
+            const closenessCentrality = this.pluginService.calculateClosenessCentrality();
+            const eigenvectorCentrality = this.pluginService.calculateEigenvectorCentrality();
+            
+            // Create maps for quick lookup by node_id
+            const degreeMap = new Map<number, number>();
+            const betweennessMap = new Map<number, number>();
+            const closenessMap = new Map<number, number>();
+            const eigenvectorMap = new Map<number, number>();
+            
+            degreeCentrality.forEach(node => {
+                if (node.centrality.degree !== undefined) {
+                    degreeMap.set(node.node_id, node.centrality.degree);
+                }
+            });
+            
+            betweennessCentrality.forEach(node => {
+                if (node.centrality.betweenness !== undefined) {
+                    betweennessMap.set(node.node_id, node.centrality.betweenness);
+                }
+            });
+            
+            closenessCentrality.forEach(node => {
+                if (node.centrality.closeness !== undefined) {
+                    closenessMap.set(node.node_id, node.centrality.closeness);
+                }
+            });
+            
+            eigenvectorCentrality.forEach(node => {
+                if (node.centrality.eigenvector !== undefined) {
+                    eigenvectorMap.set(node.node_id, node.centrality.eigenvector);
+                }
+            });
+            
+            // Map file paths to their graph metrics using node indices
+            graphData.nodes.forEach((filePath, nodeIndex) => {
+                const metrics: VaultAnalysisResult['graphMetrics'] = {
+                    degreeCentrality: degreeMap.get(nodeIndex),
+                    betweennessCentrality: betweennessMap.get(nodeIndex),
+                    closenessCentrality: closenessMap.get(nodeIndex),
+                    eigenvectorCentrality: eigenvectorMap.get(nodeIndex)
+                };
+                
+                metricsMap.set(filePath, metrics);
+            });
+            
+        } catch (error) {
+            console.error('Error calculating graph metrics:', error);
+            // Return empty map on error - semantic analysis can proceed without graph metrics
+        }
+        
+        return metricsMap;
+    }
 
+    /**
+     * Enhance existing vault analysis results with graph metrics
+     * This handles scenario 2: cached vault-analysis.json exists
+     */
+    public async enhanceWithGraphMetrics(): Promise<boolean> {
+        try {
+            // Load existing analysis data
+            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/vault-analysis.json`;
+            
+            let existingData: VaultAnalysisData;
+            try {
+                const content = await this.app.vault.adapter.read(filePath);
+                existingData = JSON.parse(content);
+            } catch (error) {
+                // File doesn't exist or invalid - return false to indicate no cached data
+                return false;
+            }
+            
+            // Calculate current graph metrics
+            const graphMetrics = await this.calculateGraphMetrics();
+            
+            // Enhance each result with graph metrics
+            const enhancedResults = existingData.results.map(result => {
+                const metrics = graphMetrics.get(result.path);
+                return {
+                    ...result,
+                    graphMetrics: metrics
+                };
+            });
+            
+            // Update the analysis data
+            const updatedData: VaultAnalysisData = {
+                ...existingData,
+                results: enhancedResults,
+                // Update timestamp to reflect the enhancement
+                generatedAt: new Date().toISOString()
+            };
+            
+            // Save the enhanced data
+            await this.app.vault.adapter.write(filePath, JSON.stringify(updatedData, null, 2));
+            
+            console.log('Enhanced existing vault analysis with graph metrics');
+            return true;
+            
+        } catch (error) {
+            console.error('Error enhancing vault analysis with graph metrics:', error);
+            throw new Error(`Failed to enhance with graph metrics: ${(error as Error).message}`);
+        }
+    }
 
     public async generateVaultAnalysis(): Promise<void> {
         try {
@@ -217,14 +355,27 @@ export class VaultSemanticAnalysisManager {
             // Hide progress notice
             progressNotice.hide();
 
-            // Save results to JSON file with token usage
-            await this.saveAnalysisResults(results, totalTokenUsage);
+            // Calculate graph metrics and enhance results
+            progressNotice.setMessage('Calculating graph metrics...');
+            const graphMetrics = await this.calculateGraphMetrics();
+            
+            // Enhance results with graph metrics
+            const enhancedResults = results.map(result => {
+                const metrics = graphMetrics.get(result.path);
+                return {
+                    ...result,
+                    graphMetrics: metrics
+                };
+            });
+            
+            // Save enhanced results to JSON file with token usage
+            await this.saveAnalysisResults(enhancedResults, totalTokenUsage);
             
             // Show completion notice with detailed stats including token usage
             if (failed === 0) {
-                new Notice(`✅ Vault analysis completed successfully! Processed ${processed} files using ${totalTokenUsage.totalTokens} tokens. Results saved to plugin data folder`);
+                new Notice(`✅ Vault analysis with graph metrics completed successfully! Processed ${processed} files using ${totalTokenUsage.totalTokens} tokens. Results saved to plugin data folder`);
             } else {
-                new Notice(`⚠️ Vault analysis completed with some issues. Processed ${processed - failed} files successfully, ${failed} failed, using ${totalTokenUsage.totalTokens} tokens. Results saved to plugin data folder`);
+                new Notice(`⚠️ Vault analysis with graph metrics completed with some issues. Processed ${processed - failed} files successfully, ${failed} failed, using ${totalTokenUsage.totalTokens} tokens. Results saved to plugin data folder`);
             }
             
         } catch (error) {
@@ -460,6 +611,64 @@ export class VaultSemanticAnalysisManager {
                 const content = await this.app.vault.adapter.read(filePath);
                 analysisData = JSON.parse(content);
                 hasExistingData = analysisData.results && analysisData.results.length > 0;
+                
+                // Check if the data has graph metrics
+                if (hasExistingData) {
+                    const hasGraphMetrics = analysisData.results.some((result: VaultAnalysisResult) => 
+                        result.graphMetrics && Object.keys(result.graphMetrics).length > 0
+                    );
+                    
+                    if (!hasGraphMetrics) {
+                        // Offer to enhance with graph metrics
+                        const shouldEnhance = await new Promise<boolean>((resolve) => {
+                            const notice = new Notice('Your vault analysis exists but lacks graph metrics. Click to enhance it with centrality scores.', 0);
+                            
+                            // Create enhance button in the notice
+                            const enhanceBtn = notice.noticeEl.createEl('button', { 
+                                text: 'Enhance with Graph Metrics',
+                                cls: 'graph-enhance-btn'
+                            });
+                            enhanceBtn.style.marginLeft = '10px';
+                            enhanceBtn.style.padding = '4px 8px';
+                            enhanceBtn.style.backgroundColor = 'var(--interactive-accent)';
+                            enhanceBtn.style.color = 'var(--text-on-accent)';
+                            enhanceBtn.style.border = 'none';
+                            enhanceBtn.style.borderRadius = '4px';
+                            enhanceBtn.style.cursor = 'pointer';
+                            
+                            enhanceBtn.onclick = () => {
+                                notice.hide();
+                                resolve(true);
+                            };
+                            
+                            // Auto-resolve to false after 8 seconds
+                            setTimeout(() => {
+                                notice.hide();
+                                resolve(false);
+                            }, 8000);
+                        });
+
+                        if (shouldEnhance) {
+                            // Show loading notice and enhance with graph metrics
+                            const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
+                            try {
+                                await this.enhanceWithGraphMetrics();
+                                enhanceNotice.hide();
+                                new Notice('✅ Vault analysis enhanced with graph metrics!');
+                                
+                                // Reload the enhanced data
+                                const enhancedContent = await this.app.vault.adapter.read(filePath);
+                                analysisData = JSON.parse(enhancedContent);
+                                
+                            } catch (error) {
+                                enhanceNotice.hide();
+                                console.error('Error enhancing with graph metrics:', error);
+                                new Notice(`❌ Failed to enhance analysis: ${(error as Error).message}`);
+                                // Continue with original data
+                            }
+                        }
+                    }
+                }
             } catch (error) {
                 // File doesn't exist or is invalid, we'll show empty state
                 hasExistingData = false;
