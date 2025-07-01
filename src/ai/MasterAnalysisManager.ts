@@ -1,10 +1,15 @@
 import { App, requestUrl } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
-
-// Import interfaces from visualization managers for type consistency
-import { KnowledgeStructureData } from './visualization/KnowledgeStructureManager';
-import { KnowledgeEvolutionData } from './visualization/KnowledgeEvolutionManager';
-import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
+import { 
+    KnowledgeStructureData,
+    KnowledgeEvolutionData, 
+    KnowledgeActionsData,
+    TimelineAnalysis,
+    TopicPatternsAnalysis,
+    FocusShiftAnalysis,
+    LearningVelocityAnalysis,
+    EvolutionInsight
+} from './visualization/managers';
 
 export interface TokenUsage {
     promptTokens: number;
@@ -27,6 +32,12 @@ export interface VaultAnalysisResult {
         betweennessCentrality?: number;
         closenessCentrality?: number;
         eigenvectorCentrality?: number;
+    };
+    centralityRankings?: {
+        betweennessRank?: number;
+        closenessRank?: number;
+        eigenvectorRank?: number;
+        degreeRank?: number;
     };
 }
 
@@ -57,6 +68,7 @@ export interface MasterAnalysisData {
 export class MasterAnalysisManager {
     private app: App;
     private settings: GraphAnalysisSettings;
+    private readonly MAX_CHUNK_SIZE = 600000; // Increased chunk size to take advantage of 1M TPM limit
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
@@ -89,16 +101,13 @@ export class MasterAnalysisManager {
             throw new Error('No vault analysis data found. Please generate vault analysis first.');
         }
 
-        console.log('Generating master analysis with single AI call...');
+        console.log('Generating master analysis using chunked JSON approach...');
         
-        // Prepare comprehensive context for the single AI call
-        const comprehensiveContext = this.prepareComprehensiveContext(analysisData);
-        
-        // Make single comprehensive AI call
-        const masterInsights = await this.generateComprehensiveMasterInsights(comprehensiveContext);
+        // Use chunked strategy to send complete JSON data
+        const masterInsights = await this.generateMasterInsightsWithChunking(analysisData);
         
         // Parse the comprehensive response into structured data
-        const parsedInsights = this.parseMasterInsights(masterInsights, comprehensiveContext);
+        const parsedInsights = this.parseMasterInsights(masterInsights, analysisData);
 
         // Create structured master analysis data
         const masterData: MasterAnalysisData = {
@@ -150,82 +159,6 @@ export class MasterAnalysisManager {
         }
     }
 
-    private prepareComprehensiveContext(analysisData: VaultAnalysisData): any {
-        const results = analysisData.results;
-        
-        // Create a comprehensive context for the single AI analysis
-        const totalNotes = results.length;
-        const totalWords = results.reduce((sum, note) => sum + note.wordCount, 0);
-        const timeSpan = this.getTimeSpan(results);
-        
-        // Extract all unique domains and keywords
-        const allDomains = new Set<string>();
-        const allKeywords = new Set<string>();
-        results.forEach(note => {
-            if (note.knowledgeDomain) {
-                note.knowledgeDomain.split(',').forEach(d => allDomains.add(d.trim().toLowerCase()));
-            }
-            if (note.keywords) {
-                note.keywords.split(',').forEach(k => allKeywords.add(k.trim().toLowerCase()));
-            }
-        });
-
-        // Group notes by time periods for evolution analysis
-        const notesByPeriod = this.groupNotesByTimePeriod(results);
-        
-        // Create detailed period summaries
-        const periodSummaries = Object.entries(notesByPeriod.quarters).map(([period, notes]: [string, VaultAnalysisResult[]]) => {
-            const domains = new Set<string>();
-            const keywords = new Set<string>();
-            const noteCount = notes.length;
-            const wordCount = notes.reduce((sum, note) => sum + note.wordCount, 0);
-            
-            notes.forEach(note => {
-                if (note.knowledgeDomain) {
-                    note.knowledgeDomain.split(',').forEach(d => domains.add(d.trim().toLowerCase()));
-                }
-                if (note.keywords) {
-                    note.keywords.split(',').forEach(k => keywords.add(k.trim().toLowerCase()));
-                }
-            });
-            
-            // Include detailed note data for comprehensive analysis
-            const noteDetails = notes.map(note => ({
-                title: note.title,
-                summary: note.summary,
-                keywords: note.keywords,
-                knowledgeDomain: note.knowledgeDomain,
-                wordCount: note.wordCount,
-                graphMetrics: note.graphMetrics
-            }));
-            
-            return {
-                period,
-                noteCount,
-                wordCount,
-                domains: Array.from(domains),
-                keywords: Array.from(keywords),
-                avgWordsPerNote: noteCount > 0 ? Math.round(wordCount / noteCount) : 0,
-                noteDetails
-            };
-        }).sort((a, b) => a.period.localeCompare(b.period));
-
-        // Analyze graph centrality patterns
-        const centralityAnalysis = this.analyzeCentralityPatterns(results);
-
-        return {
-            totalNotes,
-            totalWords,
-            timeSpan,
-            totalDomains: allDomains.size,
-            totalKeywords: allKeywords.size,
-            periodSummaries,
-            topDomains: Array.from(allDomains).slice(0, 30),
-            topKeywords: Array.from(allKeywords).slice(0, 50),
-            centralityAnalysis,
-            allNoteDetails: results // Include full analysis for comprehensive insights
-        };
-    }
 
     private groupNotesByTimePeriod(results: VaultAnalysisResult[]): any {
         const periods: { [key: string]: VaultAnalysisResult[] } = {};
@@ -303,114 +236,167 @@ export class MasterAnalysisManager {
         };
     }
 
-    private async generateComprehensiveMasterInsights(context: any): Promise<string> {
-        const prompt = `You are an AI knowledge analyst tasked with providing comprehensive insights about a user's knowledge vault. Based on the complete vault analysis data provided, generate detailed insights for three key areas: Knowledge Structure, Knowledge Evolution, and Recommended Actions.
+    private async generateMasterInsightsWithChunking(analysisData: VaultAnalysisData): Promise<string> {
+        try {
+            // Convert analysis data to JSON string
+            const jsonData = JSON.stringify(analysisData, null, 2);
+            
+            console.log(`Vault data size: ${jsonData.length} characters`);
+            
+            // With Gemini 2.0 Flash-Lite's 1M TPM limit, we can send much larger payloads
+            // Only chunk if data is extremely large (>800k characters)
+            if (jsonData.length <= this.MAX_CHUNK_SIZE) {
+                console.log('Sending complete data in single request (optimal for 2.0 Flash-Lite)...');
+                return await this.sendCompleteAnalysisRequest(jsonData);
+            } else {
+                console.log(`Data exceeds ${this.MAX_CHUNK_SIZE} characters, using minimal chunking...`);
+                const chunks = this.chunkJsonData(jsonData);
+                console.log(`Sending vault data in ${chunks.length} chunk(s) to AI...`);
+                
+                // Send chunks with appropriate delays for 30 RPM limit
+                for (let i = 0; i < chunks.length - 1; i++) {
+                    console.log(`Sending chunk ${i + 1}/${chunks.length}...`);
+                    await this.sendDataChunk(chunks[i], i + 1, chunks.length);
+                    
+                    // Respect 30 RPM limit: wait 2+ seconds between requests
+                    await new Promise(resolve => setTimeout(resolve, 2500));
+                }
+                
+                // Send final chunk with analysis instructions
+                console.log(`Sending final chunk with analysis instructions...`);
+                const finalResponse = await this.sendFinalChunkWithInstructions(
+                    chunks[chunks.length - 1], 
+                    chunks.length, 
+                    chunks.length
+                );
+                
+                return finalResponse;
+            }
+            
+        } catch (error) {
+            console.error('Error in master analysis:', error);
+            throw error;
+        }
+    }
 
-## VAULT OVERVIEW
-- Total Notes: ${context.totalNotes}
-- Total Words: ${context.totalWords.toLocaleString()}
-- Knowledge Journey: ${context.timeSpan}
-- Domains Covered: ${context.totalDomains}
-- Unique Keywords: ${context.totalKeywords}
-
-## GLOBAL KNOWLEDGE LANDSCAPE
-**Primary Domains**: ${context.topDomains.slice(0, 15).join(', ')}
-**Key Research Themes**: ${context.topKeywords.slice(0, 20).join(', ')}
-
-## GRAPH ANALYSIS CONTEXT
-${context.centralityAnalysis.hasMetrics ? `
-**Top Knowledge Bridges**: ${context.centralityAnalysis.bridges.slice(0, 5).map((n: any) => n.title).join(', ')}
-**Knowledge Foundations**: ${context.centralityAnalysis.foundations.slice(0, 5).map((n: any) => n.title).join(', ')}
-**Knowledge Authorities**: ${context.centralityAnalysis.authorities.slice(0, 5).map((n: any) => n.title).join(', ')}
-` : 'Graph metrics not available - focus on semantic analysis.'}
-
-## TEMPORAL EVOLUTION DATA
-${context.periodSummaries.map((period: any) => `
-**${period.period}**: ${period.noteCount} notes, ${period.wordCount.toLocaleString()} words
-- Domains: ${period.domains.slice(0, 5).join(', ')}
-- Key Themes: ${period.keywords.slice(0, 8).join(', ')}
-- Sample Notes: ${period.noteDetails.slice(0, 3).map((note: any) => `"${note.title}" (${note.knowledgeDomain})`).join(', ')}
-`).join('')}
-
-## DETAILED NOTE ANALYSIS (Sample)
-${context.allNoteDetails.slice(0, 10).map((note: any) => `
-• "${note.title}" (${note.wordCount} words)
-  Domain: ${note.knowledgeDomain}
-  Summary: ${note.summary}
-  Keywords: ${note.keywords}
-  ${note.graphMetrics ? `Graph Metrics: Degree=${note.graphMetrics.degreeCentrality?.toFixed(3)}, Betweenness=${note.graphMetrics.betweennessCentrality?.toFixed(3)}` : ''}
-`).join('')}
-
----
-
-Please provide comprehensive analysis in the following format. Be specific, actionable, and reference actual note content and patterns from the data:
+    /**
+     * New method: Send complete analysis in single request (optimal for 2.0 Flash-Lite)
+     */
+    private async sendCompleteAnalysisRequest(jsonData: string): Promise<string> {
+        const prompt = `I have complete vault analysis data that I need you to analyze comprehensively. Please provide insights in the following structured format:
 
 # KNOWLEDGE STRUCTURE ANALYSIS
 
 ## Domain Distribution Insights
-[Analyze the distribution of knowledge domains, identify patterns, dominant areas, and gaps]
+[Analyze knowledge domain distribution, identify dominant areas and gaps using the knowledgeDomain field]
 
-## Knowledge Network Analysis  
-[${context.centralityAnalysis.hasMetrics ? 'Analyze the graph structure using centrality metrics' : 'Analyze knowledge connections using semantic relationships'}]
+## Centrality-Based Network Analysis
+[Use centralityRankings to identify:
+- Top Knowledge Bridges (low betweennessRank = high betweenness centrality)
+- Top Knowledge Foundations (low closenessRank = high closeness centrality)  
+- Top Knowledge Authorities (low eigenvectorRank = high eigenvector centrality)]
 
 ## Knowledge Gaps
-[Identify 3-5 specific knowledge gaps or underexplored areas]
-
-## Structure Insights
-[Provide 2-3 key insights about knowledge organization]
+[Identify 3-5 underexplored knowledge areas]
 
 ---
 
 # KNOWLEDGE EVOLUTION ANALYSIS
 
 ## Timeline Narrative
-[Describe the overall learning journey and growth patterns]
-
-## Learning Phases
-[Identify distinct phases in the knowledge development]
+[Analyze note creation/modification patterns over time using created/modified fields]
 
 ## Topic Introduction Patterns
-[Analyze how new topics are introduced over time]
-
-## Focus Shifts
-[Identify major shifts in intellectual focus]
+[Track how new knowledge domains emerge over time]
 
 ## Learning Velocity Trends
-[Analyze productivity and learning velocity patterns]
-
-## Evolution Insights
-[Provide 2-3 key insights about knowledge evolution]
+[Analyze productivity patterns using wordCount and time data]
 
 ---
 
 # RECOMMENDED ACTIONS
 
 ## Knowledge Maintenance (5 items)
-[Identify specific notes that need review, updates, or improvements]
+[Identify specific notes needing updates based on centrality and content]
 
 ## Connection Opportunities (5 items)
-[Suggest specific links between notes with rationale]
+[Suggest note connections using centrality rankings and knowledge domains]
 
-## Learning Paths (3 items)
+## Learning Paths (3 paths)
 [Recommend learning sequences based on knowledge structure]
 
 ## Organization Suggestions (5 items)
-[Suggest improvements for tags, folders, or structure]
+[Suggest structural improvements using domain and keyword analysis]
 
----
+Please reference specific notes, rankings, and data patterns from the complete dataset in your analysis.
 
-Make your response specific, actionable, and grounded in the actual vault data. Reference specific notes, domains, and patterns from the analysis.`;
+VAULT ANALYSIS DATA:
+${jsonData}`;
 
-        return this.callGeminiForMasterAnalysis(prompt);
+        return await this.callGeminiFlashLite(prompt);
     }
 
-    private async callGeminiForMasterAnalysis(prompt: string): Promise<string> {
+    /**
+     * Split JSON data into larger, more efficient chunks for 2.0 Flash-Lite
+     */
+    private chunkJsonData(jsonData: string): string[] {
+        const chunks: string[] = [];
+        let currentIndex = 0;
+        
+        // Use larger chunk size to minimize API calls
+        const chunkSize = this.MAX_CHUNK_SIZE;
+        
+        while (currentIndex < jsonData.length) {
+            const chunkEnd = Math.min(currentIndex + chunkSize, jsonData.length);
+            let chunk = jsonData.substring(currentIndex, chunkEnd);
+            
+            // Try to break at a logical point to maintain JSON structure
+            if (chunkEnd < jsonData.length) {
+                const lastBrace = chunk.lastIndexOf('}');
+                const lastBracket = chunk.lastIndexOf(']');
+                const lastComma = chunk.lastIndexOf(',');
+                
+                const breakPoint = Math.max(lastBrace, lastBracket, lastComma);
+                if (breakPoint > chunk.length * 0.6) { // More flexible breaking point
+                    chunk = chunk.substring(0, breakPoint + 1);
+                    currentIndex += breakPoint + 1;
+                } else {
+                    currentIndex = chunkEnd;
+                }
+            } else {
+                currentIndex = chunkEnd;
+            }
+            
+            chunks.push(chunk);
+        }
+        
+        console.log(`Split into ${chunks.length} large chunks of average size ${Math.round(jsonData.length / chunks.length)} characters`);
+        return chunks;
+    }
+
+    /**
+     * Send a data chunk to AI for storage (respecting 30 RPM limit)
+     */
+    private async sendDataChunk(chunk: string, chunkIndex: number, totalChunks: number): Promise<void> {
+        const prompt = `Store chunk ${chunkIndex}/${totalChunks} for later analysis. Respond only with "OK ${chunkIndex}".
+
+CHUNK ${chunkIndex}/${totalChunks}:
+${chunk}`;
+
+        await this.callGeminiFlashLiteForDataChunk(prompt);
+        console.log(`Chunk ${chunkIndex}/${totalChunks} processed successfully`);
+    }
+
+    /**
+     * Optimized API call for Gemini 2.0 Flash-Lite data chunks
+     */
+    private async callGeminiFlashLiteForDataChunk(prompt: string, retryCount: number = 0): Promise<string> {
         if (!this.settings?.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
             throw new Error('Gemini API key not configured');
         }
 
         const apiKey = this.settings.geminiApiKey;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
 
         const requestBody = { 
             contents: [{
@@ -419,9 +405,143 @@ Make your response specific, actionable, and grounded in the actual vault data. 
                 }]
             }],
             generationConfig: {
-                temperature: 0.4,
-                topK: 40,
-                topP: 0.9,
+                temperature: 0.1,
+                topK: 10,
+                topP: 0.5,
+                maxOutputTokens: 50, // Brief acknowledgment only
+            }
+        };
+
+        try {
+            const response = await requestUrl({
+                url: url,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (response.status !== 200) {
+                // Handle rate limiting with exponential backoff for 30 RPM limit
+                if (response.status === 429 && retryCount < 3) {
+                    const waitTime = Math.pow(2, retryCount) * 3000; // 3s, 6s, 12s
+                    console.log(`Rate limited on data chunk. Retrying in ${waitTime/1000}s... (attempt ${retryCount + 1}/3)`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    return await this.callGeminiFlashLiteForDataChunk(prompt, retryCount + 1);
+                }
+                
+                throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
+            }
+
+            const data = response.json;
+            
+            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+                throw new Error('Invalid response format from Gemini API');
+            }
+
+            return data.candidates[0].content.parts[0].text.trim();
+        } catch (error) {
+            console.error('Gemini API error in data chunk:', error);
+            
+            const errorMessage = (error as Error).message;
+            if (errorMessage.includes('status 429') && retryCount < 3) {
+                const waitTime = Math.pow(2, retryCount) * 3000;
+                console.log(`Rate limit detected in data chunk error. Retrying in ${waitTime/1000}s... (attempt ${retryCount + 1}/3)`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                return await this.callGeminiFlashLiteForDataChunk(prompt, retryCount + 1);
+            }
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Send final chunk with analysis instructions
+     */
+    private async sendFinalChunkWithInstructions(
+        finalChunk: string, 
+        chunkIndex: number, 
+        totalChunks: number
+    ): Promise<string> {
+        const prompt = `This is the final chunk ${chunkIndex}/${totalChunks} of the vault analysis data, followed by analysis instructions.
+
+FINAL CHUNK ${chunkIndex}/${totalChunks}:
+${finalChunk}
+
+---
+
+Now that you have the complete vault analysis dataset, please analyze it comprehensively and provide insights in the following structured format:
+
+# KNOWLEDGE STRUCTURE ANALYSIS
+
+## Domain Distribution Insights
+[Analyze knowledge domain distribution, identify dominant areas and gaps using the knowledgeDomain field]
+
+## Centrality-Based Network Analysis
+[Use centralityRankings to identify:
+- Top Knowledge Bridges (low betweennessRank = high betweenness centrality)
+- Top Knowledge Foundations (low closenessRank = high closeness centrality)  
+- Top Knowledge Authorities (low eigenvectorRank = high eigenvector centrality)]
+
+## Knowledge Gaps
+[Identify 3-5 underexplored knowledge areas]
+
+---
+
+# KNOWLEDGE EVOLUTION ANALYSIS
+
+## Timeline Narrative
+[Analyze note creation/modification patterns over time using created/modified fields]
+
+## Topic Introduction Patterns
+[Track how new knowledge domains emerge over time]
+
+## Learning Velocity Trends
+[Analyze productivity patterns using wordCount and time data]
+
+---
+
+# RECOMMENDED ACTIONS
+
+## Knowledge Maintenance (5 items)
+[Identify specific notes needing updates based on centrality and content]
+
+## Connection Opportunities (5 items)
+[Suggest note connections using centrality rankings and knowledge domains]
+
+## Learning Paths (3 paths)
+[Recommend learning sequences based on knowledge structure]
+
+## Organization Suggestions (5 items)
+[Suggest structural improvements using domain and keyword analysis]
+
+Please reference specific notes, rankings, and data patterns from the complete dataset in your analysis.`;
+
+        return await this.callGeminiFlashLite(prompt);
+    }
+
+    /**
+     * Main API call method for Gemini 2.0 Flash-Lite
+     */
+    private async callGeminiFlashLite(prompt: string, retryCount: number = 0): Promise<string> {
+        if (!this.settings?.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
+            throw new Error('Gemini API key not configured');
+        }
+
+        const apiKey = this.settings.geminiApiKey;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
+
+        const requestBody = { 
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.3,
+                topK: 20,
+                topP: 0.8,
                 maxOutputTokens: 8000, // Increased for comprehensive analysis
             }
         };
@@ -437,7 +557,24 @@ Make your response specific, actionable, and grounded in the actual vault data. 
             });
 
             if (response.status !== 200) {
-                throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
+                // Handle rate limiting for 30 RPM limit (2 seconds minimum between requests)
+                if (response.status === 429 && retryCount < 3) {
+                    const waitTime = Math.max(2500, Math.pow(2, retryCount) * 3000); // Min 2.5s, then 3s, 6s, 12s
+                    console.log(`Rate limited (429). Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/3)`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    return await this.callGeminiFlashLite(prompt, retryCount + 1);
+                }
+                
+                // Provide user-friendly error messages
+                if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Please wait a few minutes before trying again.');
+                } else if (response.status === 400) {
+                    throw new Error('Invalid request. Please check your API key or try again.');
+                } else if (response.status === 403) {
+                    throw new Error('API access forbidden. Please check your Gemini API key permissions.');
+                } else {
+                    throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
+                }
             }
 
             const data = response.json;
@@ -448,12 +585,29 @@ Make your response specific, actionable, and grounded in the actual vault data. 
 
             return data.candidates[0].content.parts[0].text.trim();
         } catch (error) {
-            console.error('Gemini API error in master analysis:', error);
+            console.error('Gemini 2.0 Flash-Lite API error:', error);
+            
+            const errorMessage = (error as Error).message;
+            if (errorMessage.includes('status 429') && retryCount < 3) {
+                const waitTime = Math.max(2500, Math.pow(2, retryCount) * 3000);
+                console.log(`Rate limit detected in error. Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/3)`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                return await this.callGeminiFlashLite(prompt, retryCount + 1);
+            }
+            
+            // Network error retry
+            if (retryCount < 2 && !errorMessage.includes('Rate limit') && !errorMessage.includes('status 429') && !errorMessage.includes('API')) {
+                const waitTime = (retryCount + 1) * 3000;
+                console.log(`Network error. Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/2)`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                return await this.callGeminiFlashLite(prompt, retryCount + 1);
+            }
+            
             throw error;
         }
     }
 
-    private parseMasterInsights(rawResponse: string, context: any): any {
+    private parseMasterInsights(rawResponse: string, analysisData: VaultAnalysisData): any {
         // Parse the comprehensive AI response into structured data for each tab
         
         // Extract sections using markdown headers
@@ -462,9 +616,9 @@ Make your response specific, actionable, and grounded in the actual vault data. 
         const actionsSection = this.extractSection(rawResponse, 'RECOMMENDED ACTIONS');
 
         return {
-            knowledgeStructure: this.parseKnowledgeStructure(structureSection, context),
-            knowledgeEvolution: this.parseKnowledgeEvolution(evolutionSection, context),
-            recommendedActions: this.parseRecommendedActions(actionsSection, context)
+            knowledgeStructure: this.parseKnowledgeStructure(structureSection, analysisData),
+            knowledgeEvolution: this.parseKnowledgeEvolution(evolutionSection, analysisData),
+            recommendedActions: this.parseRecommendedActions(actionsSection, analysisData)
         };
     }
 
@@ -478,74 +632,133 @@ Make your response specific, actionable, and grounded in the actual vault data. 
             : text.substring(sectionStart, nextSectionStart);
     }
 
-    private parseKnowledgeStructure(section: string, context: any): KnowledgeStructureData {
-        // Parse the knowledge structure section
-        const domainDistribution = context.topDomains.slice(0, 10).map((domain: string) => {
-            const notesInDomain = context.allNoteDetails.filter((note: any) => 
-                note.knowledgeDomain?.toLowerCase().includes(domain.toLowerCase())
-            );
-            const avgCentrality = notesInDomain.length > 0 
-                ? notesInDomain.reduce((sum: number, note: any) => 
-                    sum + (note.graphMetrics?.degreeCentrality || 0), 0) / notesInDomain.length
-                : 0;
-
-            return {
-                domain,
-                noteCount: notesInDomain.length,
-                avgCentrality,
-                keywords: context.topKeywords.filter((k: string) => 
-                    notesInDomain.some((note: any) => 
-                        note.keywords?.toLowerCase().includes(k.toLowerCase())
-                    )
-                ).slice(0, 5)
-            };
+    private parseKnowledgeStructure(section: string, analysisData: VaultAnalysisData): KnowledgeStructureData {
+        // Parse the knowledge structure section using the complete analysis data
+        const results = analysisData.results;
+        
+        // Extract domain distribution from raw data
+        const domainMap = new Map<string, VaultAnalysisResult[]>();
+        results.forEach(note => {
+            if (note.knowledgeDomain) {
+                const domains = note.knowledgeDomain.split(',').map(d => d.trim());
+                domains.forEach(domain => {
+                    if (!domainMap.has(domain)) {
+                        domainMap.set(domain, []);
+                    }
+                    domainMap.get(domain)!.push(note);
+                });
+            }
         });
 
-        const knowledgeNetwork = {
-            bridges: context.centralityAnalysis.bridges.slice(0, 5).map((note: any) => ({
+        const domainDistribution = Array.from(domainMap.entries()).map(([domain, notes]) => {
+            const avgCentrality = notes.length > 0 
+                ? notes.reduce((sum, note) => sum + (note.graphMetrics?.degreeCentrality || 0), 0) / notes.length
+                : 0;
+            
+            // Extract keywords for this domain
+            const keywordSet = new Set<string>();
+            notes.forEach(note => {
+                if (note.keywords) {
+                    note.keywords.split(',').forEach(k => keywordSet.add(k.trim()));
+                }
+            });
+            
+            return {
+                domain,
+                noteCount: notes.length,
+                avgCentrality,
+                keywords: Array.from(keywordSet).slice(0, 10) // Top keywords per domain
+            };
+        }).sort((a, b) => b.noteCount - a.noteCount);
+
+        // Extract network analysis using centrality rankings
+        const notesWithRankings = results.filter(note => note.centralityRankings);
+        
+        const bridges = notesWithRankings
+            .filter(note => note.centralityRankings!.betweennessRank)
+            .sort((a, b) => a.centralityRankings!.betweennessRank! - b.centralityRankings!.betweennessRank!)
+            .slice(0, 10)
+            .map(note => ({
                 title: note.title,
                 score: note.graphMetrics?.betweennessCentrality || 0,
-                connections: [] // Would need to calculate actual connections
-            })),
-            foundations: context.centralityAnalysis.foundations.slice(0, 5).map((note: any) => ({
+                rank: note.centralityRankings!.betweennessRank!,
+                connections: [] // TODO: Can be enhanced with actual connections
+            }));
+
+        const foundations = notesWithRankings
+            .filter(note => note.centralityRankings!.closenessRank)
+            .sort((a, b) => a.centralityRankings!.closenessRank! - b.centralityRankings!.closenessRank!)
+            .slice(0, 10)
+            .map(note => ({
                 title: note.title,
                 score: note.graphMetrics?.closenessCentrality || 0,
-                reach: Math.round((note.graphMetrics?.closenessCentrality || 0) * 100)
-            })),
-            authorities: context.centralityAnalysis.authorities.slice(0, 5).map((note: any) => ({
+                rank: note.centralityRankings!.closenessRank!,
+                reach: note.graphMetrics?.degreeCentrality || 0
+            }));
+
+        const authorities = notesWithRankings
+            .filter(note => note.centralityRankings!.eigenvectorRank)
+            .sort((a, b) => a.centralityRankings!.eigenvectorRank! - b.centralityRankings!.eigenvectorRank!)
+            .slice(0, 10)
+            .map(note => ({
                 title: note.title,
                 score: note.graphMetrics?.eigenvectorCentrality || 0,
-                influence: Math.round((note.graphMetrics?.eigenvectorCentrality || 0) * 100)
-            }))
-        };
+                rank: note.centralityRankings!.eigenvectorRank!,
+                influence: note.graphMetrics?.eigenvectorCentrality || 0
+            }));
 
         return {
             domainDistribution,
-            knowledgeNetwork,
+            knowledgeNetwork: {
+                bridges,
+                foundations,
+                authorities
+            },
             insights: this.extractInsights(section),
             gaps: this.extractKnowledgeGaps(section)
         };
     }
 
-    private parseKnowledgeEvolution(section: string, context: any): KnowledgeEvolutionData {
-        // Parse the knowledge evolution section using existing interfaces
-        const timeline = {
+    private parseKnowledgeEvolution(section: string, analysisData: VaultAnalysisData): KnowledgeEvolutionData {
+        const results = analysisData.results;
+        
+        // Group notes by time periods for timeline analysis
+        const timelineData = this.groupNotesByTimePeriod(results);
+        
+        // Create timeline analysis from the data
+        const timeline: TimelineAnalysis = {
             narrative: {
-                title: 'Learning Journey Overview',
+                title: 'Knowledge Evolution Journey',
                 content: this.extractNarrative(section),
-                keyPoints: this.extractKeyPoints(section),
+                keyPoints: this.extractKeyPoints(this.extractNarrative(section)),
                 recommendations: []
             },
-            phases: context.periodSummaries.map((period: any) => ({
-                period: period.period,
-                description: `${period.noteCount} notes created with focus on ${period.domains.slice(0, 3).join(', ')}`,
-                keyDomains: period.domains.slice(0, 5),
-                metrics: {
-                    noteCount: period.noteCount,
-                    wordCount: period.wordCount,
-                    avgWordsPerNote: period.avgWordsPerNote
-                }
-            })),
+            phases: Object.entries(timelineData.quarters).map(([period, notes]: [string, VaultAnalysisResult[]]) => {
+                const domains = new Set<string>();
+                const keywords = new Set<string>();
+                const noteCount = notes.length;
+                const wordCount = notes.reduce((sum, note) => sum + note.wordCount, 0);
+                
+                notes.forEach(note => {
+                    if (note.knowledgeDomain) {
+                        note.knowledgeDomain.split(',').forEach(d => domains.add(d.trim()));
+                    }
+                    if (note.keywords) {
+                        note.keywords.split(',').forEach(k => keywords.add(k.trim()));
+                    }
+                });
+                
+                return {
+                    period,
+                    description: `${noteCount} notes created with focus on ${Array.from(domains).slice(0, 3).join(', ')}`,
+                    keyDomains: Array.from(domains).slice(0, 5),
+                    metrics: {
+                        noteCount,
+                        wordCount,
+                        avgWordsPerNote: noteCount > 0 ? Math.round(wordCount / noteCount) : 0
+                    }
+                };
+            }).sort((a, b) => a.period.localeCompare(b.period)),
             trends: {
                 productivity: 'stable' as const,
                 diversity: 'expanding' as const,
@@ -553,27 +766,21 @@ Make your response specific, actionable, and grounded in the actual vault data. 
             }
         };
 
-        // Create other evolution analyses with parsed data
-        const topicPatterns = this.parseTopicPatterns(section, context);
-        const focusShift = this.parseFocusShift(section, context);
-        const learningVelocity = this.parseLearningVelocity(section, context);
-
         return {
             timeline,
-            topicPatterns,
-            focusShift,
-            learningVelocity,
+            topicPatterns: this.parseTopicPatterns(section, analysisData),
+            focusShift: this.parseFocusShift(section, analysisData),
+            learningVelocity: this.parseLearningVelocity(section, analysisData),
             insights: this.extractInsights(section)
         };
     }
 
-    private parseRecommendedActions(section: string, context: any): KnowledgeActionsData {
-        // Parse the recommended actions section
+    private parseRecommendedActions(section: string, analysisData: VaultAnalysisData): KnowledgeActionsData {
         return {
-            maintenance: this.parseMaintenanceActions(section, context),
-            connections: this.parseConnectionSuggestions(section, context),
-            learningPaths: this.parseLearningPaths(section, context),
-            organization: this.parseOrganizationSuggestions(section, context)
+            maintenance: this.parseMaintenanceActions(section, analysisData),
+            connections: this.parseConnectionSuggestions(section, analysisData),
+            learningPaths: this.parseLearningPaths(section, analysisData),
+            organization: this.parseOrganizationSuggestions(section, analysisData)
         };
     }
 
@@ -650,6 +857,8 @@ Make your response specific, actionable, and grounded in the actual vault data. 
         // Parse organization suggestions from the AI response
         return [];
     }
+
+
 
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;

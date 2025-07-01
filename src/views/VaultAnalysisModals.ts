@@ -1,7 +1,8 @@
-import { App, Modal, setIcon } from 'obsidian';
+import { App, Modal, setIcon, Notice } from 'obsidian';
 import { KnowledgeCalendarChart } from '../components/calendar-chart/KnowledgeCalendarChart';
-import { VaultAnalysisData, VaultAnalysisResult } from '../ai/MasterAnalysisManager';
+import { VaultAnalysisData, VaultAnalysisResult, MasterAnalysisManager, MasterAnalysisData } from '../ai/MasterAnalysisManager';
 import { KnowledgeEvolutionData } from '../ai/visualization/KnowledgeEvolutionManager';
+import { GraphAnalysisSettings } from '../types/types';
 
 // Import type for the manager
 export interface VaultSemanticAnalysisManager {
@@ -14,22 +15,25 @@ export class VaultAnalysisModal extends Modal {
     private contentContainer: HTMLElement;
     private hasExistingData: boolean;
     private vaultSemanticAnalysisManager: VaultSemanticAnalysisManager;
-    private settings: { excludeFolders: string[]; excludeTags: string[] };
+    private settings: GraphAnalysisSettings;
     private analysisResultsContainer: HTMLElement | null = null;
     private knowledgeEvolutionData: KnowledgeEvolutionData | null = null;
+    private masterAnalysisManager: MasterAnalysisManager;
+    private masterAnalysisData: MasterAnalysisData | null = null;
 
     constructor(
         app: App, 
         analysisData: VaultAnalysisData | null, 
         hasExistingData: boolean, 
         vaultSemanticAnalysisManager: VaultSemanticAnalysisManager,
-        settings: { excludeFolders: string[]; excludeTags: string[] } = { excludeFolders: [], excludeTags: [] }
+        settings: GraphAnalysisSettings
     ) {
         super(app);
         this.analysisData = analysisData;
         this.hasExistingData = hasExistingData;
         this.vaultSemanticAnalysisManager = vaultSemanticAnalysisManager;
         this.settings = settings;
+        this.masterAnalysisManager = new MasterAnalysisManager(app, settings);
     }
 
     onOpen() {
@@ -385,53 +389,156 @@ export class VaultAnalysisModal extends Modal {
             cls: 'vault-analysis-section-title'
         });
         
-        const placeholderContainer = structureSection.createEl('div', { 
-            cls: 'vault-analysis-placeholder' 
-        });
-        
-        if (!this.hasExistingData) {
+        if (!this.hasExistingData || !this.analysisData) {
+            const placeholderContainer = structureSection.createEl('div', { 
+                cls: 'vault-analysis-placeholder' 
+            });
+            
             placeholderContainer.createEl('p', {
                 text: 'Please generate vault analysis first to access this feature.',
                 cls: 'analysis-required'
             });
-        } else {
-            placeholderContainer.createEl('p', {
-                text: 'This view will show the structural relationships between your notes, including:'
-            });
             
-            const featureList = placeholderContainer.createEl('ul');
-            const features = [
-                'Note clustering by knowledge domains',
-                'Connection strength analysis',
-                'Knowledge gaps identification',
-                'Topic hierarchies and relationships'
-            ];
-            
-            features.forEach(feature => {
-                featureList.createEl('li', { text: feature });
+            // Action buttons section
+            const actionsSection = this.contentContainer.createEl('div', { 
+                cls: 'vault-analysis-section' 
             });
+
+            actionsSection.createEl('h3', {
+                text: 'Actions',
+                cls: 'vault-analysis-section-title'
+            });
+
+            const originalContentContainer = this.contentContainer;
+            this.contentContainer = actionsSection;
+            this.createActionButtons();
+            this.contentContainer = originalContentContainer;
+            return;
         }
         
-        placeholderContainer.createEl('p', {
-            text: 'This feature is coming soon!',
-            cls: 'coming-soon'
+        // Check if we have master analysis data
+        if (this.masterAnalysisData?.knowledgeStructure) {
+            this.displayKnowledgeStructureResults(structureSection);
+        } else {
+            // Show generate analysis prompt
+            this.showStructureEmptyState(structureSection);
+        }
+    }
+
+    private displayKnowledgeStructureResults(container: HTMLElement): void {
+        if (!this.masterAnalysisData?.knowledgeStructure) return;
+
+        const structureData = this.masterAnalysisData.knowledgeStructure;
+
+        // Domain Distribution Section
+        const domainSection = container.createEl('div', { cls: 'structure-analysis-section' });
+        domainSection.createEl('h4', { text: '📊 Knowledge Domain Distribution' });
+        
+        const domainList = domainSection.createEl('div', { cls: 'domain-distribution-list' });
+        structureData.domainDistribution.slice(0, 10).forEach(domain => {
+            const domainItem = domainList.createEl('div', { cls: 'domain-item' });
+            domainItem.innerHTML = `
+                <div class="domain-header">
+                    <span class="domain-name">${domain.domain}</span>
+                    <span class="domain-count">${domain.noteCount} notes</span>
+                </div>
+                <div class="domain-keywords">${domain.keywords.join(', ')}</div>
+            `;
         });
 
-        // Action buttons section
-        const actionsSection = this.contentContainer.createEl('div', { 
-            cls: 'vault-analysis-section' 
+        // Network Analysis Section
+        const networkSection = container.createEl('div', { cls: 'structure-analysis-section' });
+        networkSection.createEl('h4', { text: '🕸️ Knowledge Network Analysis' });
+
+        // Bridges
+        if (structureData.knowledgeNetwork.bridges.length > 0) {
+            const bridgesDiv = networkSection.createEl('div', { cls: 'network-category' });
+            bridgesDiv.createEl('h5', { text: '🌉 Knowledge Bridges (High Betweenness Centrality)' });
+            const bridgesList = bridgesDiv.createEl('div', { cls: 'centrality-list' });
+            structureData.knowledgeNetwork.bridges.slice(0, 5).forEach(bridge => {
+                const item = bridgesList.createEl('div', { cls: 'centrality-item' });
+                item.innerHTML = `
+                    <span class="note-title">${bridge.title}</span>
+                    <span class="centrality-score">Rank #${bridge.rank}</span>
+                `;
+            });
+        }
+
+        // Foundations
+        if (structureData.knowledgeNetwork.foundations.length > 0) {
+            const foundationsDiv = networkSection.createEl('div', { cls: 'network-category' });
+            foundationsDiv.createEl('h5', { text: '🏛️ Knowledge Foundations (High Closeness Centrality)' });
+            const foundationsList = foundationsDiv.createEl('div', { cls: 'centrality-list' });
+            structureData.knowledgeNetwork.foundations.slice(0, 5).forEach(foundation => {
+                const item = foundationsList.createEl('div', { cls: 'centrality-item' });
+                item.innerHTML = `
+                    <span class="note-title">${foundation.title}</span>
+                    <span class="centrality-score">Rank #${foundation.rank}</span>
+                `;
+            });
+        }
+
+        // Authorities
+        if (structureData.knowledgeNetwork.authorities.length > 0) {
+            const authoritiesDiv = networkSection.createEl('div', { cls: 'network-category' });
+            authoritiesDiv.createEl('h5', { text: '👑 Knowledge Authorities (High Eigenvector Centrality)' });
+            const authoritiesList = authoritiesDiv.createEl('div', { cls: 'centrality-list' });
+            structureData.knowledgeNetwork.authorities.slice(0, 5).forEach(authority => {
+                const item = authoritiesList.createEl('div', { cls: 'centrality-item' });
+                item.innerHTML = `
+                    <span class="note-title">${authority.title}</span>
+                    <span class="centrality-score">Rank #${authority.rank}</span>
+                `;
+            });
+        }
+
+        // Knowledge Gaps Section
+        if (structureData.gaps && structureData.gaps.length > 0) {
+            const gapsSection = container.createEl('div', { cls: 'structure-analysis-section' });
+            gapsSection.createEl('h4', { text: '🔍 Identified Knowledge Gaps' });
+            const gapsList = gapsSection.createEl('ul', { cls: 'gaps-list' });
+            structureData.gaps.forEach(gap => {
+                gapsList.createEl('li', { text: gap });
+            });
+        }
+    }
+
+    private showStructureEmptyState(container: HTMLElement): void {
+        const emptyState = container.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
         });
         
-        actionsSection.createEl('h3', {
-            text: 'Actions',
-            cls: 'vault-analysis-section-title'
+        emptyState.createEl('p', {
+            text: 'Knowledge Structure Analysis requires AI-powered analysis to be completed first.',
+            cls: 'analysis-required'
         });
         
-        // Move the button creation context to this section
-        const originalContentContainer = this.contentContainer;
-        this.contentContainer = actionsSection;
-        this.createActionButtons();
-        this.contentContainer = originalContentContainer;
+        const featureList = emptyState.createEl('ul');
+        const features = [
+            'Domain Distribution - see how your knowledge is organized across different fields',
+            'Network Analysis - identify bridge notes, foundational concepts, and authorities',
+            'Knowledge Gaps - discover underexplored areas in your knowledge base',
+            'Centrality Rankings - understand which notes are most important in your network'
+        ];
+        
+        features.forEach(feature => {
+            featureList.createEl('li', { text: feature });
+        });
+
+        // Generate Analysis Button
+        const buttonContainer = emptyState.createEl('div', { 
+            cls: 'analysis-button-container',
+            attr: { style: 'margin-top: 24px;' }
+        });
+
+        const generateButton = buttonContainer.createEl('button', {
+            cls: 'analysis-trigger-button',
+            text: '🧠 Generate AI Analysis'
+        });
+
+        generateButton.addEventListener('click', async () => {
+            await this.triggerAIAnalysis(container, false);
+        });
     }
 
     private async loadKnowledgeEvolutionView(): Promise<void> {
@@ -453,10 +560,19 @@ export class VaultAnalysisModal extends Modal {
         // 1. Calendar Section (shown by default)
         await this.createCalendarSection(evolutionContainer);
         
-        // 2. Check for cached analysis - placeholder for new architecture integration
-        this.knowledgeEvolutionData = null;
+        // 2. Check for cached master analysis
+        try {
+            this.masterAnalysisData = await this.masterAnalysisManager.loadCachedMasterAnalysis();
+            if (this.masterAnalysisData) {
+                this.knowledgeEvolutionData = this.masterAnalysisData.knowledgeEvolution;
+            }
+        } catch (error) {
+            console.warn('No cached master analysis found:', error);
+            this.masterAnalysisData = null;
+            this.knowledgeEvolutionData = null;
+        }
         
-        if (this.knowledgeEvolutionData) {
+        if (this.knowledgeEvolutionData && this.masterAnalysisData) {
             // Show cached analysis directly
             await this.displayCachedAnalysis(evolutionContainer);
             
@@ -575,6 +691,35 @@ export class VaultAnalysisModal extends Modal {
             cls: 'vault-analysis-section-title'
         });
 
+        // Add token usage warning
+        const warningContainer = buttonSection.createEl('div', {
+            cls: 'analysis-token-warning'
+        });
+
+        warningContainer.innerHTML = `
+            <div style="background: var(--background-modifier-info); 
+                        border: 1px solid var(--background-modifier-border); 
+                        border-radius: 8px; 
+                        padding: 16px; 
+                        margin: 16px 0;
+                        color: var(--text-normal);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span style="font-size: 18px;">🧪</span>
+                    <strong>TEST MODE - Minimal Token Usage</strong>
+                </div>
+                <p style="margin: 8px 0; font-size: 14px;">
+                    This test analysis will process only the first 3 notes from your vault 
+                    to verify API connectivity and basic functionality.
+                </p>
+                <p style="margin: 8px 0; font-size: 14px;">
+                    <strong>Estimated cost:</strong> Very minimal (~200-500 tokens, <$0.01)
+                </p>
+                <p style="margin: 0; font-size: 13px; color: var(--text-muted);">
+                    If successful, you can disable test mode for full analysis.
+                </p>
+            </div>
+        `;
+
         const buttonContainer = buttonSection.createEl('div', { 
             cls: 'analysis-button-container' 
         });
@@ -585,7 +730,6 @@ export class VaultAnalysisModal extends Modal {
             text: '🧠 Generate AI Analysis'
         });
 
-
         // Store reference to the container for later use
         this.analysisResultsContainer = container;
 
@@ -595,37 +739,58 @@ export class VaultAnalysisModal extends Modal {
     }
 
     private async triggerAIAnalysis(buttonSection: HTMLElement, isUpdate: boolean = false): Promise<void> {
+        // Validate Gemini API key first
+        if (!this.settings?.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
+            new Notice('❌ Gemini API key not configured. Please set your API key in plugin settings.');
+            return;
+        }
+
         // Show loading state
         const loadingContainer = buttonSection.createEl('div', { 
             cls: 'evolution-loading' 
         });
         loadingContainer.createEl('h3', { 
-            text: isUpdate ? 'Updating Knowledge Evolution Analysis...' : 'Analyzing Knowledge Evolution...' 
+            text: isUpdate ? 'Updating Knowledge Analysis...' : 'Generating AI Knowledge Analysis...' 
         });
-        loadingContainer.createEl('p', { text: 'Processing AI analysis data to generate insights...' });
+        
+        const loadingText = loadingContainer.createEl('p');
+        loadingText.innerHTML = `
+            <strong style="color: var(--color-orange);">🧪 TEST MODE ACTIVE</strong><br>
+            Testing AI analysis with minimal data (first 3 notes only).<br>
+            <strong>Estimated time:</strong> 10-20 seconds.<br>
+            <small style="color: var(--text-muted);">This will verify API connectivity and basic functionality.</small>
+        `;
 
         try {
-            // TODO: Integrate with new MasterAnalysisManager for evolution analysis
-            // For now, show placeholder message
-            throw new Error('Evolution analysis is being migrated to the new architecture');
+            // Generate master analysis using MasterAnalysisManager
+            this.masterAnalysisData = await this.masterAnalysisManager.generateAndCacheMasterAnalysis();
+            this.knowledgeEvolutionData = this.masterAnalysisData.knowledgeEvolution;
             
             // Remove loading state
             loadingContainer.remove();
             
-            // Display the cached analysis
+            // Show success notice
+            new Notice('✅ AI Knowledge Analysis completed successfully! Results cached for future use.');
+            
+            // Display the analysis results
             await this.displayCachedAnalysis(buttonSection);
+            
+            // Add update button below results
+            await this.createUpdateAnalysisButtonSection(buttonSection);
 
         } catch (error) {
-            console.error('Error generating evolution analysis:', error);
+            console.error('Error generating master analysis:', error);
             loadingContainer.remove();
             
             const errorContainer = buttonSection.createEl('div', { 
                 cls: 'evolution-error' 
             });
-            errorContainer.createEl('h4', { text: 'Error Loading Evolution Analysis' });
+            errorContainer.createEl('h4', { text: 'Error Generating AI Analysis' });
             errorContainer.createEl('p', { 
-                text: 'There was an issue analyzing your knowledge evolution. Please check the console for details.' 
+                text: `Failed to generate analysis: ${(error as Error).message}` 
             });
+            
+            new Notice(`❌ Failed to generate AI analysis: ${(error as Error).message}`);
         }
     }
 
@@ -725,54 +890,147 @@ export class VaultAnalysisModal extends Modal {
             cls: 'vault-analysis-section-title'
         });
         
-        const placeholderContainer = recommendationsSection.createEl('div', { 
-            cls: 'vault-analysis-placeholder' 
-        });
-        
-        if (!this.hasExistingData) {
+        if (!this.hasExistingData || !this.analysisData) {
+            const placeholderContainer = recommendationsSection.createEl('div', { 
+                cls: 'vault-analysis-placeholder' 
+            });
+            
             placeholderContainer.createEl('p', {
                 text: 'Please generate vault analysis first to access this feature.',
                 cls: 'analysis-required'
             });
-        } else {
-            placeholderContainer.createEl('p', {
-                text: 'This view will provide AI-powered recommendations for improving your vault, including:'
-            });
             
-            const featureList = placeholderContainer.createEl('ul');
-            const features = [
-                'Notes that could benefit from more connections',
-                'Orphaned notes that need integration',
-                'Similar notes that could be merged or linked',
-                'Knowledge areas that need more development',
-                'Suggested tags and organization improvements'
-            ];
-            
-            features.forEach(feature => {
-                featureList.createEl('li', { text: feature });
+            // Action buttons section
+            const actionsSection = this.contentContainer.createEl('div', { 
+                cls: 'vault-analysis-section' 
             });
+
+            actionsSection.createEl('h3', {
+                text: 'Actions',
+                cls: 'vault-analysis-section-title'
+            });
+
+            const originalContentContainer = this.contentContainer;
+            this.contentContainer = actionsSection;
+            this.createActionButtons();
+            this.contentContainer = originalContentContainer;
+            return;
         }
         
-        placeholderContainer.createEl('p', {
-            text: 'This feature is coming soon!',
-            cls: 'coming-soon'
+        // Check if we have master analysis data with recommended actions
+        if (this.masterAnalysisData?.recommendedActions) {
+            this.displayRecommendedActionsResults(recommendationsSection);
+        } else {
+            this.showActionsEmptyState(recommendationsSection);
+        }
+    }
+
+    private displayRecommendedActionsResults(container: HTMLElement): void {
+        if (!this.masterAnalysisData?.recommendedActions) return;
+
+        const actionsData = this.masterAnalysisData.recommendedActions;
+
+        // Knowledge Maintenance Section
+        if (actionsData.maintenance && actionsData.maintenance.length > 0) {
+            const maintenanceSection = container.createEl('div', { cls: 'actions-category' });
+            maintenanceSection.createEl('h4', { text: '🔧 Knowledge Maintenance' });
+            
+            const maintenanceList = maintenanceSection.createEl('div', { cls: 'actions-list' });
+            actionsData.maintenance.slice(0, 10).forEach((action: any) => {
+                const actionItem = maintenanceList.createEl('div', { cls: 'action-item' });
+                actionItem.innerHTML = `
+                    <div class="action-title">${action.title || action.action || 'Maintenance Action'}</div>
+                    <div class="action-description">${action.reason || action.description || ''}</div>
+                    <div class="action-priority">${action.priority || 'medium'}</div>
+                `;
+            });
+        }
+
+        // Connection Opportunities Section
+        if (actionsData.connections && actionsData.connections.length > 0) {
+            const connectionsSection = container.createEl('div', { cls: 'actions-category' });
+            connectionsSection.createEl('h4', { text: '🔗 Connection Opportunities' });
+            
+            const connectionsList = connectionsSection.createEl('div', { cls: 'actions-list' });
+            actionsData.connections.slice(0, 10).forEach((connection: any) => {
+                const connectionItem = connectionsList.createEl('div', { cls: 'action-item' });
+                connectionItem.innerHTML = `
+                    <div class="action-title">${connection.title || connection.suggestion || 'Connection Suggestion'}</div>
+                    <div class="action-description">${connection.reason || connection.description || ''}</div>
+                    <div class="action-notes">${connection.notes ? connection.notes.join(', ') : ''}</div>
+                `;
+            });
+        }
+
+        // Learning Paths Section
+        if (actionsData.learningPaths && actionsData.learningPaths.length > 0) {
+            const pathsSection = container.createEl('div', { cls: 'actions-category' });
+            pathsSection.createEl('h4', { text: '📚 Learning Paths' });
+            
+            const pathsList = pathsSection.createEl('div', { cls: 'learning-paths-list' });
+            actionsData.learningPaths.slice(0, 5).forEach((path: any) => {
+                const pathItem = pathsList.createEl('div', { cls: 'learning-path-item' });
+                pathItem.innerHTML = `
+                    <div class="path-title">${path.title || path.name || 'Learning Path'}</div>
+                    <div class="path-description">${path.description || ''}</div>
+                    <div class="path-steps">${path.steps ? path.steps.join(' → ') : ''}</div>
+                `;
+            });
+        }
+
+        // Organization Suggestions Section
+        if (actionsData.organization && actionsData.organization.length > 0) {
+            const organizationSection = container.createEl('div', { cls: 'actions-category' });
+            organizationSection.createEl('h4', { text: '📁 Organization Suggestions' });
+            
+            const organizationList = organizationSection.createEl('div', { cls: 'actions-list' });
+            actionsData.organization.slice(0, 10).forEach((suggestion: any) => {
+                const suggestionItem = organizationList.createEl('div', { cls: 'action-item' });
+                suggestionItem.innerHTML = `
+                    <div class="action-title">${suggestion.title || suggestion.suggestion || 'Organization Suggestion'}</div>
+                    <div class="action-description">${suggestion.reason || suggestion.description || ''}</div>
+                    <div class="action-impact">${suggestion.impact || ''}</div>
+                `;
+            });
+        }
+    }
+
+    private showActionsEmptyState(container: HTMLElement): void {
+        const emptyState = container.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
+        });
+        
+        emptyState.createEl('p', {
+            text: 'Recommended Actions require AI-powered analysis to be completed first.',
+            cls: 'analysis-required'
+        });
+        
+        const featureList = emptyState.createEl('ul');
+        const features = [
+            'Knowledge Maintenance - notes that need review, updates, or improvements',
+            'Connection Opportunities - suggestions for linking related concepts',
+            'Learning Paths - recommended sequences for exploring new topics',
+            'Organization Suggestions - ways to improve your vault structure'
+        ];
+        
+        features.forEach(feature => {
+            featureList.createEl('li', { text: feature });
         });
 
-        // Action buttons section
-        const actionsSection = this.contentContainer.createEl('div', { 
-            cls: 'vault-analysis-section' 
+        // Generate Analysis Button
+        const buttonContainer = emptyState.createEl('div', { 
+            cls: 'analysis-button-container',
+            attr: { style: 'margin-top: 24px;' }
         });
-        
-        actionsSection.createEl('h3', {
-            text: 'Actions',
-            cls: 'vault-analysis-section-title'
+
+        const generateButton = buttonContainer.createEl('button', {
+            cls: 'analysis-trigger-button',
+            text: '🧠 Generate AI Analysis'
         });
-        
-        // Move the button creation context to this section
-        const originalContentContainer = this.contentContainer;
-        this.contentContainer = actionsSection;
-        this.createActionButtons();
-        this.contentContainer = originalContentContainer;
+
+        generateButton.addEventListener('click', async () => {
+            await this.triggerAIAnalysis(container, false);
+        });
     }
 
     onClose() {

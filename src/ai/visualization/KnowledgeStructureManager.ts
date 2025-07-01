@@ -13,6 +13,7 @@ export interface DomainData {
 export interface NetworkNode {
     title: string;
     score: number;
+    rank?: number;
     connections?: string[];
     reach?: number;
     influence?: number;

@@ -136,6 +136,69 @@ export class VaultSemanticAnalysisManager {
     }
 
     /**
+     * Calculate centrality rankings for all notes with graph metrics
+     */
+    private calculateCentralityRankings(results: VaultAnalysisResult[]): VaultAnalysisResult[] {
+        const notesWithMetrics = results.filter(note => note.graphMetrics);
+        
+        if (notesWithMetrics.length === 0) {
+            return results; // Return unchanged if no metrics
+        }
+
+        // Sort by each centrality measure and assign rankings
+        const betweennessSorted = [...notesWithMetrics]
+            .sort((a, b) => (b.graphMetrics?.betweennessCentrality || 0) - (a.graphMetrics?.betweennessCentrality || 0));
+        
+        const closenessSorted = [...notesWithMetrics]
+            .sort((a, b) => (b.graphMetrics?.closenessCentrality || 0) - (a.graphMetrics?.closenessCentrality || 0));
+            
+        const eigenvectorSorted = [...notesWithMetrics]
+            .sort((a, b) => (b.graphMetrics?.eigenvectorCentrality || 0) - (a.graphMetrics?.eigenvectorCentrality || 0));
+            
+        const degreeSorted = [...notesWithMetrics]
+            .sort((a, b) => (b.graphMetrics?.degreeCentrality || 0) - (a.graphMetrics?.degreeCentrality || 0));
+
+        // Create ranking maps
+        const betweennessRankMap = new Map<string, number>();
+        const closenessRankMap = new Map<string, number>();
+        const eigenvectorRankMap = new Map<string, number>();
+        const degreeRankMap = new Map<string, number>();
+
+        betweennessSorted.forEach((note, index) => {
+            betweennessRankMap.set(note.id, index + 1);
+        });
+        
+        closenessSorted.forEach((note, index) => {
+            closenessRankMap.set(note.id, index + 1);
+        });
+        
+        eigenvectorSorted.forEach((note, index) => {
+            eigenvectorRankMap.set(note.id, index + 1);
+        });
+        
+        degreeSorted.forEach((note, index) => {
+            degreeRankMap.set(note.id, index + 1);
+        });
+
+        // Apply rankings to all results
+        return results.map(result => {
+            if (!result.graphMetrics) {
+                return result;
+            }
+            
+            return {
+                ...result,
+                centralityRankings: {
+                    betweennessRank: betweennessRankMap.get(result.id),
+                    closenessRank: closenessRankMap.get(result.id),
+                    eigenvectorRank: eigenvectorRankMap.get(result.id),
+                    degreeRank: degreeRankMap.get(result.id)
+                }
+            };
+        });
+    }
+
+    /**
      * Enhance existing vault analysis results with graph metrics
      * This handles scenario 2: cached vault-analysis.json exists
      */
@@ -165,10 +228,13 @@ export class VaultSemanticAnalysisManager {
                 };
             });
             
+            // Calculate and add centrality rankings
+            const resultsWithRankings = this.calculateCentralityRankings(enhancedResults);
+            
             // Update the analysis data
             const updatedData: VaultAnalysisData = {
                 ...existingData,
-                results: enhancedResults,
+                results: resultsWithRankings,
                 // Update timestamp to reflect the enhancement
                 generatedAt: new Date().toISOString()
             };
@@ -176,7 +242,7 @@ export class VaultSemanticAnalysisManager {
             // Save the enhanced data
             await this.app.vault.adapter.write(filePath, JSON.stringify(updatedData, null, 2));
             
-            console.log('Enhanced existing vault analysis with graph metrics');
+            console.log('Enhanced existing vault analysis with graph metrics and rankings');
             return true;
             
         } catch (error) {
@@ -212,24 +278,88 @@ export class VaultSemanticAnalysisManager {
             let failed = 0;
             let totalTokenUsage: TokenUsage = { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 };
 
-            // Process files in batches to avoid rate limiting
-            const batchSize = 10; // 10 files per batch
-            const delayBetweenBatches = 5000; // 5 seconds between batches for rate limiting
-            const totalBatches = Math.ceil(includedFiles.length / batchSize);
+            // Prepare file data first to get word counts
+            progressNotice.setMessage('Preparing files for analysis...');
+            const fileDataList: Array<{
+                file: TFile;
+                content: string;
+                wordCount: number;
+                created: string;
+                modified: string;
+                isShort: boolean;
+            }> = [];
+
+            for (const file of includedFiles) {
+                try {
+                    const content = await this.app.vault.read(file);
+                    const cleanedContent = this.cleanupContent(content);
+                    const wordCount = cleanedContent.split(/\s+/).filter(word => word.length > 0).length;
+                    
+                    // Get file stats
+                    const stat = await this.app.vault.adapter.stat(file.path);
+                    const created = stat?.ctime ? new Date(stat.ctime).toISOString() : '';
+                    const modified = stat?.mtime ? new Date(stat.mtime).toISOString() : '';
+
+                    fileDataList.push({
+                        file,
+                        content: cleanedContent,
+                        wordCount,
+                        created,
+                        modified,
+                        isShort: wordCount < 10
+                    });
+                } catch (error) {
+                    console.error(`Error reading file ${file.path}:`, error);
+                    fileDataList.push({
+                        file,
+                        content: '',
+                        wordCount: 0,
+                        created: '',
+                        modified: '',
+                        isShort: true
+                    });
+                }
+            }
+
+            // Create word-count-based batches with 2.0 Flash-Lite's generous limits
+            const maxWordsPerBatch = 20000; // Target ~20k words per batch (efficient token usage)
+            const delayBetweenBatches = 3000; // 3 seconds between batches for 30 RPM rate limiting
             
-            // Process batches sequentially
+            const batches: Array<typeof fileDataList> = [];
+            let currentBatch: typeof fileDataList = [];
+            let currentBatchWordCount = 0;
+
+            for (const fileData of fileDataList) {
+                // If adding this file would exceed the limit and we have files in current batch, start new batch
+                if (currentBatchWordCount + fileData.wordCount > maxWordsPerBatch && currentBatch.length > 0) {
+                    batches.push(currentBatch);
+                    currentBatch = [fileData];
+                    currentBatchWordCount = fileData.wordCount;
+                } else {
+                    // Add file to current batch
+                    currentBatch.push(fileData);
+                    currentBatchWordCount += fileData.wordCount;
+                }
+            }
+            
+            // Add the last batch if it has files
+            if (currentBatch.length > 0) {
+                batches.push(currentBatch);
+            }
+
+            const totalBatches = batches.length;
+            console.log(`Processing ${includedFiles.length} files in ${totalBatches} word-count-based batches using Gemini 2.0 Flash-Lite`);
+            console.log(`Average batch size: ${Math.round(fileDataList.reduce((sum, f) => sum + f.wordCount, 0) / totalBatches)} words`);
+            
+            // Process batches sequentially with proper rate limiting
             for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-                const startIndex = batchIndex * batchSize;
-                const endIndex = Math.min(startIndex + batchSize, includedFiles.length);
-                const batch = includedFiles.slice(startIndex, endIndex);
+                const batch = batches[batchIndex];
+                const batchWordCount = batch.reduce((sum, f) => sum + f.wordCount, 0);
+                const batchFileCount = batch.length;
                 
-                // API response status flag
-                let apiResponseStatus: number | null = null;
-                let apiResponseReceived = false;
-                
-                // Update progress with token usage
+                // Update progress with batch info
                 const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
-                progressNotice.setMessage(`Processing batch ${batchIndex + 1}/${totalBatches} (${batch.length} files)... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
+                progressNotice.setMessage(`Processing batch ${batchIndex + 1}/${totalBatches} (${batchFileCount} files, ${batchWordCount} words)... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
                 
                 try {
                     // Process entire batch in a single API request
@@ -241,20 +371,18 @@ export class VaultSemanticAnalysisManager {
                     totalTokenUsage.candidatesTokens += batchResult.tokenUsage.candidatesTokens;
                     totalTokenUsage.totalTokens += batchResult.tokenUsage.totalTokens;
                     
-                    // Set flag when API response is successful
-                    apiResponseStatus = 200;
-                    apiResponseReceived = true;
+                    console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} files, ${batchWordCount} words, ${batchResult.tokenUsage.totalTokens} tokens`);
                     
-                    // Process batch results immediately after successful API response
+                    // Process batch results
                     for (let i = 0; i < batch.length; i++) {
-                        const file = batch[i];
+                        const fileData = batch[i];
                         const result = batchResults[i];
                         
                         if (result && result.success && result.data) {
                             results.push(result.data);
                             processed++;
                         } else {
-                            console.error(`Failed to analyze file ${file.path}:`, result?.error || 'Unknown error');
+                            console.error(`Failed to analyze file ${fileData.file.path}:`, result?.error || 'Unknown error');
                             failed++;
                             processed++;
                         }
@@ -263,23 +391,18 @@ export class VaultSemanticAnalysisManager {
                 } catch (batchError) {
                     console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
                     
-                    // Set error flag
-                    apiResponseReceived = true;
-                    if (batchError instanceof Error && batchError.message.includes('429')) {
-                        apiResponseStatus = 429;
-                    } else {
-                        apiResponseStatus = 500; // Generic error status
-                    }
-                    
                     // Check if it's a rate limit error (429) and retry with longer delay
                     if (batchError instanceof Error && batchError.message.includes('429')) {
                         console.log(`Rate limit hit, retrying batch ${batchIndex + 1} after longer delay...`);
                         const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
-                        progressNotice.setMessage(`Rate limit exceeded, waiting 10s before retry... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
-                        await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay for rate limit retry
+                        progressNotice.setMessage(`Rate limit exceeded, waiting before retry... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
+                        
+                        // Wait longer for rate limit retry (respecting 30 RPM = max 2 requests per minute)
+                        await new Promise(resolve => setTimeout(resolve, 8000)); // 8 second delay for rate limit retry
                         
                         // Retry the batch once
                         try {
+                            console.log(`Retrying batch ${batchIndex + 1}...`);
                             const retryResult = await this.analyzeBatch(batch);
                             const retryResults = retryResult.results;
                             
@@ -288,19 +411,17 @@ export class VaultSemanticAnalysisManager {
                             totalTokenUsage.candidatesTokens += retryResult.tokenUsage.candidatesTokens;
                             totalTokenUsage.totalTokens += retryResult.tokenUsage.totalTokens;
                             
-                            // Update flag after successful retry
-                            apiResponseStatus = 200;
-                            apiResponseReceived = true;
+                            console.log(`Batch ${batchIndex + 1} retry completed successfully`);
                             
                             for (let i = 0; i < batch.length; i++) {
-                                const file = batch[i];
+                                const fileData = batch[i];
                                 const result = retryResults[i];
                                 
                                 if (result && result.success && result.data) {
                                     results.push(result.data);
                                     processed++;
                                 } else {
-                                    console.error(`Failed to analyze file ${file.path} on retry:`, result?.error || 'Unknown error');
+                                    console.error(`Failed to analyze file ${fileData.file.path} on retry:`, result?.error || 'Unknown error');
                                     failed++;
                                     processed++;
                                 }
@@ -310,44 +431,20 @@ export class VaultSemanticAnalysisManager {
                             // Mark all files in this batch as failed
                             failed += batch.length;
                             processed += batch.length;
-                            apiResponseStatus = 500;
                         }
                     } else {
                         // Non-rate-limit error, mark all files in this batch as failed
+                        console.error(`Non-rate-limit error in batch ${batchIndex + 1}:`, batchError);
                         failed += batch.length;
                         processed += batch.length;
                     }
                 }
                 
-                // Rate limiting: always wait between batches
+                // Rate limiting: wait between batches to respect 30 RPM limit
                 if (batchIndex < totalBatches - 1) {
-                    // progressNotice.setMessage(`Rate limiting: waiting 5s... (${processed}/${includedFiles.length} completed, ${failed} failed)`);
-                    await new Promise(resolve => setTimeout(resolve, delayBetweenBatches)); // Always wait between batches
-                    
-                    // After delay, check if we got a successful response
-                    if (apiResponseReceived && apiResponseStatus === 200) {
-                        const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
-                        progressNotice.setMessage(`API responded successfully, proceeding to next batch... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
-                    } else {
-                        // Wait until we get a successful response or timeout
-                        let waitTime = 0;
-                        const maxWaitTime = 30000; // Maximum 30 seconds additional wait
-                        const checkInterval = 1000; // Check every 1 second
-                        
-                        while (waitTime < maxWaitTime && (!apiResponseReceived || apiResponseStatus !== 200)) {
-                            const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
-                            progressNotice.setMessage(`Waiting for successful API response... ${Math.ceil((maxWaitTime - waitTime)/1000)}s remaining (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
-                            await new Promise(resolve => setTimeout(resolve, checkInterval));
-                            waitTime += checkInterval;
-                        }
-                        
-                        const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
-                        if (apiResponseStatus === 200) {
-                            progressNotice.setMessage(`API response successful after additional wait, proceeding... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
-                        } else {
-                            progressNotice.setMessage(`Proceeding despite API issues (status: ${apiResponseStatus})... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
-                        }
-                    }
+                    const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
+                    progressNotice.setMessage(`Rate limiting: waiting 3s before next batch... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
+                    await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
                 }
             }
 
@@ -355,7 +452,7 @@ export class VaultSemanticAnalysisManager {
             progressNotice.hide();
 
             // Calculate graph metrics and enhance results
-            progressNotice.setMessage('Calculating graph metrics...');
+            const enhanceNotice = new Notice('Calculating graph metrics...', 0);
             const graphMetrics = await this.calculateGraphMetrics();
             
             // Enhance results with graph metrics
@@ -367,8 +464,13 @@ export class VaultSemanticAnalysisManager {
                 };
             });
             
+            // Calculate and add centrality rankings
+            const resultsWithRankings = this.calculateCentralityRankings(enhancedResults);
+            
             // Save enhanced results to JSON file with token usage
-            await this.saveAnalysisResults(enhancedResults, totalTokenUsage);
+            await this.saveAnalysisResults(resultsWithRankings, totalTokenUsage);
+            
+            enhanceNotice.hide();
             
             // Show completion notice with detailed stats including token usage
             if (failed === 0) {
@@ -383,52 +485,20 @@ export class VaultSemanticAnalysisManager {
         }
     }
 
-    private async analyzeBatch(files: TFile[]): Promise<{
+    private async analyzeBatch(fileDataList: Array<{
+        file: TFile;
+        content: string;
+        wordCount: number;
+        created: string;
+        modified: string;
+        isShort: boolean;
+    }>): Promise<{
         results: Array<{ success: boolean; data?: VaultAnalysisResult; error?: string }>;
         tokenUsage: TokenUsage;
     }> {
         try {
-            // Prepare file data for batch processing
-            const fileData: Array<{
-                file: TFile;
-                content: string;
-                wordCount: number;
-                created: string;
-                modified: string;
-                isShort: boolean;
-            }> = [];
-
-            for (const file of files) {
-                try {
-                    const content = await this.app.vault.read(file);
-                    const cleanedContent = this.cleanupContent(content);
-                    const wordCount = cleanedContent.split(/\s+/).filter(word => word.length > 0).length;
-                    
-                    // Get file stats
-                    const stat = await this.app.vault.adapter.stat(file.path);
-                    const created = stat?.ctime ? new Date(stat.ctime).toISOString() : '';
-                    const modified = stat?.mtime ? new Date(stat.mtime).toISOString() : '';
-
-                    fileData.push({
-                        file,
-                        content: cleanedContent,
-                        wordCount,
-                        created,
-                        modified,
-                        isShort: wordCount < 10 // Mark files that are too short
-                    });
-                } catch (error) {
-                    console.error(`Error reading file ${file.path}:`, error);
-                    fileData.push({
-                        file,
-                        content: '',
-                        wordCount: 0,
-                        created: '',
-                        modified: '',
-                        isShort: true
-                    });
-                }
-            }
+            // File data is already prepared, no need to read files again
+            const fileData = fileDataList;
 
             // Separate short files from files that need API analysis
             const shortFiles = fileData.filter(data => data.isShort);
@@ -522,7 +592,7 @@ export class VaultSemanticAnalysisManager {
             console.error('Error in batch analysis:', error);
             // Return error for all files in batch
             return {
-                results: files.map(() => ({ success: false, error: (error as Error).message })),
+                results: fileDataList.map(() => ({ success: false, error: (error as Error).message })),
                 tokenUsage: { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 }
             };
         }
@@ -778,7 +848,7 @@ export class VaultSemanticAnalysisManager {
         tokenUsage: TokenUsage;
     }> {
         const apiKey = this.settings.geminiApiKey;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
 
         // Filter out short files (they should already be filtered, but double-check)
         const meaningfulFiles = fileData.filter(data => !data.isShort && data.content.trim().length > 0);
@@ -825,11 +895,13 @@ Notes to analyze:
                 temperature: 0.2,
                 topK: 20,
                 topP: 0.8,
-                maxOutputTokens: meaningfulFiles.length * 100 + 200, // Dynamic token limit based on file count
+                maxOutputTokens: meaningfulFiles.length * 150 + 300, // Increased token limit for better analysis
             }
         };
 
         try {
+            console.log(`Sending batch analysis request for ${meaningfulFiles.length} files to Gemini 2.0 Flash-Lite...`);
+            
             const response = await requestUrl({
                 url: url,
                 method: 'POST',
@@ -840,7 +912,16 @@ Notes to analyze:
             });
 
             if (response.status !== 200) {
-                throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
+                // Handle rate limiting for 30 RPM limit
+                if (response.status === 429) {
+                    throw new Error(`Rate limit exceeded (429). Please wait before retrying. Status: ${response.status}`);
+                } else if (response.status === 400) {
+                    throw new Error('Invalid request. Please check your API key or try again.');
+                } else if (response.status === 403) {
+                    throw new Error('API access forbidden. Please check your Gemini API key permissions.');
+                } else {
+                    throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
+                }
             }
 
             const data = response.json;
@@ -855,6 +936,8 @@ Notes to analyze:
                 candidatesTokens: data.usageMetadata?.candidatesTokenCount || 0,
                 totalTokens: data.usageMetadata?.totalTokenCount || 0
             };
+
+            console.log(`Batch analysis completed. Token usage: ${tokenUsage.totalTokens} total (${tokenUsage.promptTokens} prompt + ${tokenUsage.candidatesTokens} response)`);
 
             const responseText = data.candidates[0].content.parts[0].text;
             
@@ -872,6 +955,7 @@ Notes to analyze:
                 
                 const jsonResponse = JSON.parse(cleanedResponse);
                 if (Array.isArray(jsonResponse) && jsonResponse.length === meaningfulFiles.length) {
+                    console.log(`Successfully parsed ${jsonResponse.length} analysis results`);
                     return {
                         results: jsonResponse.map(item => ({
                             summary: item.summary || '',
@@ -915,7 +999,7 @@ Notes to analyze:
                 };
             }
         } catch (error) {
-            console.error('Gemini API error in batch analysis:', error);
+            console.error('Gemini 2.0 Flash-Lite API error in batch analysis:', error);
             throw error;
         }
     }
