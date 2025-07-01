@@ -1,10 +1,7 @@
 import { App, Modal, setIcon } from 'obsidian';
 import { KnowledgeCalendarChart } from '../components/calendar-chart/KnowledgeCalendarChart';
-import { 
-    KnowledgeEvolutionAnalysisManager, 
-    KnowledgeEvolutionData,
-    VaultAnalysisData,
-    VaultAnalysisResult} from '../ai/KnowledgeEvolutionAnalysisManager';
+import { VaultAnalysisData, VaultAnalysisResult } from '../ai/MasterAnalysisManager';
+import { KnowledgeEvolutionData } from '../ai/visualization/KnowledgeEvolutionManager';
 
 // Import type for the manager
 export interface VaultSemanticAnalysisManager {
@@ -17,7 +14,6 @@ export class VaultAnalysisModal extends Modal {
     private contentContainer: HTMLElement;
     private hasExistingData: boolean;
     private vaultSemanticAnalysisManager: VaultSemanticAnalysisManager;
-    private knowledgeEvolutionManager: KnowledgeEvolutionAnalysisManager;
     private settings: { excludeFolders: string[]; excludeTags: string[] };
     private analysisResultsContainer: HTMLElement | null = null;
     private knowledgeEvolutionData: KnowledgeEvolutionData | null = null;
@@ -27,14 +23,12 @@ export class VaultAnalysisModal extends Modal {
         analysisData: VaultAnalysisData | null, 
         hasExistingData: boolean, 
         vaultSemanticAnalysisManager: VaultSemanticAnalysisManager,
-        knowledgeEvolutionManager: KnowledgeEvolutionAnalysisManager,
         settings: { excludeFolders: string[]; excludeTags: string[] } = { excludeFolders: [], excludeTags: [] }
     ) {
         super(app);
         this.analysisData = analysisData;
         this.hasExistingData = hasExistingData;
         this.vaultSemanticAnalysisManager = vaultSemanticAnalysisManager;
-        this.knowledgeEvolutionManager = knowledgeEvolutionManager;
         this.settings = settings;
     }
 
@@ -333,7 +327,7 @@ export class VaultAnalysisModal extends Modal {
                 return;
             }
             
-            const filteredResults = this.analysisData.results.filter(result => 
+            const filteredResults = this.analysisData.results.filter((result: VaultAnalysisResult) => 
                 result.title.toLowerCase().includes(searchTerm) ||
                 result.summary.toLowerCase().includes(searchTerm) ||
                 result.keywords.toLowerCase().includes(searchTerm) ||
@@ -459,8 +453,8 @@ export class VaultAnalysisModal extends Modal {
         // 1. Calendar Section (shown by default)
         await this.createCalendarSection(evolutionContainer);
         
-        // 2. Check for cached analysis and display directly if available
-        this.knowledgeEvolutionData = await this.knowledgeEvolutionManager.loadCachedKnowledgeEvolution();
+        // 2. Check for cached analysis - placeholder for new architecture integration
+        this.knowledgeEvolutionData = null;
         
         if (this.knowledgeEvolutionData) {
             // Show cached analysis directly
@@ -611,9 +605,9 @@ export class VaultAnalysisModal extends Modal {
         loadingContainer.createEl('p', { text: 'Processing AI analysis data to generate insights...' });
 
         try {
-            // Generate AI-powered evolution analysis and cache it
-            const evolutionData = await this.knowledgeEvolutionManager.generateAndCacheEvolutionAnalysis();
-            this.knowledgeEvolutionData = evolutionData;
+            // TODO: Integrate with new MasterAnalysisManager for evolution analysis
+            // For now, show placeholder message
+            throw new Error('Evolution analysis is being migrated to the new architecture');
             
             // Remove loading state
             loadingContainer.remove();
@@ -638,7 +632,8 @@ export class VaultAnalysisModal extends Modal {
     private async displayCachedAnalysis(container: HTMLElement): Promise<void> {
         if (!this.knowledgeEvolutionData) return;
 
-        const data = this.knowledgeEvolutionData.analysis;
+        // Access the data properties directly (new KnowledgeEvolutionData structure)
+        const data = this.knowledgeEvolutionData;
         
         // Create analysis sections with structured data
         this.createStructuredAnalysisSection(container, 'Knowledge Development Timeline', data.timeline);

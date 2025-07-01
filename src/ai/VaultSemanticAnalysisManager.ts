@@ -2,11 +2,10 @@ import { App, Notice, requestUrl, TFile, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { VaultAnalysisModal, VaultAnalysisInfoModal } from '../views/VaultAnalysisModals';
 import { 
-    KnowledgeEvolutionAnalysisManager, 
     TokenUsage, 
     VaultAnalysisResult, 
     VaultAnalysisData 
-} from './KnowledgeEvolutionAnalysisManager';
+} from './MasterAnalysisManager';
 import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
 
@@ -158,7 +157,7 @@ export class VaultSemanticAnalysisManager {
             const graphMetrics = await this.calculateGraphMetrics();
             
             // Enhance each result with graph metrics
-            const enhancedResults = existingData.results.map(result => {
+            const enhancedResults = existingData.results.map((result: VaultAnalysisResult) => {
                 const metrics = graphMetrics.get(result.path);
                 return {
                     ...result,
@@ -675,8 +674,7 @@ export class VaultSemanticAnalysisManager {
             }
             
             // Always display modal, passing whether we have existing data
-            const knowledgeEvolutionManager = new KnowledgeEvolutionAnalysisManager(this.app, this.settings);
-            const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this, knowledgeEvolutionManager, this.settings);
+            const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this, this.settings);
             modal.open();
         } catch (error) {
             console.error('Failed to load vault analysis results:', error);
