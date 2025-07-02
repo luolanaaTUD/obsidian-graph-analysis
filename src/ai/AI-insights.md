@@ -926,3 +926,8 @@ graph TD
     style J fill:#f3e5f5
     style K fill:#f3e5f5
 ```
+
+
+
+
+centralize AI model management

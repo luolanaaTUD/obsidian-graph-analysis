@@ -1,4 +1,4 @@
-import { App, requestUrl } from 'obsidian';
+import { App } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { 
     KnowledgeStructureData,
@@ -10,12 +10,7 @@ import {
     LearningVelocityAnalysis,
     EvolutionInsight
 } from './visualization/managers';
-
-export interface TokenUsage {
-    promptTokens: number;
-    candidatesTokens: number;
-    totalTokens: number;
-}
+import { AIModelService, TokenUsage } from '../services/AIModelService';
 
 export interface VaultAnalysisResult {
     id: string;
@@ -68,11 +63,13 @@ export interface MasterAnalysisData {
 export class MasterAnalysisManager {
     private app: App;
     private settings: GraphAnalysisSettings;
+    private aiService: AIModelService;
     private readonly MAX_CHUNK_SIZE = 600000; // Increased chunk size to take advantage of 1M TPM limit
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         this.settings = settings;
+        this.aiService = new AIModelService(settings);
     }
 
     public async loadCachedMasterAnalysis(): Promise<MasterAnalysisData | null> {
@@ -333,7 +330,8 @@ Please reference specific notes, rankings, and data patterns from the complete d
 VAULT ANALYSIS DATA:
 ${jsonData}`;
 
-        return await this.callGeminiFlashLite(prompt);
+        const response = await this.aiService.generateCompleteAnalysis(prompt);
+        return response.result;
     }
 
     /**
@@ -383,78 +381,10 @@ ${jsonData}`;
 CHUNK ${chunkIndex}/${totalChunks}:
 ${chunk}`;
 
-        await this.callGeminiFlashLiteForDataChunk(prompt);
-        console.log(`Chunk ${chunkIndex}/${totalChunks} processed successfully`);
+        await this.aiService.storeDataChunk(prompt, chunkIndex, totalChunks);
     }
 
-    /**
-     * Optimized API call for Gemini 2.0 Flash-Lite data chunks
-     */
-    private async callGeminiFlashLiteForDataChunk(prompt: string, retryCount: number = 0): Promise<string> {
-        if (!this.settings?.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
-            throw new Error('Gemini API key not configured');
-        }
 
-        const apiKey = this.settings.geminiApiKey;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
-
-        const requestBody = { 
-            contents: [{
-                parts: [{
-                    text: prompt
-                }]
-            }],
-            generationConfig: {
-                temperature: 0.1,
-                topK: 10,
-                topP: 0.5,
-                maxOutputTokens: 50, // Brief acknowledgment only
-            }
-        };
-
-        try {
-            const response = await requestUrl({
-                url: url,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (response.status !== 200) {
-                // Handle rate limiting with exponential backoff for 30 RPM limit
-                if (response.status === 429 && retryCount < 3) {
-                    const waitTime = Math.pow(2, retryCount) * 3000; // 3s, 6s, 12s
-                    console.log(`Rate limited on data chunk. Retrying in ${waitTime/1000}s... (attempt ${retryCount + 1}/3)`);
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                    return await this.callGeminiFlashLiteForDataChunk(prompt, retryCount + 1);
-                }
-                
-                throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
-            }
-
-            const data = response.json;
-            
-            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-                throw new Error('Invalid response format from Gemini API');
-            }
-
-            return data.candidates[0].content.parts[0].text.trim();
-        } catch (error) {
-            console.error('Gemini API error in data chunk:', error);
-            
-            const errorMessage = (error as Error).message;
-            if (errorMessage.includes('status 429') && retryCount < 3) {
-                const waitTime = Math.pow(2, retryCount) * 3000;
-                console.log(`Rate limit detected in data chunk error. Retrying in ${waitTime/1000}s... (attempt ${retryCount + 1}/3)`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-                return await this.callGeminiFlashLiteForDataChunk(prompt, retryCount + 1);
-            }
-            
-            throw error;
-        }
-    }
 
     /**
      * Send final chunk with analysis instructions
@@ -518,94 +448,11 @@ Now that you have the complete vault analysis dataset, please analyze it compreh
 
 Please reference specific notes, rankings, and data patterns from the complete dataset in your analysis.`;
 
-        return await this.callGeminiFlashLite(prompt);
+        const response = await this.aiService.generateAnalysis(prompt);
+        return response.result;
     }
 
-    /**
-     * Main API call method for Gemini 2.0 Flash-Lite
-     */
-    private async callGeminiFlashLite(prompt: string, retryCount: number = 0): Promise<string> {
-        if (!this.settings?.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
-            throw new Error('Gemini API key not configured');
-        }
 
-        const apiKey = this.settings.geminiApiKey;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
-
-        const requestBody = { 
-            contents: [{
-                parts: [{
-                    text: prompt
-                }]
-            }],
-            generationConfig: {
-                temperature: 0.3,
-                topK: 20,
-                topP: 0.8,
-                maxOutputTokens: 8000, // Increased for comprehensive analysis
-            }
-        };
-
-        try {
-            const response = await requestUrl({
-                url: url,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (response.status !== 200) {
-                // Handle rate limiting for 30 RPM limit (2 seconds minimum between requests)
-                if (response.status === 429 && retryCount < 3) {
-                    const waitTime = Math.max(2500, Math.pow(2, retryCount) * 3000); // Min 2.5s, then 3s, 6s, 12s
-                    console.log(`Rate limited (429). Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/3)`);
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                    return await this.callGeminiFlashLite(prompt, retryCount + 1);
-                }
-                
-                // Provide user-friendly error messages
-                if (response.status === 429) {
-                    throw new Error('Rate limit exceeded. Please wait a few minutes before trying again.');
-                } else if (response.status === 400) {
-                    throw new Error('Invalid request. Please check your API key or try again.');
-                } else if (response.status === 403) {
-                    throw new Error('API access forbidden. Please check your Gemini API key permissions.');
-                } else {
-                    throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
-                }
-            }
-
-            const data = response.json;
-            
-            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-                throw new Error('Invalid response format from Gemini API');
-            }
-
-            return data.candidates[0].content.parts[0].text.trim();
-        } catch (error) {
-            console.error('Gemini 2.0 Flash-Lite API error:', error);
-            
-            const errorMessage = (error as Error).message;
-            if (errorMessage.includes('status 429') && retryCount < 3) {
-                const waitTime = Math.max(2500, Math.pow(2, retryCount) * 3000);
-                console.log(`Rate limit detected in error. Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/3)`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-                return await this.callGeminiFlashLite(prompt, retryCount + 1);
-            }
-            
-            // Network error retry
-            if (retryCount < 2 && !errorMessage.includes('Rate limit') && !errorMessage.includes('status 429') && !errorMessage.includes('API')) {
-                const waitTime = (retryCount + 1) * 3000;
-                console.log(`Network error. Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/2)`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-                return await this.callGeminiFlashLite(prompt, retryCount + 1);
-            }
-            
-            throw error;
-        }
-    }
 
     private parseMasterInsights(rawResponse: string, analysisData: VaultAnalysisData): any {
         // Parse the comprehensive AI response into structured data for each tab
@@ -862,5 +709,6 @@ Please reference specific notes, rankings, and data patterns from the complete d
 
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;
+        this.aiService.updateSettings(settings);
     }
 }

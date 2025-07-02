@@ -1,17 +1,18 @@
-import { App, Notice, requestUrl, TFile, setIcon } from 'obsidian';
+import { App, Notice, TFile, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { VaultAnalysisModal, VaultAnalysisInfoModal } from '../views/VaultAnalysisModals';
 import { 
-    TokenUsage, 
     VaultAnalysisResult, 
     VaultAnalysisData 
 } from './MasterAnalysisManager';
+import { AIModelService, TokenUsage } from '../services/AIModelService';
 import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
 
 export class VaultSemanticAnalysisManager {
     private app: App;
     private settings: GraphAnalysisSettings;
+    private aiService: AIModelService;
     private statusBarItem: HTMLElement | null = null;
     private graphDataBuilder: GraphDataBuilder;
     private pluginService: PluginService;
@@ -19,6 +20,7 @@ export class VaultSemanticAnalysisManager {
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         this.settings = settings;
+        this.aiService = new AIModelService(settings);
         this.graphDataBuilder = new GraphDataBuilder(app);
         this.pluginService = new PluginService(app);
     }
@@ -793,6 +795,7 @@ export class VaultSemanticAnalysisManager {
 
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;
+        this.aiService.updateSettings(settings);
     }
 
     public destroy(): void {
@@ -847,9 +850,6 @@ export class VaultSemanticAnalysisManager {
         }>;
         tokenUsage: TokenUsage;
     }> {
-        const apiKey = this.settings.geminiApiKey;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
-
         // Filter out short files (they should already be filtered, but double-check)
         const meaningfulFiles = fileData.filter(data => !data.isShort && data.content.trim().length > 0);
         
@@ -885,122 +885,35 @@ Notes to analyze:
             prompt += `--- Note ${index + 1}: "${data.file.basename}" (${data.wordCount} words) ---\n${data.content}\n\n`;
         });
 
-        const requestBody = { 
-            contents: [{
-                parts: [{
-                    text: prompt
-                }]
-            }],
-            generationConfig: {
-                temperature: 0.2,
-                topK: 20,
-                topP: 0.8,
-                maxOutputTokens: meaningfulFiles.length * 150 + 300, // Increased token limit for better analysis
-            }
-        };
-
         try {
-            console.log(`Sending batch analysis request for ${meaningfulFiles.length} files to Gemini 2.0 Flash-Lite...`);
-            
-            const response = await requestUrl({
-                url: url,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
+            const response = await this.aiService.generateBatchAnalysis<{
+                summary: string;
+                keywords: string;
+                knowledgeDomain: string;
+            }>(prompt, meaningfulFiles.length);
 
-            if (response.status !== 200) {
-                // Handle rate limiting for 30 RPM limit
-                if (response.status === 429) {
-                    throw new Error(`Rate limit exceeded (429). Please wait before retrying. Status: ${response.status}`);
-                } else if (response.status === 400) {
-                    throw new Error('Invalid request. Please check your API key or try again.');
-                } else if (response.status === 403) {
-                    throw new Error('API access forbidden. Please check your Gemini API key permissions.');
-                } else {
-                    throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
-                }
-            }
+            console.log(`Batch analysis completed. Token usage: ${response.tokenUsage.totalTokens} total (${response.tokenUsage.promptTokens} prompt + ${response.tokenUsage.candidatesTokens} response)`);
 
-            const data = response.json;
-            
-            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-                throw new Error('Invalid response format from Gemini API');
-            }
-
-            // Extract token usage from the response
-            const tokenUsage: TokenUsage = {
-                promptTokens: data.usageMetadata?.promptTokenCount || 0,
-                candidatesTokens: data.usageMetadata?.candidatesTokenCount || 0,
-                totalTokens: data.usageMetadata?.totalTokenCount || 0
+            return {
+                results: response.results.map(item => ({
+                    summary: item.summary || '',
+                    keywords: item.keywords || '',
+                    knowledgeDomain: item.knowledgeDomain || ''
+                })),
+                tokenUsage: response.tokenUsage
             };
 
-            console.log(`Batch analysis completed. Token usage: ${tokenUsage.totalTokens} total (${tokenUsage.promptTokens} prompt + ${tokenUsage.candidatesTokens} response)`);
-
-            const responseText = data.candidates[0].content.parts[0].text;
-            
-            // Try to parse as JSON array
-            try {
-                // Clean the response text by removing markdown code blocks
-                let cleanedResponse = responseText.trim();
-                
-                // Remove markdown code block markers if present
-                if (cleanedResponse.startsWith('```json')) {
-                    cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-                } else if (cleanedResponse.startsWith('```')) {
-                    cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
-                }
-                
-                const jsonResponse = JSON.parse(cleanedResponse);
-                if (Array.isArray(jsonResponse) && jsonResponse.length === meaningfulFiles.length) {
-                    console.log(`Successfully parsed ${jsonResponse.length} analysis results`);
-                    return {
-                        results: jsonResponse.map(item => ({
-                            summary: item.summary || '',
-                            keywords: item.keywords || '',
-                            knowledgeDomain: item.knowledgeDomain || ''
-                        })),
-                        tokenUsage
-                    };
-                } else {
-                    console.error('Response array length mismatch. Expected:', meaningfulFiles.length, 'Got:', jsonResponse.length);
-                    // If length mismatch, pad with empty results or truncate
-                    const paddedResults = [];
-                    for (let i = 0; i < meaningfulFiles.length; i++) {
-                        if (i < jsonResponse.length && jsonResponse[i]) {
-                            paddedResults.push({
-                                summary: jsonResponse[i].summary || 'Analysis incomplete',
-                                keywords: jsonResponse[i].keywords || '',
-                                knowledgeDomain: jsonResponse[i].knowledgeDomain || ''
-                            });
-                        } else {
-                            paddedResults.push({
-                                summary: 'Analysis incomplete',
-                                keywords: '',
-                                knowledgeDomain: ''
-                            });
-                        }
-                    }
-                    return { results: paddedResults, tokenUsage };
-                }
-            } catch (parseError) {
-                console.error('Failed to parse batch response as JSON:', parseError);
-                console.error('Raw response:', responseText);
-                // Fallback: create default results for each file
-                return {
-                    results: meaningfulFiles.map((data) => ({
-                        summary: `Analysis failed for ${data.file.basename}`,
-                        keywords: '',
-                        knowledgeDomain: ''
-                    })),
-                    tokenUsage
-                };
-            }
         } catch (error) {
-            console.error('Gemini 2.0 Flash-Lite API error in batch analysis:', error);
-            throw error;
+            console.error('AI batch analysis error:', error);
+            // Fallback: create default results for each file
+            return {
+                results: meaningfulFiles.map((data) => ({
+                    summary: `Analysis failed for ${data.file.basename}`,
+                    keywords: '',
+                    knowledgeDomain: ''
+                })),
+                tokenUsage: { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 }
+            };
         }
     }
 }
