@@ -1,14 +1,15 @@
 import { App } from 'obsidian';
 import { GraphAnalysisSettings } from '../../types/types';
+import { 
+    DomainDistributionChart, 
+    DomainDistributionData,
+    HierarchicalDomain,
+    DomainData,
+    DomainConnection
+} from '../../components/domain-distribution/DomainDistributionChart';
 import * as d3 from 'd3';
 
-// Interfaces for Knowledge Structure data
-export interface DomainData {
-    domain: string;
-    noteCount: number;
-    avgCentrality: number;
-    keywords: string[];
-}
+// Note: DomainData, HierarchicalDomain, and DomainConnection are now imported from DomainDistributionChart
 
 export interface NetworkNode {
     title: string;
@@ -20,7 +21,13 @@ export interface NetworkNode {
 }
 
 export interface KnowledgeStructureData {
-    domainDistribution: DomainData[];
+    // Hierarchical domain structure for sunburst visualization (4 layers: Main Classes, Divisions, Sections, User Domains)
+    domainHierarchy: HierarchicalDomain[];
+    
+    // Cross-domain connections
+    domainConnections?: DomainConnection[];
+    
+    // Existing network analysis
     knowledgeNetwork: {
         bridges: NetworkNode[];
         foundations: NetworkNode[];
@@ -76,8 +83,10 @@ export class KnowledgeStructureManager {
             return;
         }
 
-        // Create main layout
-        this.createStructureLayout();
+        // Create the three main sections following Knowledge Evolution pattern
+        await this.createKnowledgeDomainDistributionSection();
+        await this.createKnowledgeNetworkAnalysisSection();
+        await this.createKnowledgeGapSection();
     }
 
     private renderPlaceholder(): void {
@@ -105,184 +114,213 @@ export class KnowledgeStructureManager {
         `;
     }
 
-    private createStructureLayout(): void {
-        // Upper section: Knowledge Structure Analysis
-        const upperSection = this.container.createEl('div', { cls: 'structure-upper-section' });
-        
-        // Create insights panel
-        this.createInsightsPanel(upperSection);
-        
-        // Create domain distribution chart
-        this.createDomainDistribution(upperSection);
+    /**
+     * Section 1: Knowledge Domain Distribution
+     * Shows sunburst chart and domain distribution table
+     */
+    private async createKnowledgeDomainDistributionSection(): Promise<void> {
+        const section = this.container.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
 
-        // Create knowledge gaps section
-        this.createKnowledgeGaps(upperSection);
+        section.createEl('h3', {
+            text: 'Knowledge Domain Distribution',
+            cls: 'vault-analysis-section-title'
+        });
 
-        // Lower section: Knowledge Network Analysis
-        const lowerSection = this.container.createEl('div', { cls: 'structure-lower-section' });
+        // Check if we have hierarchical data
+        if (!this.data!.domainHierarchy || this.data!.domainHierarchy.length === 0) {
+            const placeholder = section.createEl('div', { 
+                cls: 'vault-analysis-placeholder' 
+            });
+            placeholder.createEl('p', {
+                text: 'No DDC hierarchy data available. Please generate vault analysis with hierarchical domain structure.',
+                cls: 'analysis-required'
+            });
+            return;
+        }
+
+        // Create chart container with proper sizing
+        const chartContainer = section.createEl('div', { 
+            cls: 'domain-chart-container' // Use the proper CSS class for domain charts
+        });
         
-        this.createNetworkAnalysis(lowerSection);
+        // Prepare data for the domain distribution component
+        const domainDistributionData: DomainDistributionData = {
+            domainHierarchy: this.data!.domainHierarchy,
+            domainConnections: this.data!.domainConnections
+        };
+        
+        // Create and render the domain distribution chart
+        const domainChart = new DomainDistributionChart(
+            this.app,
+            this.settings,
+            chartContainer,
+            {
+                chartType: 'sunburst',
+                showTooltips: true,
+                showLabels: true
+            }
+        );
+        
+        await domainChart.renderWithData(domainDistributionData);
     }
 
-    private createInsightsPanel(container: HTMLElement): void {
-        const insightsContainer = container.createEl('div', { cls: 'structure-insights' });
-        
-        insightsContainer.innerHTML = `
-            <h3>🧠 Knowledge Structure Insights</h3>
-            <div class="insights-content">
-                ${this.data!.insights.map(insight => `
-                    <div class="insight-item">
-                        <h4>${insight.title}</h4>
-                        <p>${insight.content}</p>
-                        ${insight.keyPoints.length > 0 ? `
-                            <ul class="key-points">
-                                ${insight.keyPoints.map(point => `<li>${point}</li>`).join('')}
-                            </ul>
-                        ` : ''}
-                    </div>
-                `).join('')}
-            </div>
-        `;
+    /**
+     * Section 2: Knowledge Network Analysis
+     * Shows bridge notes, foundation notes, and authority notes
+     */
+    private async createKnowledgeNetworkAnalysisSection(): Promise<void> {
+        const section = this.container.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
+
+        section.createEl('h3', {
+            text: 'Knowledge Network Analysis',
+            cls: 'vault-analysis-section-title'
+        });
+
+        const networkData = this.data!.knowledgeNetwork;
+
+        // Bridge Notes
+        if (networkData.bridges && networkData.bridges.length > 0) {
+            this.createNetworkSubsection(section, '🌉 Bridge Notes', networkData.bridges, 
+                'Notes that connect different knowledge domains');
+        }
+
+        // Foundation Notes
+        if (networkData.foundations && networkData.foundations.length > 0) {
+            this.createNetworkSubsection(section, '🏗️ Foundation Notes', networkData.foundations, 
+                'Central notes that provide quick access to the broader network');
+        }
+
+        // Authority Notes
+        if (networkData.authorities && networkData.authorities.length > 0) {
+            this.createNetworkSubsection(section, '👑 Authority Notes', networkData.authorities, 
+                'Influential notes connected to other highly connected notes');
+        }
+
+        // If no network data available
+        if ((!networkData.bridges || networkData.bridges.length === 0) &&
+            (!networkData.foundations || networkData.foundations.length === 0) &&
+            (!networkData.authorities || networkData.authorities.length === 0)) {
+            this.createEmptyNetworkState(section);
+        }
     }
 
-    private createDomainDistribution(container: HTMLElement): void {
-        const chartContainer = container.createEl('div', { cls: 'domain-distribution' });
-        chartContainer.innerHTML = '<h3>📊 Knowledge Domain Distribution</h3>';
-        
-        const chartDiv = chartContainer.createEl('div', { cls: 'domain-chart' });
-        
-        // Create pie chart using D3
-        this.renderDomainPieChart(chartDiv);
-        
-        // Create domain details table
-        this.createDomainTable(chartContainer);
+    /**
+     * Section 3: Knowledge Gap Analysis
+     * Shows identified gaps in knowledge coverage
+     */
+    private async createKnowledgeGapSection(): Promise<void> {
+        const section = this.container.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
+
+        section.createEl('h3', {
+            text: 'Knowledge Gap Analysis',
+            cls: 'vault-analysis-section-title'
+        });
+
+        if (this.data!.gaps && this.data!.gaps.length > 0) {
+            const gapsContainer = section.createEl('div', { 
+                cls: 'ai-insights-container'
+            });
+
+            gapsContainer.createEl('h4', {
+                text: '🎯 Identified Knowledge Gaps',
+                cls: 'ai-insights-title'
+            });
+
+            const gapsList = gapsContainer.createEl('ul', { 
+                cls: 'gaps-list' 
+            });
+
+            this.data!.gaps.slice(0, 8).forEach(gap => {
+                gapsList.createEl('li', { text: gap });
+            });
+        } else {
+            this.createEmptyGapsState(section);
+        }
     }
 
-    private renderDomainPieChart(container: HTMLElement): void {
-        const width = 300;
-        const height = 300;
-        const radius = Math.min(width, height) / 2;
+    /**
+     * Helper method to create network subsections
+     */
+    private createNetworkSubsection(parent: HTMLElement, title: string, nodes: NetworkNode[], description: string): void {
+        const subsection = parent.createEl('div', { cls: 'network-category' });
+        
+        subsection.createEl('h4', { text: title });
+        subsection.createEl('p', { 
+            text: description,
+            cls: 'network-description'
+        });
 
-        const svg = d3.select(container)
-            .append('svg')
-            .attr('width', width)
-            .attr('height', height);
+        const nodesList = subsection.createEl('div', { cls: 'centrality-list' });
 
-        const g = svg.append('g')
-            .attr('transform', `translate(${width / 2},${height / 2})`);
+        nodes.slice(0, 10).forEach((node, index) => {
+            const nodeItem = nodesList.createEl('div', { cls: 'centrality-item' });
+            
+            const noteTitle = nodeItem.createEl('div', { 
+                cls: 'note-title',
+                text: node.title
+            });
 
-        const pie = d3.pie<DomainData>()
-            .value(d => d.noteCount)
-            .sort(null);
+            // Make title clickable
+            noteTitle.style.cursor = 'pointer';
+            noteTitle.style.color = 'var(--text-accent)';
+            noteTitle.addEventListener('click', async () => {
+                const file = this.app.vault.getAbstractFileByPath(node.title);
+                if (file) {
+                    await this.app.workspace.openLinkText(file.path, '');
+                }
+            });
 
-        const arc = d3.arc<d3.PieArcDatum<DomainData>>()
-            .innerRadius(0)
-            .outerRadius(radius);
-
-        const color = d3.scaleOrdinal()
-            .domain(this.data!.domainDistribution.map(d => d.domain))
-            .range(d3.schemeCategory10);
-
-        const arcs = g.selectAll('.arc')
-            .data(pie(this.data!.domainDistribution))
-            .enter().append('g')
-            .attr('class', 'arc');
-
-        arcs.append('path')
-            .attr('d', arc)
-            .attr('fill', (d: any) => color(d.data.domain) as string)
-            .attr('stroke', '#fff')
-            .attr('stroke-width', 2);
-
-        // Add labels
-        arcs.append('text')
-            .attr('transform', (d: any) => `translate(${arc.centroid(d)})`)
-            .attr('text-anchor', 'middle')
-            .style('font-size', '12px')
-            .style('fill', '#fff')
-            .text((d: any) => d.data.noteCount > 2 ? d.data.domain.slice(0, 8) : '');
+            nodeItem.createEl('div', { 
+                cls: 'centrality-score',
+                text: `Score: ${node.score.toFixed(3)}${node.rank ? ` (Rank #${node.rank})` : ''}`
+            });
+        });
     }
 
-    private createDomainTable(container: HTMLElement): void {
-        const tableContainer = container.createEl('div', { cls: 'domain-table-container' });
+    /**
+     * Helper method for empty network state
+     */
+    private createEmptyNetworkState(section: HTMLElement): void {
+        const emptyState = section.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
+        });
         
-        const table = tableContainer.createEl('table', { cls: 'domain-table' });
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    <th>Domain</th>
-                    <th>Notes</th>
-                    <th>Avg Centrality</th>
-                    <th>Key Themes</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${this.data!.domainDistribution.map(domain => `
-                    <tr>
-                        <td><strong>${domain.domain}</strong></td>
-                        <td>${domain.noteCount}</td>
-                        <td>${domain.avgCentrality.toFixed(3)}</td>
-                        <td><span class="domain-keywords">${domain.keywords.slice(0, 3).join(', ')}</span></td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        `;
+        emptyState.createEl('p', {
+            text: 'Network analysis requires graph metrics to be calculated. Run centrality analysis first to see network insights.',
+            cls: 'analysis-required'
+        });
     }
 
-    private createKnowledgeGaps(container: HTMLElement): void {
-        if (!this.data!.gaps || this.data!.gaps.length === 0) return;
-
-        const gapsContainer = container.createEl('div', { cls: 'knowledge-gaps' });
-        gapsContainer.innerHTML = `
-            <h3>🔍 Identified Knowledge Gaps</h3>
-            <div class="gaps-content">
-                ${this.data!.gaps.map(gap => `
-                    <div class="gap-item">
-                        <span class="gap-icon">⚠️</span>
-                        <span class="gap-text">${gap}</span>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    }
-
-    private createNetworkAnalysis(container: HTMLElement): void {
-        container.innerHTML = '<h3>🌐 Knowledge Network Analysis</h3>';
+    /**
+     * Helper method for empty gaps state
+     */
+    private createEmptyGapsState(section: HTMLElement): void {
+        const emptyState = section.createEl('div', { 
+            cls: 'vault-analysis-placeholder' 
+        });
         
-        // Create three columns for different centrality types
-        const networkGrid = container.createEl('div', { cls: 'network-grid' });
-        
-        this.createNetworkColumn(networkGrid, 'bridges', '🌉 Knowledge Bridges', 
-            'Notes that connect different knowledge domains', this.data!.knowledgeNetwork.bridges);
-        
-        this.createNetworkColumn(networkGrid, 'foundations', '🏗️ Knowledge Foundations', 
-            'Notes with efficient access to the entire network', this.data!.knowledgeNetwork.foundations);
-        
-        this.createNetworkColumn(networkGrid, 'authorities', '👑 Knowledge Authorities', 
-            'Notes that are referenced by other important notes', this.data!.knowledgeNetwork.authorities);
-    }
-
-    private createNetworkColumn(container: HTMLElement, type: string, title: string, description: string, nodes: NetworkNode[]): void {
-        const column = container.createEl('div', { cls: `network-column ${type}-column` });
-        
-        column.innerHTML = `
-            <h4>${title}</h4>
-            <p class="column-description">${description}</p>
-            <div class="network-nodes">
-                ${nodes.slice(0, 5).map(node => `
-                    <div class="network-node">
-                        <div class="node-title">${node.title}</div>
-                        <div class="node-score">Score: ${node.score.toFixed(3)}</div>
-                        ${node.connections ? `<div class="node-connections">${node.connections.length} connections</div>` : ''}
-                        ${node.reach ? `<div class="node-reach">Reach: ${node.reach}</div>` : ''}
-                        ${node.influence ? `<div class="node-influence">Influence: ${node.influence}</div>` : ''}
-                    </div>
-                `).join('')}
-            </div>
-        `;
+        emptyState.createEl('p', {
+            text: 'No knowledge gaps identified in the current analysis. Your knowledge coverage appears comprehensive!',
+            cls: 'analysis-required'
+        });
     }
 
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;
     }
-} 
+
+    public setData(data: KnowledgeStructureData): void {
+        this.data = data;
+    }
+
+    public async renderWithData(container: HTMLElement, data: KnowledgeStructureData): Promise<void> {
+        this.data = data;
+        await this.renderStructureAnalysis(container);
+    }
+}
