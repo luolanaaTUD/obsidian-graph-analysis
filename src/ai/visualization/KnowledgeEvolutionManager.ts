@@ -98,12 +98,13 @@ export class KnowledgeEvolutionManager {
 
     public async loadCachedEvolutionData(): Promise<KnowledgeEvolutionData | null> {
         try {
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/master-analysis.json`;
+            // Use the tab-specific analysis file instead of master-analysis.json
+            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/evolution-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const masterData = JSON.parse(content);
+            const data = JSON.parse(content);
             
-            if (masterData?.knowledgeEvolution) {
-                this.data = masterData.knowledgeEvolution;
+            if (data?.knowledgeEvolution) {
+                this.data = data.knowledgeEvolution;
                 return this.data;
             }
             return null;
@@ -245,9 +246,16 @@ export class KnowledgeEvolutionManager {
                         <div class="phase-period">${phase.period}</div>
                         <div class="phase-description">${phase.description}</div>
                         <div class="phase-domains">
-                            ${phase.keyDomains.slice(0, 3).map(domain => 
-                                `<span class="domain-tag">${domain}</span>`
-                            ).join('')}
+                            ${phase.keyDomains.slice(0, 3).map(domain => {
+                                // Parse DDC-compliant domain names for cleaner display
+                                const domainParts = domain.match(/^(.+?)\s*\((.+)\)$/) || [null, domain, ''];
+                                const userDomain = domainParts[1] || domain;
+                                const hierarchy = domainParts[2] || '';
+                                
+                                return `<span class="domain-tag" title="${hierarchy ? `${userDomain} (${hierarchy})` : userDomain}">
+                                    ${userDomain}
+                                </span>`;
+                            }).join('')}
                         </div>
                         <div class="phase-metrics">
                             ${phase.metrics.noteCount} notes • ${phase.metrics.wordCount.toLocaleString()} words
@@ -387,7 +395,16 @@ export class KnowledgeEvolutionManager {
                                 </div>
                                 ${period.newDomains.length > 0 ? `
                                     <div class="new-domains">
-                                        ${period.newDomains.map(domain => `<span class="domain-tag">${domain}</span>`).join('')}
+                                        ${period.newDomains.map(domain => {
+                                            // Parse DDC-compliant domain names for cleaner display
+                                            const domainParts = domain.match(/^(.+?)\s*\((.+)\)$/) || [null, domain, ''];
+                                            const userDomain = domainParts[1] || domain;
+                                            const hierarchy = domainParts[2] || '';
+                                            
+                                            return `<span class="domain-tag" title="${hierarchy ? `${userDomain} (${hierarchy})` : userDomain}">
+                                                ${userDomain}
+                                            </span>`;
+                                        }).join('')}
                                     </div>
                                 ` : ''}
                             </div>

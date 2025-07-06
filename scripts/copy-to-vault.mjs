@@ -53,6 +53,7 @@ const filesToCopy = [
     { source: 'manifest.json', dest: 'manifest.json' },
     { source: 'dist/styles.css', dest: 'styles.css' },
     { source: 'dist/graph_analysis_wasm_bg.wasm', dest: 'graph_analysis_wasm_bg.wasm' },
+    { source: 'dist/DDC-template.json', dest: 'DDC-template.json', critical: true, validate: true },
     { source: 'README.md', dest: 'README.md' },
     { source: 'LICENSE', dest: 'LICENSE' }
 ];
@@ -62,19 +63,65 @@ filesToCopy.forEach(file => {
     const sourcePath = path.join(rootDir, file.source);
     const destPath = path.join(pluginDir, file.dest);
     
-    // Skip if source file doesn't exist
+    // Check if source file exists
     if (!fs.existsSync(sourcePath)) {
-        console.log(`Skipping ${file.source} (not found)`);
+        const message = `Skipping ${file.source} (not found)`;
+        if (file.critical) {
+            console.error(`❌ CRITICAL FILE MISSING: ${message}`);
+            console.error(`This file is required for the plugin to function correctly`);
+            
+            // Exit with error for critical files
+            if (file.source.includes('DDC-template.json')) {
+                console.error(`❌ DDC template file is missing. Please ensure it exists in the src/ai directory and was properly built.`);
+                process.exit(1);
+            }
+        } else {
+            console.log(message);
+        }
         return;
     }
     
     try {
         fs.copyFileSync(sourcePath, destPath);
-        console.log(`Copied ${file.source} to ${destPath}`);
+        
+        // Special handling for DDC template
+        if (file.validate && file.source.includes('DDC-template.json')) {
+            console.log(`✅ Copied DDC template from ${sourcePath} to ${destPath}`);
+            
+            // Verify the file was copied correctly
+            try {
+                const fileContent = fs.readFileSync(destPath, 'utf8');
+                const jsonContent = JSON.parse(fileContent);
+                if (jsonContent && jsonContent.ddc_23_summaries && jsonContent.ddc_23_summaries.classes) {
+                    console.log(`✅ DDC template JSON is valid with ${jsonContent.ddc_23_summaries.classes.length} classes`);
+                } else {
+                    console.error(`❌ DDC template JSON structure is invalid. Expected ddc_23_summaries.classes array.`);
+                }
+            } catch (verifyError) {
+                console.error(`❌ Error verifying DDC template: ${verifyError.message}`);
+            }
+        } else {
+            console.log(`Copied ${file.source} to ${destPath}`);
+        }
     } catch (error) {
         console.error(`Error copying ${file.source}: ${error.message}`);
     }
 });
 
 console.log('Plugin files copied to Obsidian vault.');
+
+// Clean up master-analysis.json file if it exists
+const masterAnalysisPath = path.join(pluginDir, 'master-analysis.json');
+if (fs.existsSync(masterAnalysisPath)) {
+    console.log(`Found deprecated master-analysis.json file at ${masterAnalysisPath}`);
+    try {
+        fs.unlinkSync(masterAnalysisPath);
+        console.log('Successfully deleted deprecated master-analysis.json file.');
+    } catch (error) {
+        console.error(`Error deleting master-analysis.json: ${error.message}`);
+    }
+} else {
+    console.log('No deprecated master-analysis.json file found. Nothing to clean up.');
+}
+
 console.log('Please restart Obsidian to load the updated plugin.'); 

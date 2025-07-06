@@ -6,9 +6,15 @@ export { KnowledgeActionsManager } from './KnowledgeActionsManager';
 // Export interfaces for type checking
 export type { 
     KnowledgeStructureData,
-    DomainData,
-    NetworkNode 
+    NetworkNode
 } from './KnowledgeStructureManager';
+
+// Export domain-related types from the correct location
+export type {
+    DomainData,
+    HierarchicalDomain,
+    DomainConnection
+} from '../../components/domain-distribution/DomainDistributionChart';
 
 export type { 
     KnowledgeEvolutionData,

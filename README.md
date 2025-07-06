@@ -102,6 +102,7 @@ The plugin includes a comprehensive vault analysis feature that provides deep in
    - **Search & Filter**: Find notes by title, keywords, or knowledge domain
    - **Interactive Navigation**: Click note titles to open them directly
    - **Data Persistence**: Results saved to `data/vault-analysis.json`
+   - **Tab-Specific Cache**: Each analysis tab (Structure, Evolution, Actions) has its own cache file for improved performance and modularity
 
 #### Vault Analysis Benefits
 
@@ -149,6 +150,7 @@ This plugin leverages cutting-edge technology for optimal performance:
 - Rust compiled to WebAssembly for high-performance graph analysis
 - [rustnetworkx-core](https://github.com/rustworkx/rustworkx) for efficient graph algorithms
 - Modern web technologies for interactive visualizations
+- Modular cache system with tab-specific analysis files
 
 ### Performance Features
 
@@ -158,6 +160,7 @@ The plugin includes several optimizations for excellent performance:
 - **Memory Management**: Optimized memory usage for large vaults
 - **Fast Calculations**: High-performance centrality algorithms
 - **Responsive Interface**: Non-blocking operations for smooth experience
+- **Modular Cache**: Tab-specific analysis files for independent updates and reduced memory usage
 
 ## Development
 

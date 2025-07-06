@@ -27,7 +27,8 @@ export interface DomainConnection {
 }
 
 export interface DomainDistributionData {
-    // Hierarchical domain structure for sunburst visualization (4 layers: Main Classes, Divisions, Sections, User Domains)
+    // Hierarchical domain structure for sunburst visualization (2 layers: Main Classes, Sections)
+    // Built by MasterAnalysisManager using section-based classification
     domainHierarchy: HierarchicalDomain[];
     
     // Cross-domain connections
@@ -137,7 +138,7 @@ export class DomainDistributionChart {
                 <div class="placeholder-icon">📊</div>
                 <div class="placeholder-title">No Domain Hierarchy Available</div>
                 <div class="placeholder-text">
-                    Please generate vault analysis with DDC hierarchy to see four-layer domain distribution.
+                    Please generate vault analysis with optimized DDC section classification to see four-layer domain distribution.
                 </div>
             </div>
         `;
@@ -221,16 +222,38 @@ export class DomainDistributionChart {
         // Responsive: always use 80% of container width, maintain square aspect ratio
         const width = containerWidth * 0.8;
         const height = width; // Keep square aspect ratio
+        const radius = width / 6; // Use D3 standard radius calculation
 
         // Create container for chart
         const sunburstContainer = d3.select(container)
             .style('position', 'relative');
 
-        // Prepare data for four-layer DDC structure
-        const hierarchyData = this.prepareFourLayerHierarchy();
-        console.log('📊 Four-layer DDC hierarchy data:', JSON.stringify(hierarchyData, null, 2));
+        // Prepare data - hierarchy is now pre-built by MasterAnalysisManager
+        const hierarchyData = this.prepareOptimizedHierarchy();
         
-        // Compute the layout to get actual hierarchy depth (should be 4 for full DDC + user domains)
+        // DETAILED DEBUGGING: Let's see what we're actually getting
+        console.log('📊 Raw domainHierarchy from MasterAnalysisManager:', this.data?.domainHierarchy);
+        console.log('📊 Prepared hierarchyData:', hierarchyData);
+        console.log('📊 HierarchyData children count:', hierarchyData.children?.length || 0);
+        
+        // Debug each level
+        if (hierarchyData.children) {
+            hierarchyData.children.forEach((child, i) => {
+                console.log(`📊 Level 1 [${i}]: ${child.name} (${child.noteCount || child.value} notes, children: ${child.children?.length || 0})`);
+                if (child.children) {
+                    child.children.forEach((grandChild, j) => {
+                        console.log(`📊   Level 2 [${i}.${j}]: ${grandChild.name} (${grandChild.noteCount || grandChild.value} notes, children: ${grandChild.children?.length || 0})`);
+                        if (grandChild.children) {
+                            grandChild.children.forEach((greatGrandChild, k) => {
+                                console.log(`📊     Level 3 [${i}.${j}.${k}]: ${greatGrandChild.name} (${greatGrandChild.noteCount || greatGrandChild.value} notes)`);
+                            });
+                        }
+                    });
+                }
+            });
+        }
+        
+        // Compute the layout using D3 standard approach
         const hierarchy = d3.hierarchy<D3HierarchyNode>(hierarchyData)
             .sum((d: D3HierarchyNode) => d.value || 0)
             .sort((a, b) => (b.value || 0) - (a.value || 0));
@@ -239,12 +262,40 @@ export class DomainDistributionChart {
             .size([2 * Math.PI, hierarchy.height + 1])
             (hierarchy);
 
-        // Calculate radius for four layers (Main Classes, Divisions, Sections, User Domains)
-        const maxRadialExtent = hierarchy.height + 1; // Should be 5 (root + 4 layers)
-        const availableRadius = Math.min(width, height) / 2 - 40; // Leave margin for labels
-        const radius = availableRadius / maxRadialExtent;
-        
-        console.log(`📊 DDC Sunburst: container=${containerWidth}px, chart=${width}px, layers=${hierarchy.height}, radius=${radius.toFixed(1)}px`);
+        console.log(`📊 DDC Sunburst: ${width}px, layers=${hierarchy.height}, total_nodes=${root.descendants().length}`);
+        console.log(`📊 Descendants by depth:`, root.descendants().reduce((acc: any, d: any) => {
+            acc[d.depth] = (acc[d.depth] || 0) + 1;
+            return acc;
+        }, {}));
+
+        // Create color scale - simpler approach using D3 standard colors
+        const color = d3.scaleOrdinal(d3.quantize(d3.interpolateRainbow, (hierarchyData.children?.length || 0) + 1));
+
+        // Create the arc generator following D3 example
+        const arc = d3.arc<any>()
+            .startAngle((d: any) => d.x0)
+            .endAngle((d: any) => d.x1)
+            .padAngle((d: any) => Math.min((d.x1 - d.x0) / 2, 0.005))
+            .padRadius(radius * 1.5)
+            .innerRadius((d: any) => d.y0 * radius)
+            .outerRadius((d: any) => Math.max(d.y0 * radius, d.y1 * radius - 1));
+
+        // MODIFIED: Show all layers at once - removed depth filtering
+        const arcVisible = (d: any) => {
+            return d.y0 >= 1 && d.x1 > d.x0;
+        };
+
+        // Label visibility function - show labels for all visible arcs
+        const labelVisible = (d: any) => {
+            return d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.03;
+        };
+
+        // Label transform function
+        const labelTransform = (d: any) => {
+            const x = (d.x0 + d.x1) / 2 * 180 / Math.PI;
+            const y = (d.y0 + d.y1) / 2 * radius;
+            return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
+        };
 
         // Create SVG
         const svg = sunburstContainer
@@ -259,63 +310,79 @@ export class DomainDistributionChart {
 
         const g = svg.append('g');
 
-        // Create color scale for four layers
-        const layerColors = {
-            1: d3.scaleOrdinal(d3.schemeCategory10),     // Main Classes
-            2: d3.scaleOrdinal(d3.schemePastel1),       // Divisions
-            3: d3.scaleOrdinal(d3.schemeSet3),          // Sections
-            4: d3.scaleOrdinal(d3.schemeAccent)         // User Domains
-        };
-        
-        // Create the arc generator
-        const arc = d3.arc<TypedHierarchyNode>()
-            .startAngle((d: TypedHierarchyNode) => d.x0)
-            .endAngle((d: TypedHierarchyNode) => d.x1)
-            .padAngle((d: TypedHierarchyNode) => Math.min((d.x1 - d.x0) / 2, 0.005))
-            .padRadius(radius * 1.5)
-            .innerRadius((d: TypedHierarchyNode) => d.y0 * radius)
-            .outerRadius((d: TypedHierarchyNode) => Math.max(d.y0 * radius, d.y1 * radius - 1));
-
-        // Filter out root node but include all four layers
-        const visibleNodes = root.descendants().filter((d: TypedHierarchyNode) => d.depth > 0 && d.depth <= 4);
-
-        // Create arcs with layer-specific coloring
-        const arcs = g.selectAll('path')
-            .data(visibleNodes)
+        // Create all arcs (excluding root) - show all layers immediately
+        const paths = g.selectAll('path')
+            .data(root.descendants().slice(1)) // Standard D3 approach - all descendants except root
             .enter().append('path')
-            .attr('d', (d: TypedHierarchyNode) => arc(d))
-            .attr('fill', (d: TypedHierarchyNode) => {
-                const layer = Math.min(d.depth, 4) as 1 | 2 | 3 | 4;
-                const colorScale = layerColors[layer];
-                
-                // Use ancestor path for consistent coloring within branches
-                let colorKey = d.data.name;
-                if (d.depth > 1 && d.parent) {
-                    colorKey = d.parent.data.name;
-                    if (d.depth > 2 && d.parent.parent) {
-                        colorKey = d.parent.parent.data.name;
-                        if (d.depth > 3 && d.parent.parent.parent) {
-                            colorKey = d.parent.parent.parent.data.name;
-                        }
-                    }
-                }
-                
-                return colorScale(colorKey);
+            .attr('d', arc)
+            .attr('fill', (d: any) => {
+                // Color based on top-level category for consistency
+                while (d.depth > 1) d = d.parent;
+                return color(d.data.name);
             })
+            .attr('fill-opacity', (d: any) => arcVisible(d) ? (d.children ? 0.6 : 0.4) : 0)
             .attr('stroke', 'var(--background-primary)')
-            .attr('stroke-width', 1.5)
-            .style('cursor', 'pointer')
-            .style('opacity', 0.85)
-            .style('transition', 'all 0.2s ease');
+            .attr('stroke-width', 1)
+            .attr('pointer-events', (d: any) => arcVisible(d) ? 'auto' : 'none')
+            .style('cursor', 'default') // Removed pointer cursor since no click functionality
+            .style('transition', 'opacity 0.2s ease, filter 0.2s ease'); // Simplified transitions
+
+        // Add tooltips to paths
+        const format = d3.format(',d');
+        paths.append('title')
+            .text((d: any) => {
+                const path = d.ancestors().map((ancestor: any) => ancestor.data.name).reverse().join(' → ');
+                const info = [
+                    `${path}`,
+                    `${format(d.value || d.data.noteCount || 0)} notes`,
+                ];
+                if (d.data.ddcCode) {
+                    info.push(`DDC: ${d.data.ddcCode}`);
+                }
+                if (d.data.avgCentrality !== undefined) {
+                    info.push(`Centrality: ${d.data.avgCentrality.toFixed(3)}`);
+                }
+                return info.join('\n');
+            });
+
+        // Add labels - show all labels for visible arcs
+        const labels = g.append('g')
+            .attr('pointer-events', 'none')
+            .attr('text-anchor', 'middle')
+            .style('user-select', 'none')
+            .selectAll('text')
+            .data(root.descendants().slice(1))
+            .enter().append('text')
+            .attr('dy', '0.35em')
+            .attr('fill-opacity', (d: any) => +labelVisible(d))
+            .attr('transform', (d: any) => labelTransform(d))
+            .attr('fill', 'var(--text-normal)')
+            .style('font-size', (d: any) => {
+                // Adjust font size based on depth and arc size
+                const baseSize = Math.max(8, radius * 0.08);
+                const depthFactor = Math.max(0.6, 1 - (d.depth - 1) * 0.1);
+                return `${baseSize * depthFactor}px`;
+            })
+            .text((d: any) => {
+                // Show abbreviated names for smaller arcs
+                const arcSize = (d.y1 - d.y0) * (d.x1 - d.x0);
+                const name = d.data.name;
+                if (arcSize < 0.1 && name.length > 8) {
+                    return name.substring(0, 8) + '...';
+                }
+                return name;
+            });
 
         // Create enlarged center circle for info panel
-        const centerRadius = Math.max(radius * 1.2, 60);
+        const centerRadius = Math.max(radius * 0.9, 40);
         const centerCircle = g.append('circle')
+            .datum(root)
             .attr('r', centerRadius)
             .attr('fill', 'var(--background-secondary)')
             .attr('stroke', 'var(--background-modifier-border)')
             .attr('stroke-width', 2)
-            .style('opacity', 0.95);
+            .style('opacity', 0.95)
+            .style('cursor', 'default'); // Removed pointer cursor since no click functionality
 
         // Create center info panel group
         const centerInfo = g.append('g')
@@ -337,22 +404,21 @@ export class DomainDistributionChart {
                 .attr('y', 0)
                 .style('opacity', 0);
 
-            if (data) {
+            if (data && data !== root) {
                 // Show detailed segment information
-                const percentage = ((data.value || 0) / (root.value || 1) * 100).toFixed(1);
-                const layerNames = { 1: 'Main Class', 2: 'Division', 3: 'Section', 4: 'User Domain' };
-                const layerName = layerNames[data.depth as keyof typeof layerNames] || `Layer ${data.depth}`;
+                const percentage = ((data.value || data.data.noteCount || 0) / (root.value || 1) * 100).toFixed(1);
+                const layerNames = ['Root', 'Main Class', 'Division', 'Section', 'User Domain'];
+                const layerName = layerNames[data.depth] || `Layer ${data.depth}`;
                 
                 // Domain name with text wrapping for long names
                 const domainName = data.data.name;
-                const maxLineLength = 16; // Characters per line
+                const maxLineLength = 14;
                 
                 // Split long domain names into multiple lines
                 const nameLines = [];
                 if (domainName.length <= maxLineLength) {
                     nameLines.push(domainName);
                 } else {
-                    // Try to break at word boundaries
                     const words = domainName.split(' ');
                     let currentLine = '';
                     
@@ -364,7 +430,6 @@ export class DomainDistributionChart {
                                 nameLines.push(currentLine);
                                 currentLine = word;
                             } else {
-                                // Single word too long, truncate
                                 nameLines.push(word.slice(0, maxLineLength - 3) + '...');
                                 currentLine = '';
                             }
@@ -374,14 +439,12 @@ export class DomainDistributionChart {
                         nameLines.push(currentLine);
                     }
                     
-                    // Limit to 2 lines maximum
                     if (nameLines.length > 2) {
                         nameLines[1] = nameLines[1].slice(0, maxLineLength - 3) + '...';
                         nameLines.splice(2);
                     }
                 }
 
-                // Build all text content as tspan elements
                 const lineHeight = '1.2em';
                 let currentLine = 0;
                 
@@ -390,99 +453,90 @@ export class DomainDistributionChart {
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', index === 0 ? '0em' : lineHeight)
-                        .style('font-size', Math.max(centerRadius * 0.14, 10) + 'px')
+                        .style('font-size', Math.max(centerRadius * 0.16, 10) + 'px')
                         .style('font-weight', '600')
                         .style('fill', 'var(--text-accent)')
                         .text(line);
                     currentLine++;
                 });
 
-                // Extra spacing after domain title
                 textContainer.append('tspan')
                     .attr('x', 0)
-                    .attr('dy', '1.8em')
+                    .attr('dy', '1.6em')
                     .style('font-size', '1px')
                     .text('');
 
-                // DDC Code (if available)
                 if (data.data.ddcCode) {
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.2em')
-                        .style('font-size', Math.max(centerRadius * 0.09, 8) + 'px')
+                        .style('font-size', Math.max(centerRadius * 0.10, 8) + 'px')
                         .style('fill', 'var(--text-muted)')
                         .text(`DDC: ${data.data.ddcCode}`);
                     currentLine++;
                 }
 
-                // Layer level
                 textContainer.append('tspan')
                     .attr('x', 0)
                     .attr('dy', lineHeight)
-                    .style('font-size', Math.max(centerRadius * 0.09, 7) + 'px')
+                    .style('font-size', Math.max(centerRadius * 0.10, 7) + 'px')
                     .style('fill', 'var(--text-muted)')
                     .text(layerName);
                 currentLine++;
 
-                // Notes count
                 textContainer.append('tspan')
                     .attr('x', 0)
                     .attr('dy', lineHeight)
-                    .style('font-size', Math.max(centerRadius * 0.22, 14) + 'px')
+                    .style('font-size', Math.max(centerRadius * 0.24, 14) + 'px')
                     .style('font-weight', '700')
                     .style('fill', 'var(--text-normal)')
-                    .text(data.data.noteCount || data.value || 0);
+                    .text(data.value || data.data.noteCount || 0);
                 currentLine++;
 
                 textContainer.append('tspan')
                     .attr('x', 0)
                     .attr('dy', lineHeight)
-                    .style('font-size', Math.max(centerRadius * 0.09, 7) + 'px')
+                    .style('font-size', Math.max(centerRadius * 0.10, 7) + 'px')
                     .style('fill', 'var(--text-muted)')
                     .text('notes');
                 currentLine++;
 
-                // Percentage
                 textContainer.append('tspan')
                     .attr('x', 0)
                     .attr('dy', lineHeight)
-                    .style('font-size', Math.max(centerRadius * 0.11, 9) + 'px')
+                    .style('font-size', Math.max(centerRadius * 0.12, 9) + 'px')
                     .style('font-weight', '500')
                     .style('fill', 'var(--text-accent)')
                     .text(`${percentage}%`);
                 currentLine++;
 
-                // Centrality (if available)
                 if (data.data.avgCentrality !== undefined) {
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', lineHeight)
-                        .style('font-size', Math.max(centerRadius * 0.08, 7) + 'px')
+                        .style('font-size', Math.max(centerRadius * 0.09, 7) + 'px')
                         .style('fill', 'var(--text-muted)')
                         .text(`Centrality: ${data.data.avgCentrality.toFixed(3)}`);
                     currentLine++;
                 }
 
-                // Center the entire text block vertically
                 const totalHeight = currentLine * 1.2;
                 textContainer.attr('y', -(totalHeight / 2) + 'em');
 
             } else {
-                // Show default DDC hierarchy information
+                // Show default hierarchy information
                 const totalNotes = root.value || 0;
                 const layerCount = hierarchy.height;
                 
-                // Build default content
                 textContainer.append('tspan')
                     .attr('x', 0)
                     .attr('dy', '0em')
-                    .style('font-size', Math.max(centerRadius * 0.13, 11) + 'px')
+                    .style('font-size', Math.max(centerRadius * 0.14, 11) + 'px')
                     .style('font-weight', '600')
                     .style('fill', 'var(--text-accent)')
                     .text('DDC Hierarchy');
 
                 if (totalNotes > 0) {
-                    // Empty line for spacing
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.4em')
@@ -492,7 +546,7 @@ export class DomainDistributionChart {
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.2em')
-                        .style('font-size', Math.max(centerRadius * 0.25, 16) + 'px')
+                        .style('font-size', Math.max(centerRadius * 0.26, 16) + 'px')
                         .style('font-weight', '700')
                         .style('fill', 'var(--text-normal)')
                         .text(totalNotes.toString());
@@ -500,11 +554,10 @@ export class DomainDistributionChart {
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.2em')
-                        .style('font-size', Math.max(centerRadius * 0.11, 9) + 'px')
+                        .style('font-size', Math.max(centerRadius * 0.12, 9) + 'px')
                         .style('fill', 'var(--text-muted)')
                         .text('total notes');
 
-                    // Empty line for spacing
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.4em')
@@ -514,23 +567,21 @@ export class DomainDistributionChart {
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.2em')
-                        .style('font-size', Math.max(centerRadius * 0.09, 7) + 'px')
+                        .style('font-size', Math.max(centerRadius * 0.10, 7) + 'px')
                         .style('fill', 'var(--text-muted)')
                         .text(`${layerCount} layers`);
 
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.2em')
-                        .style('font-size', Math.max(centerRadius * 0.07, 6) + 'px')
+                        .style('font-size', Math.max(centerRadius * 0.08, 6) + 'px')
                         .style('fill', 'var(--text-faint)')
-                        .text('hover for details');
+                        .text('hover to explore');
                 }
 
-                // Center the default text block vertically
                 textContainer.attr('y', '-2.5em');
             }
 
-            // Fade in the complete text container
             textContainer
                 .transition()
                 .duration(300)
@@ -540,76 +591,62 @@ export class DomainDistributionChart {
         // Initialize with default info
         updateCenterInfo();
 
-        // Enhanced hover effects with center info panel updates
+        // Enhanced hover effects - REMOVED all click functionality
         if (this.options.showTooltips) {
-            arcs
-                .on('mouseover', (event, d: TypedHierarchyNode) => {
-                    // Highlight the arc
+            paths
+                .on('mouseover', (event, d: any) => {
                     d3.select(event.currentTarget)
                         .style('opacity', 1)
                         .style('filter', 'brightness(1.1)');
 
-                    // Update center info panel with segment data
                     updateCenterInfo(d);
                 })
-                .on('mouseout', (event) => {
-                    // Restore original styling
+                .on('mouseout', (event, d: any) => {
                     d3.select(event.currentTarget)
-                        .style('opacity', 0.85)
+                        .style('opacity', null)
                         .style('filter', 'none');
 
-                    // Restore default center info
+                    // Return to default info when mouse leaves
                     updateCenterInfo();
                 });
         }
     }
 
-    // Prepare four-layer DDC hierarchy (Main Classes -> Divisions -> Sections -> User Domains)
-    private prepareFourLayerHierarchy(): D3HierarchyNode {
-        if (!this.data!.domainHierarchy || this.data!.domainHierarchy.length === 0) {
-            return { name: "root", children: [] };
+    // Prepare optimized hierarchy - data is now pre-built by MasterAnalysisManager
+    private prepareOptimizedHierarchy(): D3HierarchyNode {
+        // Create root node for hierarchy
+        const root: D3HierarchyNode = { name: "Knowledge Domains", children: [] };
+        
+        // Convert hierarchical domain structure to D3 format
+        const convertHierarchy = (nodes: HierarchicalDomain[]): D3HierarchyNode[] => {
+            return nodes.map(node => {
+                const d3Node: D3HierarchyNode = {
+                    name: node.name,
+                    ddcCode: node.ddcCode,
+                    noteCount: node.noteCount,
+                    keywords: node.keywords,
+                    level: node.level
+                };
+                
+                // Only add value for leaf nodes (level 2) or nodes without children
+                if ((node.level === 2 || !node.children || node.children.length === 0) && node.noteCount) {
+                    d3Node.value = node.noteCount;
+                }
+                
+                // Add children if they exist
+                if (node.children && node.children.length > 0) {
+                    d3Node.children = convertHierarchy(node.children);
+                }
+                
+                return d3Node;
+            });
+        };
+        
+        if (this.data?.domainHierarchy) {
+            root.children = convertHierarchy(this.data.domainHierarchy);
         }
-
-        // Validate that we have a proper four-layer structure
-        const validateAndStructure = (nodes: HierarchicalDomain[]): D3HierarchyNode[] => {
-            return nodes
-                .filter(node => node.noteCount > 0)
-                .map(node => {
-                    const d3Node: D3HierarchyNode = {
-                        name: node.name,
-                        ddcCode: node.ddcCode,
-                        avgCentrality: node.avgCentrality,
-                        keywords: node.keywords,
-                        level: node.level,
-                        noteCount: node.noteCount
-                    };
-
-                    if (node.children && node.children.length > 0) {
-                        // This is a parent node - validate children
-                        const validChildren = validateAndStructure(node.children);
-                        if (validChildren.length > 0) {
-                            d3Node.children = validChildren;
-                        } else {
-                            // If no valid children, this becomes a leaf node
-                            d3Node.value = node.noteCount;
-                        }
-                    } else {
-                        // This is a leaf node
-                        d3Node.value = node.noteCount;
-                    }
-
-                    return d3Node;
-                });
-        };
-
-        const structuredHierarchy = validateAndStructure(this.data!.domainHierarchy);
         
-        console.log(`📊 DDC Four-Layer Structure: ${structuredHierarchy.length} main classes prepared`);
-        
-        return {
-            name: "root",
-            children: structuredHierarchy
-        };
+        return root;
     }
 
     public async renderWithData(data: DomainDistributionData): Promise<void> {

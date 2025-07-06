@@ -21,6 +21,9 @@ export class AIModelService {
     private settings: GraphAnalysisSettings;
     private readonly RATE_LIMIT_DELAY = 2500; // 2.5 seconds between requests for 30 RPM
     private readonly MAX_RETRIES = 3;
+    
+    // NEW: Track if context is loaded to avoid redundant loading
+    private contextLoaded: boolean = false;
 
     constructor(settings: GraphAnalysisSettings) {
         this.settings = settings;
@@ -31,6 +34,20 @@ export class AIModelService {
      */
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;
+    }
+    
+    /**
+     * NEW: Check if context is loaded
+     */
+    public isContextLoaded(): boolean {
+        return this.contextLoaded;
+    }
+    
+    /**
+     * NEW: Set context loaded state
+     */
+    public setContextLoaded(loaded: boolean): void {
+        this.contextLoaded = loaded;
     }
 
     /**
@@ -52,13 +69,40 @@ export class AIModelService {
         chunkIndex: number,
         totalChunks: number
     ): Promise<string> {
-        const response = await this.callGeminiFlashLite(
-            prompt, 
-            50, // Brief acknowledgment only
-            0.1  // Low temperature for consistent responses
-        );
-        console.log(`Chunk ${chunkIndex}/${totalChunks} processed successfully`);
-        return response.result;
+        try {
+            // Use more output tokens to ensure model has room to acknowledge
+            const response = await this.callGeminiFlashLite(
+                prompt, 
+                200, // Increased from 50 to allow for proper acknowledgment
+                0.1,  // Low temperature for consistent responses
+                0,    // Retry count
+                `STAGE 1 (Chunk ${chunkIndex}/${totalChunks})` // Label for logs
+            );
+            
+            // Verify the model acknowledged receipt properly
+            const result = response.result.toLowerCase();
+            const expectedAcknowledgment = chunkIndex === totalChunks 
+                ? "received complete" 
+                : `received chunk ${chunkIndex}`;
+                
+            if (!result.includes(expectedAcknowledgment.toLowerCase())) {
+                console.error(`❌ ERROR - Model didn't properly acknowledge chunk ${chunkIndex}/${totalChunks}. Response: "${response.result}"`);
+                throw new Error(`Failed to get proper acknowledgment for chunk ${chunkIndex}/${totalChunks}`);
+            } else {
+                console.log(`✅ Chunk ${chunkIndex}/${totalChunks} processed and acknowledged successfully`);
+            }
+            
+            // Mark context as loaded if this is the last chunk
+            if (chunkIndex === totalChunks) {
+                this.contextLoaded = true;
+                console.log('✅ All data chunks loaded successfully, context is ready');
+            }
+            
+            return response.result;
+        } catch (error) {
+            console.error(`❌ ERROR - Failed to store data chunk ${chunkIndex}/${totalChunks}:`, error);
+            throw error; // Re-throw the error to be handled by the caller
+        }
     }
 
     /**
@@ -68,8 +112,72 @@ export class AIModelService {
         prompt: string,
         maxOutputTokens: number = 8000
     ): Promise<AIResponse> {
-        console.log('Sending complete analysis request to Gemini 2.0 Flash-Lite...');
-        return this.callGeminiFlashLite(prompt, maxOutputTokens, 0.3);
+        try {
+            console.log(`Sending complete analysis request to Gemini 2.0 Flash-Lite (max tokens: ${maxOutputTokens})...`);
+            
+            // Add explicit instructions to ensure proper JSON formatting
+            const enhancedPrompt = `${prompt}\n\nIMPORTANT: Your response MUST include properly formatted JSON in code blocks. Do not skip the JSON output.`;
+            
+            const response = await this.callGeminiFlashLite(
+                enhancedPrompt, 
+                maxOutputTokens,
+                0.3,
+                0,
+                "STAGE 2 (Analysis)" // Label for logs
+            );
+            
+            // Check if response contains JSON code blocks
+            if (!response.result.includes('```json') && !response.result.includes('```')) {
+                console.error('❌ ERROR - Response does not contain JSON code blocks.');
+                console.log('❌ ERROR - Response preview:', response.result.substring(0, 500));
+                throw new Error('AI response does not contain required JSON code blocks');
+            }
+            
+            return response;
+        } catch (error) {
+            console.error('❌ ERROR - Failed to generate complete analysis:', error);
+            throw error; // Re-throw the error to be handled by the caller
+        }
+    }
+    
+    /**
+     * NEW: Tab-specific analysis request
+     */
+    public async generateTabAnalysis(
+        tabName: string,
+        prompt: string,
+        maxOutputTokens: number = 8000
+    ): Promise<AIResponse> {
+        try {
+            if (!this.contextLoaded) {
+                throw new Error('Context not loaded. Please load data context first.');
+            }
+            
+            console.log(`Sending ${tabName} tab analysis request to Gemini 2.0 Flash-Lite...`);
+            
+            // Add tab-specific formatting instructions
+            const enhancedPrompt = `${prompt}\n\nIMPORTANT: Your response MUST include properly formatted JSON in code blocks for the ${tabName} tab. Do not skip the JSON output.`;
+            
+            const response = await this.callGeminiFlashLite(
+                enhancedPrompt, 
+                maxOutputTokens,
+                0.3,
+                0,
+                `${tabName.toUpperCase()} TAB ANALYSIS` // Label for logs
+            );
+            
+            // Check if response contains JSON code blocks
+            if (!response.result.includes('```json') && !response.result.includes('```')) {
+                console.error(`❌ ERROR - ${tabName} tab response does not contain JSON code blocks.`);
+                console.log('❌ ERROR - Response preview:', response.result.substring(0, 500));
+                throw new Error(`AI response for ${tabName} tab does not contain required JSON code blocks`);
+            }
+            
+            return response;
+        } catch (error) {
+            console.error(`❌ ERROR - Failed to generate ${tabName} tab analysis:`, error);
+            throw error; // Re-throw the error to be handled by the caller
+        }
     }
 
     /**
@@ -108,11 +216,16 @@ export class AIModelService {
         prompt: string, 
         maxOutputTokens: number = 8000,
         temperature: number = 0.3,
-        retryCount: number = 0
+        retryCount: number = 0,
+        stageLabel: string = "API Call" // Default label
     ): Promise<AIResponse> {
         if (!this.settings?.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
             throw new Error('Gemini API key not configured. Please configure your API key in settings.');
         }
+
+        // Log complete prompt for debugging
+        console.log(`${stageLabel} - COMPLETE PROMPT (${prompt.length} chars, max tokens: ${maxOutputTokens}):`);
+        console.log(prompt);
 
         const apiKey = this.settings.geminiApiKey;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
@@ -142,7 +255,7 @@ export class AIModelService {
             });
 
             if (response.status !== 200) {
-                return this.handleAPIError(response, prompt, maxOutputTokens, temperature, retryCount);
+                return this.handleAPIError(response, prompt, maxOutputTokens, temperature, retryCount, stageLabel);
             }
 
             const data = response.json;
@@ -159,6 +272,10 @@ export class AIModelService {
             };
 
             const result = data.candidates[0].content.parts[0].text.trim();
+            
+            // Log complete response for debugging
+            console.log(`${stageLabel} - COMPLETE RESPONSE (${result.length} chars, tokens: ${tokenUsage.totalTokens}):`);
+            console.log(result);
 
             return {
                 result,
@@ -166,16 +283,16 @@ export class AIModelService {
             };
 
         } catch (error) {
-            console.error('Gemini 2.0 Flash-Lite API error:', error);
+            console.error(`${stageLabel} - Gemini 2.0 Flash-Lite API error:`, error);
             
             const errorMessage = (error as Error).message;
             if (errorMessage.includes('status 429') && retryCount < this.MAX_RETRIES) {
-                return this.handleRateLimit(prompt, maxOutputTokens, temperature, retryCount);
+                return this.handleRateLimit(prompt, maxOutputTokens, temperature, retryCount, stageLabel);
             }
             
             // Network error retry
             if (retryCount < 2 && !this.isAPIError(errorMessage)) {
-                return this.handleNetworkRetry(prompt, maxOutputTokens, temperature, retryCount);
+                return this.handleNetworkRetry(prompt, maxOutputTokens, temperature, retryCount, stageLabel);
             }
             
             throw error;
@@ -190,11 +307,12 @@ export class AIModelService {
         prompt: string,
         maxOutputTokens: number,
         temperature: number,
-        retryCount: number
+        retryCount: number,
+        stageLabel: string = "API Call"
     ): Promise<AIResponse> {
         // Handle rate limiting for 30 RPM limit
         if (response.status === 429 && retryCount < this.MAX_RETRIES) {
-            return this.handleRateLimit(prompt, maxOutputTokens, temperature, retryCount);
+            return this.handleRateLimit(prompt, maxOutputTokens, temperature, retryCount, stageLabel);
         }
         
         // Provide user-friendly error messages
@@ -216,13 +334,14 @@ export class AIModelService {
         prompt: string,
         maxOutputTokens: number,
         temperature: number,
-        retryCount: number
+        retryCount: number,
+        stageLabel: string = "API Call"
     ): Promise<AIResponse> {
         const waitTime = Math.max(this.RATE_LIMIT_DELAY, Math.pow(2, retryCount) * 3000);
-        console.log(`Rate limited (429). Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);
+        console.log(`${stageLabel} - Rate limited (429). Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);
         
         await new Promise(resolve => setTimeout(resolve, waitTime));
-        return await this.callGeminiFlashLite(prompt, maxOutputTokens, temperature, retryCount + 1);
+        return await this.callGeminiFlashLite(prompt, maxOutputTokens, temperature, retryCount + 1, stageLabel);
     }
 
     /**
@@ -232,13 +351,14 @@ export class AIModelService {
         prompt: string,
         maxOutputTokens: number,
         temperature: number,
-        retryCount: number
+        retryCount: number,
+        stageLabel: string = "API Call"
     ): Promise<AIResponse> {
         const waitTime = (retryCount + 1) * 3000;
-        console.log(`Network error. Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/2)`);
+        console.log(`${stageLabel} - Network error. Retrying in ${waitTime/1000} seconds... (attempt ${retryCount + 1}/2)`);
         
         await new Promise(resolve => setTimeout(resolve, waitTime));
-        return await this.callGeminiFlashLite(prompt, maxOutputTokens, temperature, retryCount + 1);
+        return await this.callGeminiFlashLite(prompt, maxOutputTokens, temperature, retryCount + 1, stageLabel);
     }
 
     /**

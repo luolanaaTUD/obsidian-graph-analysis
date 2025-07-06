@@ -928,6 +928,8 @@ graph TD
 ```
 
 
+## TODO
 
-
-centralize AI model management
+- Important: only use leaf node from DDC for finding the right slot with AI. Then create the structure based on DDC JSON file instead of relying on AI
+- add zoomable behaviour like D3 example
+- using theme color 

@@ -21,18 +21,28 @@ export interface NetworkNode {
 }
 
 export interface KnowledgeStructureData {
-    // Hierarchical domain structure for sunburst visualization (4 layers: Main Classes, Divisions, Sections, User Domains)
+    // Hierarchical domain structure for sunburst visualization (2 layers: Main Classes, Sections)
     domainHierarchy: HierarchicalDomain[];
     
-    // Cross-domain connections
+    // Cross-domain connections - optional
     domainConnections?: DomainConnection[];
     
-    // Existing network analysis
+    // Summary indicators for dashboard display
+    summaryIndicators?: {
+        topDomain: { percentage: number, name: string };
+        bridgeMaker: { score: number, name: string };
+        growthTrend: { percentage: number, description: string };
+        recentFocus: { count: number, name: string };
+    };
+    
+    // Network analysis
     knowledgeNetwork: {
         bridges: NetworkNode[];
         foundations: NetworkNode[];
         authorities: NetworkNode[];
     };
+    
+    // Insights and gaps
     insights: Array<{
         title: string;
         content: string;
@@ -54,12 +64,13 @@ export class KnowledgeStructureManager {
 
     public async loadCachedStructureData(): Promise<KnowledgeStructureData | null> {
         try {
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/master-analysis.json`;
+            // Use the tab-specific analysis file instead of master-analysis.json
+            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/structure-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const masterData = JSON.parse(content);
+            const data = JSON.parse(content);
             
-            if (masterData?.knowledgeStructure) {
-                this.data = masterData.knowledgeStructure;
+            if (data?.knowledgeStructure) {
+                this.data = data.knowledgeStructure;
                 return this.data;
             }
             return null;

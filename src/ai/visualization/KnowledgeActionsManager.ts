@@ -50,12 +50,13 @@ export class KnowledgeActionsManager {
 
     public async loadCachedActionsData(): Promise<KnowledgeActionsData | null> {
         try {
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/master-analysis.json`;
+            // Use the tab-specific analysis file instead of master-analysis.json
+            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/actions-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const masterData = JSON.parse(content);
+            const data = JSON.parse(content);
             
-            if (masterData?.recommendedActions) {
-                this.data = masterData.recommendedActions;
+            if (data?.recommendedActions) {
+                this.data = data.recommendedActions;
                 return this.data;
             }
             return null;

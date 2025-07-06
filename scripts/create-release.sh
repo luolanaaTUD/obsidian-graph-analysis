@@ -22,6 +22,7 @@ mkdir obsidian-graph-analysis
 echo "Copying files..."
 cp ../dist/main.js obsidian-graph-analysis/
 cp ../dist/graph_analysis_wasm_bg.wasm obsidian-graph-analysis/
+cp ../dist/DDC-template.json obsidian-graph-analysis/
 cp ../manifest.json obsidian-graph-analysis/
 cp ../README.md obsidian-graph-analysis/
 cp ../LICENSE obsidian-graph-analysis/
