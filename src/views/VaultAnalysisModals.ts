@@ -1,4 +1,4 @@
-import { App, Modal, setIcon, Notice } from 'obsidian';
+import { App, Modal, setIcon, Notice, TFile } from 'obsidian';
 import { KnowledgeCalendarChart } from '../components/calendar-chart/KnowledgeCalendarChart';
 import { 
     VaultAnalysisData, 
@@ -11,6 +11,7 @@ import {
 import { KnowledgeEvolutionData } from '../ai/visualization/KnowledgeEvolutionManager';
 import { KnowledgeStructureManager } from '../ai/visualization/KnowledgeStructureManager';
 import { GraphAnalysisSettings } from '../types/types';
+import { DomainDistributionChart } from '../components/domain-distribution/DomainDistributionChart';
 
 // Import type for the manager
 export interface VaultSemanticAnalysisManager {
@@ -279,7 +280,12 @@ export class VaultAnalysisModal extends Modal {
                 });
                 
                 resultItem.createEl('p', {
-                    text: `Knowledge Domain: ${result.knowledgeDomain}`,
+                    text: `Knowledge Domain: ${
+                        (result.knowledgeDomains && result.knowledgeDomains.length > 0
+                            ? result.knowledgeDomains.join(', ')
+                            : 'Unknown'
+                        ).replace(/\s*\([^)]*\)/g, '')
+                    }`,
                     cls: 'result-domain'
                 });
                 
@@ -349,7 +355,9 @@ export class VaultAnalysisModal extends Modal {
                 result.title.toLowerCase().includes(searchTerm) ||
                 result.summary.toLowerCase().includes(searchTerm) ||
                 result.keywords.toLowerCase().includes(searchTerm) ||
-                result.knowledgeDomain.toLowerCase().includes(searchTerm)
+                (result.knowledgeDomains && result.knowledgeDomains.some(domain => 
+                    domain.toLowerCase().includes(searchTerm)
+                ))
             );
             
             displayResults(filteredResults);
@@ -409,6 +417,34 @@ export class VaultAnalysisModal extends Modal {
             return;
         }
 
+        // Create three main sections
+        const domainDistributionSection = structureContainer.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
+        
+        domainDistributionSection.createEl('h3', {
+            text: 'Knowledge Domain Distribution',
+            cls: 'vault-analysis-section-title'
+        });
+        
+        const networkAnalysisSection = structureContainer.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
+        
+        networkAnalysisSection.createEl('h3', {
+            text: 'Knowledge Network Analysis',
+            cls: 'vault-analysis-section-title'
+        });
+        
+        const gapsSection = structureContainer.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
+        
+        gapsSection.createEl('h3', {
+            text: 'Knowledge Gaps',
+            cls: 'vault-analysis-section-title'
+        });
+        
         // Check for cached tab-specific analysis
         try {
             this.structureAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('structure') as StructureAnalysisData;
@@ -422,37 +458,224 @@ export class VaultAnalysisModal extends Modal {
             this.structureAnalysisData = null;
         }
         
+        // ALWAYS display domain distribution chart if vault analysis data exists
+        await this.displayDomainDistributionChart(domainDistributionSection);
+        
+        // For the other sections, check if we have cached structure analysis data
         if (this.structureAnalysisData?.knowledgeStructure) {
-            // Show cached analysis directly using KnowledgeStructureManager
-            await this.displayKnowledgeStructureWithManager(structureContainer);
+            // Display network analysis and gaps from cached data
+            await this.displayNetworkAnalysis(networkAnalysisSection);
+            await this.displayKnowledgeGaps(gapsSection);
             
             // Show Update Analysis button below the results
             await this.createUpdateAnalysisButtonSection(structureContainer, 'structure');
         } else {
-            // Show Generate Analysis button
+            // Show placeholder for network analysis and gaps
+            this.showNetworkAnalysisPlaceholder(networkAnalysisSection);
+            this.showKnowledgeGapsPlaceholder(gapsSection);
+            
+            // Show Generate Analysis button for the AI-powered parts
             await this.createAnalysisButtonSection(structureContainer, 'structure');
         }
     }
+    
+    /**
+     * Display domain distribution chart using vault analysis data directly
+     */
+    private async displayDomainDistributionChart(container: HTMLElement): Promise<void> {
+        try {
+            // Create chart container with proper sizing
+            const chartContainer = container.createEl('div', { 
+                cls: 'domain-chart-container'
+            });
+            
+            // Create domain chart instance
+            const domainChart = new DomainDistributionChart(
+                this.app,
+                this.settings,
+                chartContainer,
+                {
+                    chartType: 'sunburst',
+                    showTooltips: true,
+                    showLabels: true
+                }
+            );
+            
+            // Load data from cached vault analysis
+            const chartData = await domainChart.loadCachedData();
+            
+            if (chartData) {
+                await domainChart.renderWithData(chartData);
+            } else {
+                // Show placeholder if no chart data could be built
+                const placeholder = container.createEl('div', { 
+                    cls: 'vault-analysis-placeholder' 
+                });
+                placeholder.createEl('p', {
+                    text: 'No domain hierarchy data available. Please generate vault analysis with hierarchical domain structure.',
+                    cls: 'analysis-required'
+                });
+            }
+        } catch (error) {
+            console.error('Error displaying domain distribution chart:', error);
+            const errorMsg = container.createEl('div', { cls: 'error-message' });
+            errorMsg.createEl('p', {
+                text: `Failed to display domain chart: ${error.message}`,
+                cls: 'error-text'
+            });
+        }
+    }
+    
+    /**
+     * Display network analysis from cached structure analysis data
+     */
+    private async displayNetworkAnalysis(container: HTMLElement): Promise<void> {
+        if (!this.structureAnalysisData?.knowledgeStructure?.knowledgeNetwork) {
+            this.showNetworkAnalysisPlaceholder(container);
+            return;
+        }
+        
+        const networkData = this.structureAnalysisData.knowledgeStructure.knowledgeNetwork;
+        
+        // Bridge Notes
+        if (networkData.bridges && networkData.bridges.length > 0) {
+            this.createNetworkSubsection(container, '🌉 Knowledge Bridges', networkData.bridges, 
+                'Notes that connect different knowledge domains');
+        }
 
-    private async displayKnowledgeStructureWithManager(container: HTMLElement): Promise<void> {
-        // Use tab-specific data only
-        const structureData = this.structureAnalysisData?.knowledgeStructure;
-                             
-        if (!structureData) return;
+        // Foundation Notes
+        if (networkData.foundations && networkData.foundations.length > 0) {
+            this.createNetworkSubsection(container, '🏗️ Knowledge Foundations', networkData.foundations, 
+                'Core concepts central to your understanding');
+        }
 
-        console.log('Displaying Knowledge Structure with sunburst chart...');
+        // Authority Notes
+        if (networkData.authorities && networkData.authorities.length > 0) {
+            this.createNetworkSubsection(container, '👑 Knowledge Authorities', networkData.authorities, 
+                'Influential notes connected to other highly connected notes');
+        }
+    }
+    
+    /**
+     * Display knowledge gaps from cached structure analysis data
+     */
+    private async displayKnowledgeGaps(container: HTMLElement): Promise<void> {
+        if (!this.structureAnalysisData?.knowledgeStructure?.gaps) {
+            this.showKnowledgeGapsPlaceholder(container);
+            return;
+        }
+        
+        const gaps = this.structureAnalysisData.knowledgeStructure.gaps;
+        
+        if (gaps && gaps.length > 0) {
+            const gapsContainer = container.createEl('div', { 
+                cls: 'ai-insights-container'
+            });
 
-        // Create and initialize the KnowledgeStructureManager
-        this.knowledgeStructureManager = new KnowledgeStructureManager(
-            this.app,
-            this.settings
-        );
+            gapsContainer.createEl('h4', {
+                text: '🎯 Identified Knowledge Gaps',
+                cls: 'ai-insights-title'
+            });
 
-        // Render the knowledge structure visualization with data
-        await this.knowledgeStructureManager.renderWithData(
-            container,
-            structureData
-        );
+            const gapsList = gapsContainer.createEl('ul', { 
+                cls: 'gaps-list' 
+            });
+
+            gaps.slice(0, 8).forEach(gap => {
+                gapsList.createEl('li', { text: gap });
+            });
+        } else {
+            this.showKnowledgeGapsPlaceholder(container);
+        }
+    }
+    
+    /**
+     * Helper to create network subsection
+     */
+    private createNetworkSubsection(parent: HTMLElement, title: string, nodes: any[], description: string): void {
+        const subsection = parent.createEl('div', { 
+            cls: 'network-subsection' 
+        });
+        
+        subsection.createEl('h4', { 
+            text: title,
+            cls: 'network-title'
+        });
+        
+        subsection.createEl('p', { 
+            text: description,
+            cls: 'network-description'
+        });
+        
+        const nodesList = subsection.createEl('ul', { 
+            cls: 'network-nodes-list' 
+        });
+        
+        nodes.slice(0, 5).forEach(node => {
+            const nodeItem = nodesList.createEl('li');
+            const nodeLink = nodeItem.createEl('a', { 
+                text: node.title,
+                cls: 'network-node-link'
+            });
+            
+            // Add click handler to open the note
+            nodeLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                // Find the note path by title
+                const note = this.analysisData?.results.find(r => r.title === node.title);
+                if (note) {
+                    // Open the note
+                    const file = this.app.vault.getAbstractFileByPath(note.path);
+                    if (file && file instanceof TFile) {
+                        this.app.workspace.getLeaf().openFile(file);
+                    }
+                }
+            });
+            
+            // Add score
+            nodeItem.createEl('span', { 
+                text: ` (score: ${node.score.toFixed(3)})`,
+                cls: 'network-node-score'
+            });
+        });
+    }
+    
+    /**
+     * Show placeholder for network analysis section
+     */
+    private showNetworkAnalysisPlaceholder(container: HTMLElement): void {
+        const placeholder = container.createEl('div', { cls: 'section-placeholder' });
+        
+        placeholder.createEl('p', {
+            text: 'Generate AI analysis to discover bridge notes, foundation notes, and authority notes in your knowledge network.',
+            cls: 'placeholder-text'
+        });
+        
+        const featureList = placeholder.createEl('ul', { cls: 'feature-list' });
+        
+        featureList.createEl('li', { 
+            text: 'Knowledge Bridges - Notes that connect different knowledge domains'
+        });
+        
+        featureList.createEl('li', { 
+            text: 'Knowledge Foundations - Core concepts central to your understanding'
+        });
+        
+        featureList.createEl('li', { 
+            text: 'Knowledge Authorities - Influential notes connected to other highly connected notes'
+        });
+    }
+    
+    /**
+     * Show placeholder for knowledge gaps section
+     */
+    private showKnowledgeGapsPlaceholder(container: HTMLElement): void {
+        const placeholder = container.createEl('div', { cls: 'section-placeholder' });
+        
+        placeholder.createEl('p', {
+            text: 'Generate AI analysis to identify potential knowledge gaps and areas for expansion.',
+            cls: 'placeholder-text'
+        });
     }
 
     private showStructureEmptyState(container: HTMLElement): void {
@@ -639,8 +862,9 @@ export class VaultAnalysisModal extends Modal {
             
             // Refresh the current view to show results
             if (this.currentView === 'structure') {
-                await this.displayKnowledgeStructureWithManager(buttonSection);
-                await this.createUpdateAnalysisButtonSection(buttonSection, 'structure');
+                // Reload the entire structure view to show updated data
+                this.contentContainer.empty();
+                await this.loadKnowledgeStructureView();
             } else if (this.currentView === 'evolution') {
                 await this.displayCachedAnalysis(buttonSection);
                 await this.createUpdateAnalysisButtonSection(buttonSection, 'evolution');

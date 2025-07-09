@@ -4,16 +4,15 @@ This document outlines both the user-facing insights and technical implementatio
 
 ---
 
-## User-Facing Insights Overview
+## Knowledge Structure Analysis
 
-### Knowledge Structure Analysis
+### Knowledge domain distribution
 
-- **Knowledge domain distribution** - percentage and depth of each domain
-- **Topic hierarchies** - how concepts nest within broader disciplines
-- **Knowledge cluster detection** - identifying related concept groups
-- **Knowledge gaps** - underexplored areas ripe for expansion
+- **knowledge domain summary**
+- **Knowledge domain distribution chart** - percentage and depth of each domain
 
-_Visualizations_: [Zoomable Sunburst](https://observablehq.com/@d3/zoomable-sunburst), [Chord Diagram](https://observablehq.com/@d3/chord-diagram)
+_Visualizations_: [Zoomable Sunburst](https://observablehq.com/@d3/zoomable-sunburst)
+
 
 ### Knowledge Network Analysis
 
@@ -30,14 +29,18 @@ _Visualizations_: [Zoomable Sunburst](https://observablehq.com/@d3/zoomable-sunb
     - Prestigious concepts connected to other important ideas
     - Theoretical foundations with deep interconnections
 
-### Knowledge Evolution
+
+### Knowledge Gaps
+- **Knowledge gaps** - underexplored areas ripe for expansion
+
+## Knowledge Evolution
 
 - **Knowledge Development Timeline** - [Calendar View](https://observablehq.com/@d3/calendar/2)
 - **Topic introduction patterns** - when different subjects entered your system
 - **Focus shift analysis** - current interests vs historical patterns
 - **Learning velocity** - pace of knowledge acquisition over time
 
-### Recommended Actions
+## Recommended Actions
 
 - **Knowledge Maintenance**
     - Review schedules for reinforcing key concepts

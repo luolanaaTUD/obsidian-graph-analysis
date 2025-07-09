@@ -19,7 +19,7 @@ export interface VaultAnalysisResult {
     title: string;
     summary: string;
     keywords: string;
-    knowledgeDomain: string;
+    knowledgeDomains: string[]; // Changed from knowledgeDomain string to knowledgeDomains string array
     created: string;
     modified: string;
     path: string;
@@ -36,6 +36,7 @@ export interface VaultAnalysisResult {
         eigenvectorRank?: number;
         degreeRank?: number;
     };
+    knowledgeDomainNames?: string[];
 }
 
 export interface VaultAnalysisData {
@@ -417,157 +418,142 @@ export class MasterAnalysisManager {
     public buildHierarchyFromVaultData(
         analysisData: VaultAnalysisData
     ): HierarchicalDomain[] {
-        // Create maps for DDC hierarchy
+        // Create maps for DDC hierarchy - we'll only use class and section now
         const classMap = new Map<string, HierarchicalDomain>();
-        const divisionMap = new Map<string, HierarchicalDomain>();
         const sectionMap = new Map<string, HierarchicalDomain>();
         
         // Count notes per DDC section
         const sectionCounts = new Map<string, number>();
         const sectionNotes = new Map<string, VaultAnalysisResult[]>();
         
-        // Process each note to extract its DDC codes
+        // Get DDC name to code mapping for reverse lookup
+        const nameToCodeMap = new Map<string, string>();
+        const codeToNameMap = this.getDDCCodeToNameMap();
+        
+        // Add main class names to the code-to-name map
+        if (this.ddcTemplate && this.ddcTemplate.ddc_23_summaries && this.ddcTemplate.ddc_23_summaries.classes) {
+            this.ddcTemplate.ddc_23_summaries.classes.forEach(cls => {
+                // Store main class names with their IDs (0, 1, 2, etc.)
+                codeToNameMap.set(cls.id, cls.name);
+            });
+        }
+        
+        // Build reverse lookup map
+        codeToNameMap.forEach((name, code) => {
+            nameToCodeMap.set(name, code);
+        });
+        
+        // Process each note to extract its DDC codes or names
         analysisData.results.forEach(note => {
-            if (note.knowledgeDomain) {
-                // Split multiple domains if they exist
-                const domains = note.knowledgeDomain.split(',').map(d => d.trim());
-                
-                domains.forEach(domain => {
-                    // Skip empty domains
-                    if (!domain) return;
-                    
-                    // Skip invalid DDC codes
-                    if (!this.isValidDDCSectionId(domain)) {
-                        console.warn(`Invalid DDC section ID: ${domain} in note: ${note.title}`);
+            if (note.knowledgeDomains && note.knowledgeDomains.length > 0) {
+                // Process each domain in the array
+                note.knowledgeDomains.forEach(domain => {
+                    let sectionId = '';
+                    // Try to use domain as a DDC code first
+                    if (this.isValidDDCSectionId(domain)) {
+                        sectionId = domain;
+                    } 
+                    // If not a valid code, try to look up by name
+                    else if (nameToCodeMap.has(domain)) {
+                        sectionId = nameToCodeMap.get(domain) || '';
+                    } 
+                    // If still not found, skip this domain (do NOT create synthetic IDs)
+                    else {
+                        // Skip this domain
                         return;
                     }
-                    
-                    // Update section count
-                    sectionCounts.set(domain, (sectionCounts.get(domain) || 0) + 1);
-                    
-                    // Add note to section
-                    if (!sectionNotes.has(domain)) {
-                        sectionNotes.set(domain, []);
+                    // Skip if we couldn't determine a section ID
+                    if (!sectionId) return;
+                    // Get class ID from section ID
+                    const classId = this.getClassIdFromSection(sectionId);
+                    // Update section counts
+                    sectionCounts.set(sectionId, (sectionCounts.get(sectionId) || 0) + 1);
+                    // Update section notes
+                    if (!sectionNotes.has(sectionId)) {
+                        sectionNotes.set(sectionId, []);
                     }
-                    sectionNotes.get(domain)!.push(note);
+                    sectionNotes.get(sectionId)?.push(note);
+                    // Create class node if it doesn't exist
+                    if (!classMap.has(classId)) {
+                        // Get the proper name for the class - for standard DDC classes (0-9),
+                        // this will be the proper main class name
+                        const className = codeToNameMap.get(classId) || classId;
+                        classMap.set(classId, {
+                            ddcCode: classId,
+                            name: className,
+                            noteCount: 0,
+                            level: 1, // Main class level
+                            children: []
+                        });
+                    }
+                    // Create section node if it doesn't exist
+                    if (!sectionMap.has(sectionId)) {
+                        const sectionNode: HierarchicalDomain = {
+                            ddcCode: sectionId,
+                            name: codeToNameMap.get(sectionId) || sectionId,
+                            noteCount: 0,
+                            level: 2, // Section level (was 3 before)
+                            parent: classMap.get(classId)?.ddcCode // Fix: Use ddcCode string instead of the HierarchicalDomain object
+                        };
+                        sectionMap.set(sectionId, sectionNode);
+                        // Add section as child of class
+                        classMap.get(classId)?.children?.push(sectionNode);
+                    }
+                    // Update note count for section and class
+                    if (sectionMap.has(sectionId)) {
+                        const section = sectionMap.get(sectionId);
+                        if (section) {
+                            section.noteCount = (section.noteCount || 0) + 1;
+                        }
+                    }
+                    if (classMap.has(classId)) {
+                        const classNode = classMap.get(classId);
+                        if (classNode) {
+                            classNode.noteCount = (classNode.noteCount || 0) + 1;
+                        }
+                    }
                 });
             }
         });
         
-        // Build hierarchy from section counts
-        sectionCounts.forEach((count, sectionId) => {
-            // Extract class and division IDs
-            const classId = this.getClassIdFromSection(sectionId);
-            const divisionId = this.getDivisionIdFromSection(sectionId);
+        // Extract keywords for each section
+        sectionMap.forEach((section, sectionId) => {
+            const notes = sectionNotes.get(sectionId) || [];
+            const keywords = new Set<string>();
             
-            // Get section info
-            const sectionInfo = this.getDDCSectionInfo(sectionId);
-            
-            // Create or update class node
-            if (!classMap.has(classId)) {
-                const className = this.ddcMainClasses[classId] || `Class ${classId}`;
-                
-                classMap.set(classId, {
-                    name: className,
-                    noteCount: 0,
-                    children: [],
-                    level: 1,
-                    ddcCode: classId
-                });
-            }
-            
-            // Create or update division node
-            if (!divisionMap.has(divisionId)) {
-                const divisionName = this.ddcDivisions[divisionId] || `Division ${divisionId.split('-')[1] || '0'}`;
-                
-                const divisionNode: HierarchicalDomain = {
-                    name: divisionName,
-                    noteCount: 0,
-                    children: [],
-                    level: 2,
-                    ddcCode: divisionId,
-                    parent: classId
-                };
-                
-                divisionMap.set(divisionId, divisionNode);
-                
-                // Add division to its class
-                const classNode = classMap.get(classId);
-                if (classNode && classNode.children) {
-                    classNode.children.push(divisionNode);
-                }
-            }
-            
-            // Create section node
-            const sectionNode: HierarchicalDomain = {
-                name: sectionInfo ? sectionInfo.name : this.ddcSections[sectionId] || `Section ${sectionId.split('-')[2] || '0'}`,
-                noteCount: count,
-                level: 3,
-                ddcCode: sectionId,
-                parent: divisionId
-            };
-            
-            // Calculate average centrality if available
-            const notesInSection = sectionNotes.get(sectionId) || [];
-            if (notesInSection.length > 0) {
-                let totalCentrality = 0;
-                let centralityCount = 0;
-                
-                notesInSection.forEach(note => {
-                    if (note.graphMetrics?.betweennessCentrality) {
-                        totalCentrality += note.graphMetrics.betweennessCentrality;
-                        centralityCount++;
-                    }
-                });
-                
-                if (centralityCount > 0) {
-                    sectionNode.avgCentrality = totalCentrality / centralityCount;
-                }
-            }
-            
-            // Extract keywords
-            const keywords = new Map<string, number>();
-            notesInSection.forEach(note => {
+            notes.forEach(note => {
                 if (note.keywords) {
                     note.keywords.split(',').forEach(keyword => {
-                        const k = keyword.trim();
-                        if (k) {
-                            keywords.set(k, (keywords.get(k) || 0) + 1);
+                        const trimmed = keyword.trim();
+                        if (trimmed) {
+                            keywords.add(trimmed);
                         }
                     });
                 }
             });
             
-            // Get top 5 keywords
-            sectionNode.keywords = Array.from(keywords.entries())
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 5)
-                .map(entry => entry[0]);
-            
-            // Add section to its division
-            const divisionNode = divisionMap.get(divisionId);
-            if (divisionNode && divisionNode.children) {
-                divisionNode.children.push(sectionNode);
-                
-                // Update note count for division
-                divisionNode.noteCount += count;
-                
-                // Update note count for class
-                const classNode = classMap.get(classId);
-                if (classNode) {
-                    classNode.noteCount += count;
-                }
-            }
+            section.keywords = Array.from(keywords); // Fix: Use string array instead of comma-joined string
         });
         
-        // Convert the map to an array and sort by note count (descending)
-        const hierarchy = Array.from(classMap.values())
-            .filter(node => node.noteCount > 0) // Only include non-empty classes
-            .sort((a, b) => b.noteCount - a.noteCount);
+        // Convert class map to array and sort by note count
+        const result = Array.from(classMap.values())
+            .filter(cls => cls.noteCount && cls.noteCount > 0)
+            .sort((a, b) => (b.noteCount || 0) - (a.noteCount || 0));
         
-        console.log(`Built domain hierarchy with ${hierarchy.length} classes, ${divisionMap.size} divisions, and ${sectionCounts.size} sections`);
-        
-        return hierarchy;
+        return result;
+    }
+    
+    /**
+     * Simple string hash function for creating synthetic IDs
+     */
+    private hashString(str: string): number {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash);
     }
 
     /**
@@ -1072,6 +1058,40 @@ ${this.generateActionsAnalysisPrompt()}
         return this.ddcSectionsList.filter(section => 
             this.getClassIdFromSection(section.id) === classId
         );
+    }
+
+    /**
+     * Get a map from DDC section code to section name
+     */
+    public getDDCCodeToNameMap(): Map<string, string> {
+        const map = new Map<string, string>();
+        
+        // Add section names from the sections list
+        this.ddcSectionsList.forEach(section => {
+            map.set(section.id, section.name);
+        });
+        
+        // Add main class names from the DDC template
+        if (this.ddcTemplate && this.ddcTemplate.ddc_23_summaries && this.ddcTemplate.ddc_23_summaries.classes) {
+            this.ddcTemplate.ddc_23_summaries.classes.forEach(cls => {
+                map.set(cls.id, cls.name);
+            });
+        }
+        
+        // Add any manually defined class and division names
+        Object.entries(this.ddcMainClasses).forEach(([code, name]) => {
+            map.set(code, name);
+        });
+        
+        Object.entries(this.ddcDivisions).forEach(([code, name]) => {
+            map.set(code, name);
+        });
+        
+        Object.entries(this.ddcSections).forEach(([code, name]) => {
+            map.set(code, name);
+        });
+        
+        return map;
     }
 
     /**

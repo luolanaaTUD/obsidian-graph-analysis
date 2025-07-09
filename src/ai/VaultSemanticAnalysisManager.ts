@@ -551,7 +551,7 @@ export class VaultSemanticAnalysisManager {
                         title: data.file.basename,
                         summary: 'Note is empty or too short for semantic analysis',
                         keywords: '',
-                        knowledgeDomain: '',
+                        knowledgeDomains: [], // Empty array instead of empty string
                         created: data.created,
                         modified: data.modified,
                         path: data.file.path,
@@ -576,6 +576,11 @@ export class VaultSemanticAnalysisManager {
                         const analysis = batchAnalysisResult.results[i];
                         
                         if (analysis && analysis.summary) {
+                            // Convert comma-separated domains to array
+                            const domainArray = analysis.knowledgeDomain 
+                                ? analysis.knowledgeDomain.split(',').map(domain => domain.trim()).filter(domain => domain.length > 0)
+                                : [];
+                                
                             results.push({
                                 success: true,
                                 data: {
@@ -583,7 +588,7 @@ export class VaultSemanticAnalysisManager {
                                     title: data.file.basename,
                                     summary: analysis.summary,
                                     keywords: analysis.keywords,
-                                    knowledgeDomain: analysis.knowledgeDomain,
+                                    knowledgeDomains: domainArray, // Use array instead of string
                                     created: data.created,
                                     modified: data.modified,
                                     path: data.file.path,
@@ -845,14 +850,60 @@ export class VaultSemanticAnalysisManager {
             
             // Sort results by title for consistent ordering
             const sortedResults = results.sort((a, b) => a.title.localeCompare(b.title));
+
+            // Build DDC code-to-name map from MasterAnalysisManager
+            const ddcCodeToNameMap = this.masterAnalysisManager.getDDCCodeToNameMap();
+
+            // Convert DDC codes to domain names and store as string array
+            const enhancedResults = sortedResults.map(result => {
+                // Handle legacy data format (string) or new format (array)
+                let domainCodes: string[] = [];
+                
+                // TypeScript doesn't know about the old property, so we need to use type assertion
+                const oldResult = result as any;
+                if (oldResult.knowledgeDomain && typeof oldResult.knowledgeDomain === 'string') {
+                    domainCodes = oldResult.knowledgeDomain.split(',')
+                        .map((code: string) => code.trim())
+                        .filter((code: string) => code.length > 0);
+                } else if (result.knowledgeDomains && Array.isArray(result.knowledgeDomains)) {
+                    domainCodes = result.knowledgeDomains;
+                }
+                
+                // Convert codes to names
+                const domainNames = domainCodes.map(code => ddcCodeToNameMap.get(code) || code);
+                
+                // Create a clean result object with the new format
+                const cleanResult: VaultAnalysisResult = {
+                    id: result.id,
+                    title: result.title,
+                    summary: result.summary,
+                    keywords: result.keywords,
+                    knowledgeDomains: domainNames,
+                    created: result.created,
+                    modified: result.modified,
+                    path: result.path,
+                    wordCount: result.wordCount
+                };
+                
+                // Add optional properties if they exist
+                if (result.graphMetrics) {
+                    cleanResult.graphMetrics = result.graphMetrics;
+                }
+                
+                if (result.centralityRankings) {
+                    cleanResult.centralityRankings = result.centralityRankings;
+                }
+                
+                return cleanResult;
+            });
             
             // Create the output data with metadata
             const outputData: VaultAnalysisData = {
                 generatedAt: new Date().toISOString(),
-                totalFiles: sortedResults.length,
+                totalFiles: enhancedResults.length,
                 apiProvider: 'Google Gemini',
                 tokenUsage: totalTokenUsage,
-                results: sortedResults
+                results: enhancedResults
             };
             
             // Save to plugin data folder
@@ -905,7 +956,7 @@ export class VaultSemanticAnalysisManager {
         );
 
         // Build the batch prompt with DDC classification instructions
-        let prompt = `Analyze the following ${meaningfulFiles.length} notes and provide analysis for each one. For each note, provide:
+        let prompt = `Analyze the following notes and provide analysis for each one. For each note, provide:
 1. A two to three sentence summary of the main concept or purpose (be detailed)
 2. 3-6 key terms or phrases (comma-separated)
 3. DDC classification codes that best match the content (comma-separated)

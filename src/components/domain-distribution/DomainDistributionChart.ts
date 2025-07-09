@@ -259,7 +259,7 @@ export class DomainDistributionChart {
                 });
                 
                 // Level
-                const levelNames = { 1: 'Class', 2: 'Division', 3: 'Section', 4: 'User Domain' };
+                const levelNames = { 1: 'Class', 2: 'Section' };
                 row.createEl('td', { 
                     text: levelNames[domain.level as keyof typeof levelNames] || `Level ${domain.level}`,
                     cls: 'level-name'
@@ -326,12 +326,7 @@ export class DomainDistributionChart {
                 console.log(`📊 Level 1 [${i}]: ${child.name} (${child.noteCount || child.value} notes, children: ${child.children?.length || 0})`);
                 if (child.children) {
                     child.children.forEach((grandChild, j) => {
-                        console.log(`📊   Level 2 [${i}.${j}]: ${grandChild.name} (${grandChild.noteCount || grandChild.value} notes, children: ${grandChild.children?.length || 0})`);
-                        if (grandChild.children) {
-                            grandChild.children.forEach((greatGrandChild, k) => {
-                                console.log(`📊     Level 3 [${i}.${j}.${k}]: ${greatGrandChild.name} (${greatGrandChild.noteCount || greatGrandChild.value} notes)`);
-                            });
-                        }
+                        console.log(`📊   Level 2 [${i}.${j}]: ${grandChild.name} (${grandChild.noteCount || grandChild.value} notes)`);
                     });
                 }
             });
@@ -569,41 +564,29 @@ export class DomainDistributionChart {
                 // Domain name with text wrapping for long names
                 const domainName = data.data.name;
                 const maxLineLength = 14;
-                
-                // Split long domain names into multiple lines
+                // Split long domain names into multiple lines (no trimming, just wrap)
                 const nameLines = [];
                 if (domainName.length <= maxLineLength) {
                     nameLines.push(domainName);
                 } else {
                     const words = domainName.split(' ');
                     let currentLine = '';
-                    
                     for (const word of words) {
-                        if ((currentLine + ' ' + word).length <= maxLineLength) {
+                        if ((currentLine + ' ' + word).trim().length <= maxLineLength) {
                             currentLine = currentLine ? currentLine + ' ' + word : word;
                         } else {
                             if (currentLine) {
                                 nameLines.push(currentLine);
-                                currentLine = word;
-                            } else {
-                                nameLines.push(word.slice(0, maxLineLength - 3) + '...');
-                                currentLine = '';
                             }
+                            currentLine = word;
                         }
                     }
                     if (currentLine) {
                         nameLines.push(currentLine);
                     }
-                    
-                    if (nameLines.length > 2) {
-                        nameLines[1] = nameLines[1].slice(0, maxLineLength - 3) + '...';
-                        nameLines.splice(2);
-                    }
                 }
-
                 const lineHeight = '1.2em';
                 let currentLine = 0;
-                
                 // Domain name lines
                 nameLines.forEach((line, index) => {
                     textContainer.append('tspan')
@@ -615,6 +598,9 @@ export class DomainDistributionChart {
                         .text(line);
                     currentLine++;
                 });
+                // Vertically center the block of lines
+                const nameBlockHeight = currentLine * 1.2;
+                textContainer.attr('y', -(nameBlockHeight / 2) + 'em');
 
                 textContainer.append('tspan')
                     .attr('x', 0)
@@ -774,7 +760,7 @@ export class DomainDistributionChart {
                     level: node.level
                 };
                 
-                // Only add value for leaf nodes (level 2) or nodes without children
+                // Only add value for leaf nodes or nodes without children
                 if ((node.level === 2 || !node.children || node.children.length === 0) && node.noteCount) {
                     d3Node.value = node.noteCount;
                 }
