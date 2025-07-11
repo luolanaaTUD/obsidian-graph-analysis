@@ -68,20 +68,79 @@ export class DomainDistributionChart {
         this.masterAnalysisManager = new MasterAnalysisManager(app, settings);
 
         // Listen for theme or accent color changes and refresh chart
-        // Obsidian emits 'css-change' on the workspace container
+        // Use multiple methods to detect theme changes
+        this._themeChangeHandler = () => {
+            // Debounce rapid theme changes
+            if (this._themeChangeTimeout) {
+                clearTimeout(this._themeChangeTimeout);
+            }
+            this._themeChangeTimeout = setTimeout(() => {
+                this.refresh();
+            }, 100);
+        };
+
+        // Method 1: Listen for CSS changes on workspace
         const workspace = document.querySelector('.workspace');
         if (workspace) {
-            this._themeChangeHandler = () => this.refresh();
             workspace.addEventListener('css-change', this._themeChangeHandler);
         }
+
+                 // Method 2: Listen for theme class changes on body
+         this._themeObserver = new MutationObserver((mutations) => {
+             for (const mutation of mutations) {
+                 if (mutation.type === 'attributes' && 
+                     mutation.attributeName === 'class' &&
+                     mutation.target === document.body) {
+                     this._themeChangeHandler?.();
+                     break;
+                 }
+             }
+         });
+        this._themeObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+
+                 // Method 3: Listen for changes to the document element class/style
+         this._documentObserver = new MutationObserver((mutations) => {
+             for (const mutation of mutations) {
+                 if (mutation.type === 'attributes' && 
+                     (mutation.attributeName === 'class' || mutation.attributeName === 'style') &&
+                     mutation.target === document.documentElement) {
+                     this._themeChangeHandler?.();
+                     break;
+                 }
+             }
+         });
+        this._documentObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class', 'style']
+        });
     }
 
     // Add a destructor to remove the event listener when the chart is destroyed
     private _themeChangeHandler?: () => void;
+    private _themeChangeTimeout?: NodeJS.Timeout;
+    private _themeObserver?: MutationObserver;
+    private _documentObserver?: MutationObserver;
     public destroy(): void {
+        // Clean up theme change listeners
         const workspace = document.querySelector('.workspace');
         if (workspace && this._themeChangeHandler) {
             workspace.removeEventListener('css-change', this._themeChangeHandler);
+        }
+
+        // Clean up mutation observers
+        if (this._themeObserver) {
+            this._themeObserver.disconnect();
+        }
+        if (this._documentObserver) {
+            this._documentObserver.disconnect();
+        }
+
+        // Clean up timeout
+        if (this._themeChangeTimeout) {
+            clearTimeout(this._themeChangeTimeout);
         }
     }
 
@@ -282,22 +341,84 @@ export class DomainDistributionChart {
     private renderSunburstChart(container: HTMLElement = this.container): void {
         // Helper function for vivid HSL color palette based on accent color
         const getVividAccentColor = (i: number, total: number): string => {
-            const rootStyle = getComputedStyle(document.documentElement);
-            const h = rootStyle.getPropertyValue('--accent-h').trim();
-            const s = rootStyle.getPropertyValue('--accent-s').trim();
-            const l = rootStyle.getPropertyValue('--accent-l').trim();
-            let hue = 265; // fallback to purple
-            let baseSat = 0.8;
-            let baseLight = 0.5;
-            if (h && s && l) {
-                hue = parseFloat(h);
-                baseSat = Math.max(0.7, Math.min(1, parseFloat(s) / 100));
-                baseLight = Math.max(0.35, Math.min(0.65, parseFloat(l) / 100));
+            // Try to get accent color from Obsidian's CSS variables
+            const accentColor = getComputedStyle(document.documentElement)
+                .getPropertyValue('--text-accent')
+                .trim();
+            
+            // If we have the accent color, use it as the base
+            if (accentColor && accentColor !== '') {
+                // Try to parse the accent color to extract HSL values
+                // First check if it's already an HSL color
+                const hslMatch = accentColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+                if (hslMatch) {
+                    const hue = parseInt(hslMatch[1]);
+                    const saturation = parseInt(hslMatch[2]);
+                    const lightness = parseInt(hslMatch[3]);
+                    
+                    // Vary lightness for each section, keep saturation high for vividness
+                    const adjustedLightness = Math.max(35, Math.min(65, 
+                        lightness + (i / Math.max(1, total - 1)) * 25 - 12.5
+                    ));
+                    const adjustedSaturation = Math.max(70, saturation);
+                    
+                    return `hsl(${hue}, ${adjustedSaturation}%, ${adjustedLightness}%)`;
+                }
+                
+                // If not HSL, try to convert RGB to HSL
+                const rgbMatch = accentColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                if (rgbMatch) {
+                    const r = parseInt(rgbMatch[1]) / 255;
+                    const g = parseInt(rgbMatch[2]) / 255;
+                    const b = parseInt(rgbMatch[3]) / 255;
+                    
+                    const max = Math.max(r, g, b);
+                    const min = Math.min(r, g, b);
+                    const diff = max - min;
+                    
+                    // Calculate HSL values
+                    let hue = 0;
+                    if (diff !== 0) {
+                        if (max === r) hue = ((g - b) / diff) % 6;
+                        else if (max === g) hue = (b - r) / diff + 2;
+                        else hue = (r - g) / diff + 4;
+                    }
+                    hue = Math.round(hue * 60);
+                    if (hue < 0) hue += 360;
+                    
+                    const lightness = (max + min) / 2;
+                    const saturation = diff === 0 ? 0 : diff / (1 - Math.abs(2 * lightness - 1));
+                    
+                    // Vary lightness for each section, keep saturation high for vividness
+                    const adjustedLightness = Math.max(35, Math.min(65, 
+                        lightness * 100 + (i / Math.max(1, total - 1)) * 25 - 12.5
+                    ));
+                    const adjustedSaturation = Math.max(70, saturation * 100);
+                    
+                    return `hsl(${hue}, ${adjustedSaturation}%, ${adjustedLightness}%)`;
+                }
+                
+                // If all else fails, use the accent color directly with opacity variations
+                const opacity = 0.6 + 0.4 * (i / Math.max(1, total - 1));
+                return `color-mix(in srgb, ${accentColor} ${Math.round(opacity * 100)}%, transparent)`;
             }
-            // Vary lightness for each section, keep saturation high for vividness
-            const lightness = 0.38 + 0.22 * (i / Math.max(1, total - 1));
-            const saturation = 0.85; // fixed high saturation for vividness
-            return `hsl(${hue}, ${Math.round(saturation * 100)}%, ${Math.round(lightness * 100)}%)`;
+            
+            // Ultimate fallback: use a neutral color scheme that works with any theme
+            const isDarkTheme = document.body.classList.contains('theme-dark');
+            const baseHue = 220; // Blue-gray, works well in both themes
+            const baseSaturation = 30;
+            const baseLightness = isDarkTheme ? 60 : 40;
+            
+            // Vary lightness for each section
+            const adjustedLightness = Math.max(
+                isDarkTheme ? 40 : 25, 
+                Math.min(
+                    isDarkTheme ? 80 : 65, 
+                    baseLightness + (i / Math.max(1, total - 1)) * 30 - 15
+                )
+            );
+            
+            return `hsl(${baseHue}, ${baseSaturation}%, ${adjustedLightness}%)`;
         };
 
         // Get container dimensions for responsive sizing
@@ -458,15 +579,16 @@ export class DomainDistributionChart {
             // Skip tiny arcs
             if (arcSize < 0.02) return;
             
-            // For very small arcs, just show abbreviated text
-            if (arcSize < 0.1) {
-                group.append('text')
-                    .attr('dy', '0.35em')
-                    .attr('fill', 'var(--text-normal)')
-                    .style('font-size', `${fontSize}px`)
-                    .text(name.length > 8 ? name.substring(0, 8) + '...' : name);
-                return;
-            }
+                            // For very small arcs, just show abbreviated text
+                if (arcSize < 0.1) {
+                    group.append('text')
+                        .attr('dy', '0.35em')
+                        .attr('fill', 'var(--chart-text, var(--text-normal))')
+                        .style('font-size', `${fontSize}px`)
+                        .style('transition', 'fill 0.3s ease')
+                        .text(name.length > 8 ? name.substring(0, 8) + '...' : name);
+                    return;
+                }
             
             // For larger arcs, implement text wrapping
             const words = name.split(/\s+/);
@@ -474,8 +596,9 @@ export class DomainDistributionChart {
             let lineNumber = 0;
             let tspan = group.append('text')
                 .attr('dy', 0)
-                .attr('fill', 'var(--text-normal)')
+                .attr('fill', 'var(--chart-text, var(--text-normal))')
                 .style('font-size', `${fontSize}px`)
+                .style('transition', 'fill 0.3s ease')
                 .append('tspan')
                 .attr('x', 0)
                 .attr('y', 0);
@@ -529,11 +652,12 @@ export class DomainDistributionChart {
         const centerCircle = g.append('circle')
             .datum(root)
             .attr('r', centerRadius)
-            .attr('fill', 'var(--background-secondary)')
+            .attr('fill', 'var(--chart-background, var(--background-secondary))')
             .attr('stroke', 'var(--background-modifier-border)')
             .attr('stroke-width', 2)
             .style('opacity', 0.95)
-            .style('cursor', 'default'); // Removed pointer cursor since no click functionality
+            .style('cursor', 'default')
+            .style('transition', 'fill 0.3s ease, stroke 0.3s ease'); // Smooth theme transitions
 
         // Create center info panel group
         const centerInfo = g.append('g')
@@ -594,7 +718,8 @@ export class DomainDistributionChart {
                         .attr('dy', index === 0 ? '0em' : lineHeight)
                         .style('font-size', Math.max(centerRadius * 0.16, 10) + 'px')
                         .style('font-weight', '600')
-                        .style('fill', 'var(--text-accent)')
+                        .style('fill', 'var(--chart-accent-color, var(--text-accent))')
+                        .style('transition', 'fill 0.3s ease')
                         .text(line);
                     currentLine++;
                 });
@@ -612,7 +737,8 @@ export class DomainDistributionChart {
                     .attr('x', 0)
                     .attr('dy', '1.2em')
                     .style('font-size', Math.max(centerRadius * 0.10, 8) + 'px')
-                    .style('fill', 'var(--text-muted)')
+                    .style('fill', 'var(--chart-muted, var(--text-muted))')
+                    .style('transition', 'fill 0.3s ease')
                     .text(layerName);
                 currentLine++;
 
@@ -621,7 +747,8 @@ export class DomainDistributionChart {
                     .attr('dy', lineHeight)
                     .style('font-size', Math.max(centerRadius * 0.24, 14) + 'px')
                     .style('font-weight', '700')
-                    .style('fill', 'var(--text-normal)')
+                    .style('fill', 'var(--chart-text, var(--text-normal))')
+                    .style('transition', 'fill 0.3s ease')
                     .text(data.value || data.data.noteCount || 0);
                 currentLine++;
 

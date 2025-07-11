@@ -327,13 +327,33 @@
     font-size: var(--font-ui-small);
 }
 
-/* Theme consistency */
+/* Theme consistency and responsiveness */
+.domain-sunburst-chart path {
+    transition: fill 0.3s ease, opacity 0.2s ease, filter 0.2s ease;
+}
+
 .theme-dark .domain-sunburst-chart path {
     filter: brightness(0.9);
 }
 
 .theme-dark .domain-sunburst-chart path:hover {
     filter: brightness(1.1);
+}
+
+.theme-light .domain-sunburst-chart path {
+    filter: brightness(1.0);
+}
+
+.theme-light .domain-sunburst-chart path:hover {
+    filter: brightness(1.15);
+}
+
+/* Ensure proper accent color inheritance */
+.domain-sunburst-chart {
+    --chart-accent-color: var(--text-accent);
+    --chart-background: var(--background-primary);
+    --chart-text: var(--text-normal);
+    --chart-muted: var(--text-muted);
 }
 
 /* Accessibility improvements */
