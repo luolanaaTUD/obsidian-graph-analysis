@@ -17,14 +17,6 @@ export interface DomainDistributionData {
     
     // Cross-domain connections
     domainConnections?: DomainConnection[];
-    
-    // Summary indicators for dashboard display - NEW
-    summaryIndicators?: {
-        topDomain: { percentage: number, name: string };
-        bridgeMaker: { score: number, name: string };
-        growthTrend: { percentage: number, description?: string };
-        recentFocus: { count: number, name: string };
-    };
 }
 
 export interface DomainChartOptions {
@@ -174,8 +166,7 @@ export class DomainDistributionChart {
                 if (structureData?.knowledgeStructure?.domainHierarchy) {
                     return {
                         domainHierarchy: structureData.knowledgeStructure.domainHierarchy,
-                        domainConnections: structureData.knowledgeStructure.domainConnections,
-                        summaryIndicators: structureData.knowledgeStructure.summaryIndicators
+                        domainConnections: structureData.knowledgeStructure.domainConnections
                     };
                 }
             } catch (structureError) {
@@ -191,8 +182,7 @@ export class DomainDistributionChart {
                 if (masterData?.knowledgeStructure?.domainHierarchy) {
                     return {
                         domainHierarchy: masterData.knowledgeStructure.domainHierarchy,
-                        domainConnections: masterData.knowledgeStructure.domainConnections,
-                        summaryIndicators: masterData.knowledgeStructure.summaryIndicators
+                        domainConnections: masterData.knowledgeStructure.domainConnections
                     };
                 }
             } catch (masterError) {
@@ -228,13 +218,9 @@ export class DomainDistributionChart {
             // Use MasterAnalysisManager's implementation to build the hierarchy
             const domainHierarchy = this.masterAnalysisManager.buildHierarchyFromVaultData(vaultData);
             
-            // Calculate basic summary indicators from the hierarchy data
-            const summaryIndicators = this.calculateSummaryIndicators(domainHierarchy, vaultData);
-            
             return {
                 domainHierarchy,
-                domainConnections: [],
-                summaryIndicators
+                domainConnections: []
             };
         } catch (error) {
             console.error('Failed to build hierarchy from vault analysis:', error);
@@ -242,105 +228,6 @@ export class DomainDistributionChart {
         }
     }
     
-    /**
-     * Calculate basic summary indicators from hierarchy data when AI analysis is not available
-     */
-    private calculateSummaryIndicators(
-        domainHierarchy: HierarchicalDomain[], 
-        vaultData: VaultAnalysisData
-    ): {
-        topDomain: { percentage: number, name: string };
-        bridgeMaker: { score: number, name: string };
-        growthTrend: { percentage: number, description?: string };
-        recentFocus: { count: number, name: string };
-    } {
-        if (!domainHierarchy || domainHierarchy.length === 0) {
-            return {
-                topDomain: { percentage: 0, name: "No domains" },
-                bridgeMaker: { score: 0, name: "No bridge maker" },
-                growthTrend: { percentage: 0, description: "No trend data" },
-                recentFocus: { count: 0, name: "No recent focus" }
-            };
-        }
-
-        const totalNotes = vaultData.results.length;
-        
-        // Find top domain by note count
-        const topDomain = domainHierarchy
-            .reduce((max, domain) => (domain.noteCount || 0) > (max.noteCount || 0) ? domain : max);
-        const topDomainPercentage = totalNotes > 0 ? Math.round(((topDomain.noteCount || 0) / totalNotes) * 100) : 0;
-
-        // Calculate bridge maker (domain with highest average betweenness centrality)
-        let bridgeMaker = topDomain;
-        let maxBridgeScore = 0;
-        
-        domainHierarchy.forEach(domain => {
-            if (domain.avgCentrality && domain.avgCentrality > maxBridgeScore) {
-                maxBridgeScore = domain.avgCentrality;
-                bridgeMaker = domain;
-            }
-        });
-
-        // Calculate recent focus (notes modified in last 30 days)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const recentNotes = vaultData.results.filter(note => 
-            new Date(note.modified) > thirtyDaysAgo
-        );
-        
-        // Find domain with most recent notes
-        const domainRecentCounts = new Map<string, number>();
-        recentNotes.forEach(note => {
-            if (note.knowledgeDomains && note.knowledgeDomains.length > 0) {
-                note.knowledgeDomains.forEach(domain => {
-                    domainRecentCounts.set(domain, (domainRecentCounts.get(domain) || 0) + 1);
-                });
-            }
-        });
-        
-        let recentFocusDomain = topDomain.name;
-        let recentFocusCount = 0;
-        
-        domainRecentCounts.forEach((count, domainName) => {
-            if (count > recentFocusCount) {
-                recentFocusCount = count;
-                recentFocusDomain = domainName;
-            }
-        });
-
-        // Calculate growth trend (rough estimate based on creation vs modification dates)
-        const creationDates = vaultData.results.map(note => new Date(note.created).getTime());
-        const modificationDates = vaultData.results.map(note => new Date(note.modified).getTime());
-        
-        const avgCreationTime = creationDates.reduce((a, b) => a + b, 0) / creationDates.length;
-        const avgModificationTime = modificationDates.reduce((a, b) => a + b, 0) / modificationDates.length;
-        
-        // Simple growth estimate: positive if notes are being modified more recently than created
-        const growthPercentage = avgModificationTime > avgCreationTime ? 
-            Math.min(Math.round(((avgModificationTime - avgCreationTime) / (1000 * 60 * 60 * 24 * 365)) * 100), 100) : 
-            Math.max(Math.round(((avgModificationTime - avgCreationTime) / (1000 * 60 * 60 * 24 * 365)) * 100), -100);
-
-        return {
-            topDomain: { 
-                percentage: topDomainPercentage, 
-                name: topDomain.name 
-            },
-            bridgeMaker: { 
-                score: maxBridgeScore, 
-                name: bridgeMaker.name 
-            },
-            growthTrend: { 
-                percentage: growthPercentage, 
-                description: growthPercentage > 0 ? "Increasing Depth" : "Stabilizing" 
-            },
-            recentFocus: { 
-                count: recentFocusCount, 
-                name: recentFocusDomain 
-            }
-        };
-    }
-
     // Remove the redundant helper methods as they're now in MasterAnalysisManager
     
     public async render(): Promise<void> {
@@ -353,11 +240,6 @@ export class DomainDistributionChart {
         if (!this.data || !this.data.domainHierarchy || this.data.domainHierarchy.length === 0) {
             this.renderPlaceholder();
             return;
-        }
-
-        // Add summary indicators at the top if available
-        if (this.data.summaryIndicators) {
-            this.createSummarySection();
         }
 
         // Create chart container with proper CSS class for responsive sizing
@@ -386,40 +268,6 @@ export class DomainDistributionChart {
                 <div class="placeholder-title">No Domain Hierarchy Available</div>
                 <div class="placeholder-text">
                     Please generate vault analysis with optimized DDC section classification to see four-layer domain distribution.
-                </div>
-            </div>
-        `;
-    }
-
-    private createSummarySection(): void {
-        if (!this.data?.summaryIndicators) return;
-
-        const summaryContainer = this.container.createEl('div', { cls: 'domain-summary' });
-        
-        const indicators = this.data.summaryIndicators;
-        
-        // Create summary stats HTML with proper formatting
-        summaryContainer.innerHTML = `
-            <div class="domain-summary-stats">
-                <div class="summary-stat">
-                    <span class="stat-label">TOP DOMAIN</span>
-                    <span class="stat-value">${indicators.topDomain.percentage}%</span>
-                    <span class="stat-description">${indicators.topDomain.name}</span>
-                </div>
-                <div class="summary-stat">
-                    <span class="stat-label">BRIDGE MAKER</span>
-                    <span class="stat-value">${indicators.bridgeMaker.score.toFixed(3)}</span>
-                    <span class="stat-description">${indicators.bridgeMaker.name}</span>
-                </div>
-                <div class="summary-stat">
-                    <span class="stat-label">GROWTH TREND</span>
-                    <span class="stat-value">${indicators.growthTrend.percentage > 0 ? '+' : ''}${indicators.growthTrend.percentage}%</span>
-                    <span class="stat-description">${indicators.growthTrend.description || 'Increasing Depth'}</span>
-                </div>
-                <div class="summary-stat">
-                    <span class="stat-label">RECENT FOCUS</span>
-                    <span class="stat-value">${indicators.recentFocus.count}</span>
-                    <span class="stat-description">${indicators.recentFocus.name}</span>
                 </div>
             </div>
         `;

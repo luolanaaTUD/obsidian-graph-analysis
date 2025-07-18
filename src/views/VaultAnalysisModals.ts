@@ -535,25 +535,13 @@ export class VaultAnalysisModal extends Modal {
             return;
         }
         
-        const networkData = this.structureAnalysisData.knowledgeStructure.knowledgeNetwork;
+        // Use the KnowledgeStructureManager to render the network analysis
+        if (!this.knowledgeStructureManager) {
+            this.knowledgeStructureManager = new KnowledgeStructureManager(this.app, this.settings);
+        }
         
-        // Bridge Notes
-        if (networkData.bridges && networkData.bridges.length > 0) {
-            this.createNetworkSubsection(container, '🌉 Knowledge Bridges', networkData.bridges, 
-                'Notes that connect different knowledge domains');
-        }
-
-        // Foundation Notes
-        if (networkData.foundations && networkData.foundations.length > 0) {
-            this.createNetworkSubsection(container, '🏗️ Knowledge Foundations', networkData.foundations, 
-                'Core concepts central to your understanding');
-        }
-
-        // Authority Notes
-        if (networkData.authorities && networkData.authorities.length > 0) {
-            this.createNetworkSubsection(container, '👑 Knowledge Authorities', networkData.authorities, 
-                'Influential notes connected to other highly connected notes');
-        }
+        // Render the network analysis using the visualization manager
+        await this.knowledgeStructureManager.renderNetworkAnalysis(container, this.structureAnalysisData.knowledgeStructure);
     }
     
     /**
@@ -589,54 +577,141 @@ export class VaultAnalysisModal extends Modal {
         }
     }
     
+
+
     /**
-     * Helper to create network subsection
+     * Helper to create network subsection (kept for backward compatibility)
      */
     private createNetworkSubsection(parent: HTMLElement, title: string, nodes: any[], description: string): void {
-        const subsection = parent.createEl('div', { 
-            cls: 'network-subsection' 
+        // Create card container if it doesn't exist
+        let cardsContainer = parent.querySelector('.network-cards-container');
+        if (!cardsContainer) {
+            cardsContainer = parent.createEl('div', { cls: 'network-cards-container' });
+        }
+        
+        // Create a card for this network category
+        const card = cardsContainer.createEl('div', { cls: 'network-card' });
+        
+        // Card header with icon
+        const header = card.createEl('div', { cls: 'network-card-header' });
+        
+        // Determine icon based on title
+        let icon = '🔗';
+        if (title.includes('Bridge')) icon = '🌉';
+        if (title.includes('Foundation')) icon = '🏗️';
+        if (title.includes('Authority')) icon = '👑';
+        
+        // Icon with background
+        header.createEl('span', { 
+            cls: 'network-card-icon',
+            text: icon
         });
         
-        subsection.createEl('h4', { 
-            text: title,
-            cls: 'network-title'
+        // Title container
+        const titleContainer = header.createEl('div', { cls: 'network-card-title-container' });
+        
+        titleContainer.createEl('h4', { 
+            cls: 'network-card-title',
+            text: title
         });
         
-        subsection.createEl('p', { 
-            text: description,
-            cls: 'network-description'
+        titleContainer.createEl('span', { 
+            cls: 'network-card-count',
+            text: `${nodes.length} ${nodes.length === 1 ? 'item' : 'items'}`
         });
-        
-        const nodesList = subsection.createEl('ul', { 
-            cls: 'network-nodes-list' 
+
+        // Description
+        card.createEl('p', { 
+            cls: 'network-card-description',
+            text: description
         });
+
+        // Content container
+        const content = card.createEl('div', { cls: 'network-card-content' });
         
+        // Show nodes
         nodes.slice(0, 5).forEach(node => {
-            const nodeItem = nodesList.createEl('li');
-            const nodeLink = nodeItem.createEl('a', { 
-                text: node.title,
-                cls: 'network-node-link'
+            const domainItem = content.createEl('div', { cls: 'network-domain-item' });
+            
+            // Domain header
+            const domainHeader = domainItem.createEl('div', { cls: 'network-domain-header' });
+            
+            // Handle both old note-based and new domain-based data structures
+            const displayText = node.domain || node.title || 'Unknown';
+            const score = node.averageScore || node.score || 0;
+            
+            domainHeader.createEl('strong', { 
+                cls: 'network-domain-name',
+                text: displayText
             });
             
-            // Add click handler to open the note
-            nodeLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                // Find the note path by title
-                const note = this.analysisData?.results.find(r => r.title === node.title);
-                if (note) {
-                    // Open the note
-                    const file = this.app.vault.getAbstractFileByPath(note.path);
-                    if (file && file instanceof TFile) {
-                        this.app.workspace.getLeaf().openFile(file);
-                    }
+            // Add score and additional info
+            if (node.domain) {
+                // Domain-based structure
+                domainHeader.createEl('span', { 
+                    cls: 'network-domain-stats',
+                    text: `${score.toFixed(3)} • ${node.noteCount || 0} notes`
+                });
+                
+                // Add explanation if available
+                if (node.explanation) {
+                    domainItem.createEl('p', { 
+                        cls: 'network-domain-explanation',
+                        text: node.explanation
+                    });
                 }
-            });
-            
-            // Add score
-            nodeItem.createEl('span', { 
-                text: ` (score: ${node.score.toFixed(3)})`,
-                cls: 'network-node-score'
-            });
+                
+                // Add top notes if available
+                if (node.topNotes && node.topNotes.length > 0) {
+                    const notesHeader = domainItem.createEl('div', { 
+                        cls: 'network-notes-header',
+                        text: 'Top Notes'
+                    });
+                    
+                    const notesList = domainItem.createEl('ul', { cls: 'network-notes-list' });
+                    
+                    node.topNotes.slice(0, 3).forEach((note: { title: string; score: number; path: string }) => {
+                        const noteItem = notesList.createEl('li', { cls: 'network-note-item' });
+                        
+                        const noteLink = noteItem.createEl('span', { 
+                            cls: 'network-note-link',
+                            text: note.title
+                        });
+                        
+                        noteItem.createEl('span', { 
+                            cls: 'network-note-score',
+                            text: note.score.toFixed(3)
+                        });
+                        
+                        // Make note clickable
+                        noteLink.addEventListener('click', async () => {
+                            const file = this.app.vault.getAbstractFileByPath(note.path);
+                            if (file && file instanceof TFile) {
+                                this.app.workspace.getLeaf().openFile(file);
+                            }
+                        });
+                    });
+                }
+            } else {
+                // Legacy note-based structure
+                domainHeader.createEl('span', { 
+                    cls: 'network-domain-stats',
+                    text: score.toFixed(3)
+                });
+                
+                // Make node clickable
+                domainHeader.querySelector('.network-domain-name')?.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    
+                    const note = this.analysisData?.results.find(r => r.title === node.title);
+                    if (note) {
+                        const file = this.app.vault.getAbstractFileByPath(note.path);
+                        if (file && file instanceof TFile) {
+                            this.app.workspace.getLeaf().openFile(file);
+                        }
+                    }
+                });
+            }
         });
     }
     
@@ -644,25 +719,16 @@ export class VaultAnalysisModal extends Modal {
      * Show placeholder for network analysis section
      */
     private showNetworkAnalysisPlaceholder(container: HTMLElement): void {
-        const placeholder = container.createEl('div', { cls: 'section-placeholder' });
+        const placeholder = container.createEl('div', { cls: 'network-empty-state' });
+        
+        placeholder.createEl('div', {
+            cls: 'network-empty-state-icon',
+            text: '🔍'
+        });
         
         placeholder.createEl('p', {
-            text: 'Generate AI analysis to discover bridge notes, foundation notes, and authority notes in your knowledge network.',
-            cls: 'placeholder-text'
-        });
-        
-        const featureList = placeholder.createEl('ul', { cls: 'feature-list' });
-        
-        featureList.createEl('li', { 
-            text: 'Knowledge Bridges - Notes that connect different knowledge domains'
-        });
-        
-        featureList.createEl('li', { 
-            text: 'Knowledge Foundations - Core concepts central to your understanding'
-        });
-        
-        featureList.createEl('li', { 
-            text: 'Knowledge Authorities - Influential notes connected to other highly connected notes'
+            cls: 'network-empty-state-text',
+            text: 'Generate AI analysis to discover bridge notes, foundation notes, and authority notes in your knowledge network.'
         });
     }
     
@@ -670,11 +736,16 @@ export class VaultAnalysisModal extends Modal {
      * Show placeholder for knowledge gaps section
      */
     private showKnowledgeGapsPlaceholder(container: HTMLElement): void {
-        const placeholder = container.createEl('div', { cls: 'section-placeholder' });
+        const placeholder = container.createEl('div', { cls: 'network-empty-state' });
+        
+        placeholder.createEl('div', {
+            cls: 'network-empty-state-icon',
+            text: '🎯'
+        });
         
         placeholder.createEl('p', {
-            text: 'Generate AI analysis to identify potential knowledge gaps and areas for expansion.',
-            cls: 'placeholder-text'
+            cls: 'network-empty-state-text',
+            text: 'Generate AI analysis to identify potential knowledge gaps and areas for expansion in your vault.'
         });
     }
 

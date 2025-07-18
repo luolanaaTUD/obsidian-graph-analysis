@@ -8,7 +8,6 @@ This document outlines both the user-facing insights and technical implementatio
 
 ### Knowledge domain distribution
 
-- **knowledge domain summary**
 - **Knowledge domain distribution chart** - percentage and depth of each domain
 
 _Visualizations_: [Zoomable Sunburst](https://observablehq.com/@d3/zoomable-sunburst)

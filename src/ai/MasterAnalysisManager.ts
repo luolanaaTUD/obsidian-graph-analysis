@@ -360,21 +360,7 @@ export class MasterAnalysisManager {
             const jsonStr = jsonMatch[1];
             const parsedJson = JSON.parse(jsonStr);
             
-            // Extract domain distribution data - now we only need summary indicators
-            const domainDistribution = parsedJson.knowledgeDomainDistribution;
-            
-            if (!domainDistribution) {
-                throw new Error('Invalid knowledge domain distribution data');
-            }
-            
-            // Extract summary indicators
-            const summaryIndicators = domainDistribution.summary || null;
-            
-            // Build hierarchical domain structure directly from vault analysis data
-            // instead of using sectionClassification from AI response
-            const domainHierarchy = this.buildHierarchyFromVaultData(analysisData);
-            
-            // Extract knowledge network data
+            // Extract knowledge network data - this is our main focus now
             const knowledgeNetwork = parsedJson.knowledgeNetwork || {
                 bridges: [],
                 foundations: [],
@@ -384,31 +370,65 @@ export class MasterAnalysisManager {
             // Extract knowledge gaps
             const knowledgeGaps = parsedJson.knowledgeGaps || [];
             
-            // Create insights from the data
-            const insights = [{
-                title: "Knowledge Distribution Insight",
-                content: summaryIndicators ? 
-                    `Your knowledge vault primarily focuses on ${summaryIndicators.topDomain.name} (${summaryIndicators.topDomain.percentage}% of notes). Recently, you've been concentrating on ${summaryIndicators.recentFocus.name} with ${summaryIndicators.recentFocus.count} notes.` : 
-                    "Analyze your knowledge distribution to identify key focus areas.",
-                keyPoints: [
-                    summaryIndicators ? `Top domain: ${summaryIndicators.topDomain.name}` : "No top domain identified",
-                    summaryIndicators ? `Recent focus: ${summaryIndicators.recentFocus.name}` : "No recent focus identified",
-                    summaryIndicators ? `Growth trend: ${summaryIndicators.growthTrend.description || summaryIndicators.growthTrend.percentage + '%'}` : "No growth trend identified",
-                    `Classified into ${domainHierarchy.length} different knowledge areas`
-                ]
-            }];
+            // Build hierarchical domain structure directly from vault analysis data
+            const domainHierarchy = this.buildHierarchyFromVaultData(analysisData);
+            
+            // Create insights from the network analysis
+            const insights = this.generateNetworkInsights(knowledgeNetwork, domainHierarchy);
             
             return {
                 domainHierarchy,
-                summaryIndicators,
                 knowledgeNetwork,
                 insights,
                 gaps: knowledgeGaps
             };
         } catch (error) {
             console.error('Error parsing knowledge structure:', error);
+            console.error('Section content:', section);
             throw new Error(`Failed to parse knowledge structure: ${error.message}`);
         }
+    }
+
+
+
+    /**
+     * Generate insights from network analysis
+     */
+    private generateNetworkInsights(knowledgeNetwork: any, domainHierarchy: HierarchicalDomain[]): any[] {
+        const insights = [];
+
+        // Network structure insight
+        const bridgeCount = knowledgeNetwork.bridges?.length || 0;
+        const foundationCount = knowledgeNetwork.foundations?.length || 0;
+        const authorityCount = knowledgeNetwork.authorities?.length || 0;
+
+        insights.push({
+            title: "Knowledge Network Structure",
+            content: `Your knowledge network contains ${bridgeCount} bridge domain(s), ${foundationCount} foundational domain(s), and ${authorityCount} authority domain(s). This indicates ${bridgeCount > 0 ? 'strong interdisciplinary connections' : 'isolated knowledge areas'}.`,
+            keyPoints: [
+                `${bridgeCount} knowledge bridges connecting different domains`,
+                `${foundationCount} foundational domains providing core access`,
+                `${authorityCount} authority domains with deep expertise`,
+                `${domainHierarchy.length} total knowledge domains identified`
+            ]
+        });
+
+        // Top bridge insight
+        if (knowledgeNetwork.bridges && knowledgeNetwork.bridges.length > 0) {
+            const topBridge = knowledgeNetwork.bridges[0];
+            insights.push({
+                title: "Primary Knowledge Bridge",
+                content: `${topBridge.domain} serves as your main knowledge bridge with ${topBridge.noteCount} notes. ${topBridge.explanation}`,
+                keyPoints: [
+                    `Domain: ${topBridge.domain}`,
+                    `Average centrality score: ${topBridge.averageScore?.toFixed(3)}`,
+                    `Total notes: ${topBridge.noteCount}`,
+                    topBridge.insights || "Connects multiple knowledge areas"
+                ]
+            });
+        }
+
+        return insights;
     }
 
     /**
@@ -706,58 +726,73 @@ export class MasterAnalysisManager {
         return `# KNOWLEDGE STRUCTURE ANALYSIS
 
 ## Input Data Description
-The input data contains:
-- Notes with titles, summaries, and knowledge domains (already classified with DDC section codes)
-- Notes may have graph metrics showing their centrality in the knowledge network
-- Creation and modification dates for tracking knowledge evolution
+The input vault-analysis.json data contains:
+- Metadata shows the total number of notes which can be used with centrality rankings.
+- Notes with titles, summaries, and knowledge domains (already classified with DDC section codes).
+- Notes have graph metrics showing their normalized centrality scores in the knowledge network.
+- Notes have centralityRankings showing their rank in the knowledge network (betweenness, closeness, eigenvector, degree) aiming for better understanding of the knowledge network structure.
+- Creation and modification dates for tracking knowledge evolution.
 
 ## Expected Output Format
 You MUST output a JSON object with the following structure:
 \`\`\`json
 {
-  "knowledgeDomainDistribution": {
-    "summary": {
-      "topDomain": {
-        "percentage": 51,
-        "name": "domain section name"
-      },
-      "bridgeMaker": {
-        "score": 0.229,
-        "name": "domain section name"
-      },
-      "growthTrend": {
-        "percentage": 62,
-        "name": "domain section name"
-      },
-      "recentFocus": {
-        "count": 6,
-        "name": "domain section name"
-      }
-    }
-  },
   "knowledgeNetwork": {
     "bridges": [
       {
-        "title": "Note Title",
-        "score": 0.85,
-        "rank": 1,
-        "connections": []
+        "domain": "Computer Science",
+        "domainCode": "0-0-4",
+        "explanation": "Detailed explanation of why this domain serves as a bridge, mentioning how it connects different knowledge areas through high betweenness centrality",
+        "averageScore": 0.85,
+        "noteCount": 12,
+        "topNotes": [
+          {
+            "title": "Note Title",
+            "score": 0.95,
+            "rank": 1,
+            "path": "path/to/note.md"
+          }
+        ],
+        "connections": ["Mathematics", "Project Management"],
+        "insights": "Additional insights about this domain's bridging role"
       }
     ],
     "foundations": [
       {
-        "title": "Note Title",
-        "score": 0.92,
-        "rank": 1,
-        "reach": 15
+        "domain": "Mathematics",
+        "domainCode": "5-1-0",
+        "explanation": "Detailed explanation of why this domain serves as a foundation, mentioning high closeness centrality and central access to other knowledge areas",
+        "averageScore": 0.92,
+        "noteCount": 8,
+        "topNotes": [
+          {
+            "title": "Note Title",
+            "score": 0.98,
+            "rank": 1,
+            "path": "path/to/note.md"
+          }
+        ],
+        "reach": 25,
+        "insights": "Additional insights about this domain's foundational role"
       }
     ],
     "authorities": [
       {
-        "title": "Note Title",
-        "score": 0.78,
-        "rank": 1,
-        "influence": 0.78
+        "domain": "Project Management",
+        "domainCode": "6-5-8",
+        "explanation": "Detailed explanation of why this domain serves as an authority, mentioning high eigenvector centrality and connections to other important domains",
+        "averageScore": 0.78,
+        "noteCount": 15,
+        "topNotes": [
+          {
+            "title": "Note Title",
+            "score": 0.88,
+            "rank": 1,
+            "path": "path/to/note.md"
+          }
+        ],
+        "influence": 0.82,
+        "insights": "Additional insights about this domain's authority status"
       }
     ]
   },
@@ -768,19 +803,15 @@ You MUST output a JSON object with the following structure:
 }
 \`\`\`
 
-### Important Requirements for Summary Indicators
-1. **Top Domain**: The most prevalent knowledge domain by percentage of notes
-2. **Bridge Maker**: The domain that best connects different areas based on betweenness centrality
-3. **Growth Trend**: The domain showing the most growth based on recent note creation/modification
-4. **Recent Focus**: The domain with the most notes created/modified in the last month
-
 ### Analysis Approach
-1. Use the already classified DDC section codes in each note's knowledgeDomain field
-2. Calculate summary indicators based on the distribution of these DDC codes
-3. Identify knowledge network elements (bridges, foundations, authorities) based on centrality metrics
-4. Identify potential knowledge gaps based on the overall domain distribution
+1. **Domain-Level Analysis**: Analyze knowledge domains based on DDC classification from the vault-analysis.json file.
+2. **Knowledge Bridges (Betweenness Centrality)**: Identify domains that connect different knowledge areas. Look for domains whose notes have high betweenness centrality scores, indicating they serve as bridges between different knowledge clusters.
+3. **Knowledge Foundations (Closeness Centrality)**: Identify domains that provide central access to the knowledge network. Look for domains whose notes have high closeness centrality, indicating they're foundational concepts.
+4. **Knowledge Authorities (Eigenvector Centrality)**: Identify domains where you have the most developed expertise. Look for domains whose notes have high eigenvector centrality, indicating they're connected to other important concepts.
+5. **Aggregate Metrics**: For each domain, calculate average centrality scores across all notes in that domain.
+6. **Top Notes**: For each domain, identify the top 3-5 notes with highest centrality scores in that category.
 
-CRITICAL: Your response MUST include the full JSON structure with all required sections. Focus on providing accurate summary indicators and network analysis based on the pre-classified notes.`;
+CRITICAL: Your response MUST focus on DOMAINS, not individual notes. Each entry should represent a knowledge domain with aggregated metrics and explanations of why that domain serves the specific network role.`;
     }
 
 
