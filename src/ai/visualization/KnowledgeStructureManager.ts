@@ -5,6 +5,7 @@ import {
     DomainDistributionData
 } from '../../components/domain-distribution/DomainDistributionChart';
 import { MasterAnalysisManager } from '../MasterAnalysisManager';
+import { DDCHelper } from '../DDCHelper';
 
 
 export interface NetworkNode {
@@ -188,23 +189,112 @@ export class KnowledgeStructureManager {
             // Load vault analysis data
             const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/vault-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const vaultData = JSON.parse(content);
-            
-            if (!vaultData?.results || vaultData.results.length === 0) {
+            const analysisData = JSON.parse(content);
+
+            if (!analysisData?.results || analysisData.results.length === 0) {
                 return null;
             }
-            
-            // Create a new MasterAnalysisManager instance for hierarchy building
-            const masterAnalysisManager = new MasterAnalysisManager(this.app, this.settings);
-            
-            // Ensure DDC template is loaded using DDCHelper
-            const { DDCHelper } = require('../DDCHelper');
+
+            // Ensure DDC template is loaded using DDCHelper singleton
             const ddcHelper = DDCHelper.getInstance(this.app);
             await ddcHelper.ensureDDCTemplateLoaded();
-            
-            // Use MasterAnalysisManager's implementation to build the hierarchy
-            const domainHierarchy = masterAnalysisManager.buildHierarchyFromVaultData(vaultData);
-            
+
+            // Build hierarchy logic (moved from MasterAnalysisManager)
+            // Create maps for DDC hierarchy - we'll only use class and section now
+            const classMap = new Map<string, any>();
+            const sectionMap = new Map<string, any>();
+            // Count notes per DDC section
+            const sectionCounts = new Map<string, number>();
+            const sectionNotes = new Map<string, any[]>();
+            // Get DDC name to code mapping for reverse lookup
+            const nameToCodeMap = new Map<string, string>();
+            const codeToNameMap = ddcHelper.getDDCCodeToNameMap();
+            // Add main class names to the code-to-name map
+            const ddcTemplate = ddcHelper.getDDCTemplate();
+            if (ddcTemplate && ddcTemplate.ddc_23_summaries && ddcTemplate.ddc_23_summaries.classes) {
+                ddcTemplate.ddc_23_summaries.classes.forEach((cls: any) => {
+                    codeToNameMap.set(cls.id, cls.name);
+                });
+            }
+            // Build reverse lookup map
+            codeToNameMap.forEach((name: string, code: string) => {
+                nameToCodeMap.set(name, code);
+            });
+            // Process each note to extract its DDC codes or names
+            analysisData.results.forEach((note: any) => {
+                if (note.knowledgeDomains && note.knowledgeDomains.length > 0) {
+                    note.knowledgeDomains.forEach((domain: string) => {
+                        let sectionId = '';
+                        if (ddcHelper.isValidDDCSectionId(domain)) {
+                            sectionId = domain;
+                        } else if (nameToCodeMap.has(domain)) {
+                            sectionId = nameToCodeMap.get(domain) || '';
+                        } else {
+                            return;
+                        }
+                        if (!sectionId) return;
+                        const classId = ddcHelper.getClassIdFromSection(sectionId);
+                        sectionCounts.set(sectionId, (sectionCounts.get(sectionId) || 0) + 1);
+                        if (!sectionNotes.has(sectionId)) {
+                            sectionNotes.set(sectionId, []);
+                        }
+                        sectionNotes.get(sectionId)?.push(note);
+                        if (!classMap.has(classId)) {
+                            const className = codeToNameMap.get(classId) || classId;
+                            classMap.set(classId, {
+                                ddcCode: classId,
+                                name: className,
+                                noteCount: 0,
+                                level: 1,
+                                children: []
+                            });
+                        }
+                        if (!sectionMap.has(sectionId)) {
+                            const sectionNode: any = {
+                                ddcCode: sectionId,
+                                name: codeToNameMap.get(sectionId) || sectionId,
+                                noteCount: 0,
+                                level: 2,
+                                parent: classMap.get(classId)?.ddcCode
+                            };
+                            sectionMap.set(sectionId, sectionNode);
+                            classMap.get(classId)?.children?.push(sectionNode);
+                        }
+                        if (sectionMap.has(sectionId)) {
+                            const section = sectionMap.get(sectionId);
+                            if (section) {
+                                section.noteCount = (section.noteCount || 0) + 1;
+                            }
+                        }
+                        if (classMap.has(classId)) {
+                            const classNode = classMap.get(classId);
+                            if (classNode) {
+                                classNode.noteCount = (classNode.noteCount || 0) + 1;
+                            }
+                        }
+                    });
+                }
+            });
+            // Extract keywords for each section
+            sectionMap.forEach((section, sectionId) => {
+                const notes = sectionNotes.get(sectionId) || [];
+                const keywords = new Set<string>();
+                notes.forEach(note => {
+                    if (note.keywords) {
+                        note.keywords.split(',').forEach((keyword: string) => {
+                            const trimmed = keyword.trim();
+                            if (trimmed) {
+                                keywords.add(trimmed);
+                            }
+                        });
+                    }
+                });
+                section.keywords = Array.from(keywords);
+            });
+            // Convert class map to array and sort by note count
+            const domainHierarchy = Array.from(classMap.values())
+                .filter((cls: any) => cls.noteCount && cls.noteCount > 0)
+                .sort((a: any, b: any) => (b.noteCount || 0) - (a.noteCount || 0));
             return {
                 domainHierarchy,
                 domainConnections: []
