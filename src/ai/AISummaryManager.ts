@@ -1,14 +1,18 @@
-import { App, Notice, Modal, requestUrl, setIcon } from 'obsidian';
+import { App, Notice, Modal, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
+import { AIModelService } from '../services/AIModelService';
 
 export class AISummaryManager {
     private app: App;
     private settings: GraphAnalysisSettings;
+    private aiService: AIModelService;
     private statusBarItem: HTMLElement | null = null;
+    private readonly MAX_WORDS_PER_NOTE = 1000;
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         this.settings = settings;
+        this.aiService = new AIModelService(settings);
     }
 
     public createStatusBarButton(statusBarContainer: HTMLElement): HTMLElement {
@@ -70,39 +74,7 @@ export class AISummaryManager {
         }
     }
 
-    private async callAIForSummary(content: string, fileName: string): Promise<string> {
-        // Check if Gemini API key is configured
-        if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
-            throw new Error('Please configure your Gemini API key in settings to use AI summaries.');
-        }
 
-        try {
-            // Clean up and limit content
-            const cleanedContent = this.cleanupContent(content);
-            
-            // Call Gemini API
-            const summary = await this.callGeminiAPI(cleanedContent, fileName);
-            return summary;
-        } catch (error) {
-            console.error('Gemini API call failed:', error);
-            
-            // Provide more specific error messages
-            let errorMessage = 'Unknown error occurred';
-            if (error instanceof Error) {
-                if (error.message.includes('401') || error.message.includes('403')) {
-                    errorMessage = 'Invalid API key. Please check your Gemini API key in settings.';
-                } else if (error.message.includes('429')) {
-                    errorMessage = 'API rate limit exceeded. Please try again later.';
-                } else if (error.message.includes('network') || error.message.includes('fetch')) {
-                    errorMessage = 'Network error. Please check your internet connection.';
-                } else {
-                    errorMessage = error.message;
-                }
-            }
-            
-            throw new Error(errorMessage);
-        }
-    }
 
     private cleanupContent(content: string): string {
         // Remove markdown syntax and clean up content
@@ -132,80 +104,73 @@ export class AISummaryManager {
             .replace(/\s+/g, ' ')
             .trim();
 
-        // Limit to approximately 1000 words
+        // Limit to approximately MAX_WORDS_PER_NOTE words
         const words = cleaned.split(/\s+/);
-        if (words.length > 1000) {
-            cleaned = words.slice(0, 1000).join(' ') + '...';
+        if (words.length > this.MAX_WORDS_PER_NOTE) {
+            cleaned = words.slice(0, this.MAX_WORDS_PER_NOTE).join(' ') + '...';
         }
 
         return cleaned;
     }
 
-    private cleanupSummaryText(text: string): string {
-        return text
-            // Remove any empty lines that only contain whitespace
-            .split('\n')
-            .filter(line => line.trim() !== '')
-            .join('\n');
-    }
 
-    private async callGeminiAPI(content: string, fileName: string): Promise<string> {
-        const apiKey = this.settings.geminiApiKey;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
-        const prompt = `Extract key words, identify the knowledge domain, and provide a one-sentence concise summary for the following note titled "${fileName}".
-        Please use same language as "${fileName}".
-        Please format the response exactly as follows:
-
-        **Key Words:** [List 3-6 most relevant keywords or key phrases, separated by commas]
-        **Key Points:** [One concise sentence that captures the main idea and key points of the note]
-        **Knowledge Domain:** [List 2-4 relevant fields or domains this content belongs to, separated by commas]
-
-Content:
-${content}`;
-
-        const requestBody = { 
-            contents: [{
-                parts: [{
-                    text: prompt
-                }]
-            }],
-            generationConfig: {
-                temperature: 0.3,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 300,
-            }
-        };
+    private async callAIForSummary(content: string, fileName: string): Promise<string> {
+        // Check if Gemini API key is configured
+        if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
+            throw new Error('Please configure your Gemini API key in settings to use AI summaries.');
+        }
 
         try {
-            const response = await requestUrl({
-                url: url,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (response.status !== 200) {
-                throw new Error(`Gemini API returned status ${response.status}: ${response.text}`);
-            }
-
-            const data = response.json;
+            // Clean up and limit content
+            const cleanedContent = this.cleanupContent(content);
             
-            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-                throw new Error('Invalid response format from Gemini API');
-            }
+            // Create structured analysis schema for single note summary
+            const responseSchema = this.aiService.createNoteSummarySchema();
+            
+            // Build optimized prompt with clear structure
+            const systemPrompt = `You are an expert knowledge analyst specializing in semantic analysis and knowledge classification. Your role is to analyze a single note and extract meaningful insights.`;
 
-            const summaryText = this.cleanupSummaryText(data.candidates[0].content.parts[0].text);
+            const contextPrompt = `## Analysis Guidelines:
+- Be specific and detailed in your summary
+- Extract 3-6 most relevant keywords or key phrases
+- Use the same language as the original note`;
+
+            const instructionPrompt = `## Analysis Instructions
+For the note, provide:
+1. **Key Words**: 3-6 key terms or phrases (comma-separated)
+2. **Key Points**: A two to three sentence summary of the main concept or purpose (be detailed and insightful)
+
+## Note to Analyze:`;
+
+            // Build the complete prompt
+            const fullPrompt = `${systemPrompt}\n\n${contextPrompt}\n\n${instructionPrompt}\n\n--- Note: "${fileName}" (${cleanedContent.split(/\s+/).length} words) ---\n${cleanedContent}`;
+
+            // Use structured analysis for reliable results
+            const response = await this.aiService.generateStructuredAnalysis<{
+                keyWords: string;
+                keyPoints: string;
+            }>(
+                fullPrompt,
+                responseSchema,
+                1200, // Appropriate token limit for single note
+                0.2, // Low temperature for consistent results
+                0.72 // Default topP
+            );
+
+            // Extract the result (single object, not array)
+            const analysis = response.result;
             const wordCount = content.split(/\s+/).length;
+
+            // Format the summary text for display
+            const summaryText = `**Key Words:** ${analysis.keyWords}
+**Key Points:** ${analysis.keyPoints}`;
 
             // Format for display in modal (includes word count)
             const displayFormat = `${summaryText}
 
 *Original word count: ${wordCount} words*
-*Generated using Google Gemini 1.5 Flash*`;
+*Generated using Google ${this.aiService.getModelName()}*`;
 
             // Format for writing to note (callout format without word count)
             const writeFormat = `> [!summary] AI Summary
@@ -216,8 +181,23 @@ ${content}`;
                 writeFormat
             });
         } catch (error) {
-            console.error('Gemini API error:', error);
-            throw error;
+            console.error('Structured analysis failed:', error);
+            
+            // Provide more specific error messages
+            let errorMessage = 'Unknown error occurred';
+            if (error instanceof Error) {
+                if (error.message.includes('401') || error.message.includes('403')) {
+                    errorMessage = 'Invalid API key. Please check your Gemini API key in settings.';
+                } else if (error.message.includes('429')) {
+                    errorMessage = 'API rate limit exceeded. Please try again later.';
+                } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                    errorMessage = 'Network error. Please check your internet connection.';
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+            
+            throw new Error(errorMessage);
         }
     }
 
@@ -229,6 +209,7 @@ ${content}`;
 
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;
+        this.aiService.updateSettings(settings);
     }
 
     public destroy(): void {

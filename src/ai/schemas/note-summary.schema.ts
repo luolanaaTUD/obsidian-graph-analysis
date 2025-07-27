@@ -6,17 +6,15 @@ import { Type } from '@google/genai';
 export interface NoteSummaryAnalysis {
     keyWords: string;
     keyPoints: string;
-    knowledgeDomain: string;
 }
 
 /**
  * Schema for individual note summary analysis using Google Gemini structured output
- * This schema is used by AISummaryManager.callGeminiAPI()
+ * This schema is used by AISummaryManager for single note analysis
  * 
- * Current format expected by AISummaryManager:
+ * Format expected by AISummaryManager:
  * **Key Words:** [List 3-6 most relevant keywords or key phrases, separated by commas]
  * **Key Points:** [One concise sentence that captures the main idea and key points of the note]
- * **Knowledge Domain:** [List 2-4 relevant fields or domains this content belongs to, separated by commas]
  */
 export function createNoteSummarySchema(): any {
     return {
@@ -29,13 +27,9 @@ export function createNoteSummarySchema(): any {
             keyPoints: { 
                 type: Type.STRING,
                 description: "One concise sentence that captures the main idea and key points of the note"
-            },
-            knowledgeDomain: { 
-                type: Type.STRING,
-                description: "List 2-4 relevant fields or domains this content belongs to, separated by commas"
             }
         },
-        required: ["keyWords", "keyPoints", "knowledgeDomain"],
-        propertyOrdering: ["keyWords", "keyPoints", "knowledgeDomain"]
+        required: ["keyWords", "keyPoints"],
+        propertyOrdering: ["keyWords", "keyPoints"]
     };
 } 

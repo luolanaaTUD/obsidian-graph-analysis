@@ -1,6 +1,6 @@
 import { App, Notice, TFile, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
-import { VaultAnalysisModal, VaultAnalysisInfoModal } from '../views/VaultAnalysisModals';
+import { VaultAnalysisModal } from '../views/VaultAnalysisModals';
 import { 
     VaultAnalysisResult, 
     VaultAnalysisData,
@@ -15,12 +15,15 @@ export class VaultSemanticAnalysisManager {
     private app: App;
     private settings: GraphAnalysisSettings;
     private aiService: AIModelService;
-    private statusBarItem: HTMLElement | null = null;
     private graphDataBuilder: GraphDataBuilder;
     private pluginService: PluginService;
     private masterAnalysisManager: MasterAnalysisManager;
     private ddcSectionsList: Array<{id: string, name: string, division: string, mainClass: string}> = [];
     private ddcTemplateLoaded: boolean = false;
+    private readonly MAX_WORDS_PER_NOTE = 1000;
+    private readonly MAX_NOTES_PER_BATCH = 50;
+    private readonly DELAY_BETWEEN_BATCHES = 3000; // 3 seconds between batches for 30 RPM rate limiting
+    private readonly RATE_LIMIT_RETRY_DELAY = 8000; // 8 second delay for rate limit retry
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
@@ -358,24 +361,20 @@ export class VaultSemanticAnalysisManager {
                 }
             }
 
-            // Create word-count-based batches with 2.0 Flash's generous limits
-            const maxWordsPerBatch = 5000; // Reduced batch size for debugging (was 20000)
-            const delayBetweenBatches = 3000; // 3 seconds between batches for 30 RPM rate limiting
+            // Create optimized note-based batches (50 notes per batch, max 1000 words per note)
+            const delayBetweenBatches = this.DELAY_BETWEEN_BATCHES;
             
             const batches: Array<typeof fileDataList> = [];
             let currentBatch: typeof fileDataList = [];
-            let currentBatchWordCount = 0;
 
             for (const fileData of fileDataList) {
-                // If adding this file would exceed the limit and we have files in current batch, start new batch
-                if (currentBatchWordCount + fileData.wordCount > maxWordsPerBatch && currentBatch.length > 0) {
+                // If current batch is full (50 notes), start a new batch
+                if (currentBatch.length >= this.MAX_NOTES_PER_BATCH) {
                     batches.push(currentBatch);
                     currentBatch = [fileData];
-                    currentBatchWordCount = fileData.wordCount;
                 } else {
                     // Add file to current batch
                     currentBatch.push(fileData);
-                    currentBatchWordCount += fileData.wordCount;
                 }
             }
             
@@ -385,18 +384,29 @@ export class VaultSemanticAnalysisManager {
             }
 
             const totalBatches = batches.length;
-            console.log(`Processing ${includedFiles.length} files in ${totalBatches} word-count-based batches using Gemini 2.0 Flash`);
-            console.log(`Average batch size: ${Math.round(fileDataList.reduce((sum, f) => sum + f.wordCount, 0) / totalBatches)} words`);
+            const averageBatchSize = Math.round(fileDataList.length / totalBatches);
+            
+            // Log batch distribution for transparency
+            console.log(`Processing ${includedFiles.length} files in ${totalBatches} note-based batches (max ${this.MAX_NOTES_PER_BATCH} notes per batch) using ${this.aiService.getModelName()}`);
+            console.log(`Average batch size: ${averageBatchSize} notes per batch`);
+            
+            // Log batch size distribution for small vaults
+            if (totalBatches === 1 && fileDataList.length < this.MAX_NOTES_PER_BATCH) {
+                console.log(`Small vault detected: processing all ${fileDataList.length} notes in a single batch`);
+            } else if (totalBatches > 1) {
+                const batchSizes = batches.map(batch => batch.length);
+                console.log(`Batch size distribution: ${batchSizes.join(', ')} notes per batch`);
+            }
             
             // Process batches sequentially with proper rate limiting
             for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
                 const batch = batches[batchIndex];
-                const batchWordCount = batch.reduce((sum, f) => sum + f.wordCount, 0);
                 const batchFileCount = batch.length;
+                const batchWordCount = batch.reduce((sum, f) => sum + f.wordCount, 0);
                 
                 // Update progress with batch info
                 const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
-                progressNotice.setMessage(`Processing batch ${batchIndex + 1}/${totalBatches} (${batchFileCount} files, ${batchWordCount} words)... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
+                progressNotice.setMessage(`Processing batch ${batchIndex + 1}/${totalBatches} (${batchFileCount} notes, ${batchWordCount} words)... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
                 
                 try {
                     // Process entire batch in a single API request
@@ -408,7 +418,7 @@ export class VaultSemanticAnalysisManager {
                     totalTokenUsage.candidatesTokens += batchResult.tokenUsage.candidatesTokens;
                     totalTokenUsage.totalTokens += batchResult.tokenUsage.totalTokens;
                     
-                    console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} files, ${batchWordCount} words, ${batchResult.tokenUsage.totalTokens} tokens`);
+                    console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} notes, ${batchWordCount} words, ${batchResult.tokenUsage.totalTokens} tokens`);
                     
                     // Process batch results
                     for (let i = 0; i < batch.length; i++) {
@@ -435,7 +445,7 @@ export class VaultSemanticAnalysisManager {
                         progressNotice.setMessage(`Rate limit exceeded, waiting before retry... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
                         
                         // Wait longer for rate limit retry (respecting 30 RPM = max 2 requests per minute)
-                        await new Promise(resolve => setTimeout(resolve, 8000)); // 8 second delay for rate limit retry
+                        await new Promise(resolve => setTimeout(resolve, this.RATE_LIMIT_RETRY_DELAY)); // 8 second delay for rate limit retry
                         
                         // Retry the batch once
                         try {
@@ -482,6 +492,9 @@ export class VaultSemanticAnalysisManager {
                     const tokenInfo = totalTokenUsage.totalTokens > 0 ? ` (${totalTokenUsage.totalTokens} tokens used)` : '';
                     progressNotice.setMessage(`Rate limiting: waiting 3s before next batch... (${processed}/${includedFiles.length} completed, ${failed} failed)${tokenInfo}`);
                     await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+                } else if (totalBatches === 1) {
+                    // Single batch - no rate limiting needed
+                    console.log('Single batch processing completed - no rate limiting required');
                 }
             }
 
@@ -565,7 +578,8 @@ export class VaultSemanticAnalysisManager {
             // Process API files if any exist
             if (apiFiles.length > 0) {
                 try {
-                    const batchAnalysisResult = await this.generateBatchAnalysis(apiFiles);
+                    // Use structured output instead of deprecated generateBatchAnalysis
+                    const batchAnalysisResult = await this.generateStructuredBatchAnalysis(apiFiles);
                     
                     // Accumulate token usage
                     totalTokenUsage.promptTokens += batchAnalysisResult.tokenUsage.promptTokens;
@@ -674,10 +688,10 @@ export class VaultSemanticAnalysisManager {
             .replace(/\s+/g, ' ')
             .trim();
 
-        // Limit to approximately 1000 words
+        // Limit to exactly MAX_WORDS_PER_NOTE words per note for consistent batch processing
         const words = cleaned.split(/\s+/);
-        if (words.length > 1000) {
-            cleaned = words.slice(0, 1000).join(' ') + '...';
+        if (words.length > this.MAX_WORDS_PER_NOTE) {
+            cleaned = words.slice(0, this.MAX_WORDS_PER_NOTE).join(' ') + '...';
         }
 
         return cleaned;
@@ -794,10 +808,6 @@ export class VaultSemanticAnalysisManager {
         }
     }
 
-    private showVaultAnalysisInfo(): void {
-        const modal = new VaultAnalysisInfoModal(this.app);
-        modal.open();
-    }
 
     private isFileExcluded(file: TFile): boolean {
         // Check folder exclusions
@@ -839,10 +849,7 @@ export class VaultSemanticAnalysisManager {
     }
 
     public destroy(): void {
-        if (this.statusBarItem) {
-            this.statusBarItem.remove();
-            this.statusBarItem = null;
-        }
+        // No cleanup needed - removed unused statusBarItem
     }
 
     private async saveAnalysisResults(results: VaultAnalysisResult[], totalTokenUsage: TokenUsage): Promise<void> {
@@ -926,7 +933,11 @@ export class VaultSemanticAnalysisManager {
         }
     }
 
-    private async generateBatchAnalysis(fileData: Array<{
+
+    // Core analysis function.
+    // Core analysis function using structured output API
+
+    private async generateStructuredBatchAnalysis(fileData: Array<{
         file: TFile;
         content: string;
         wordCount: number;
@@ -962,41 +973,44 @@ export class VaultSemanticAnalysisManager {
             }))
         );
 
-        // Build the batch prompt with DDC classification instructions
-        let prompt = `Analyze the following notes and provide analysis for each one. For each note, provide:
-1. A two to three sentence summary of the main concept or purpose (be detailed)
-2. 3-6 key terms or phrases (comma-separated)
-3. DDC classification codes that best match the content (comma-separated)
+        // Build optimized prompt with clear system/context/instruction structure
+        const systemPrompt = `You are an expert knowledge analyst specializing in semantic analysis and knowledge classification. Your role is to analyze notes and extract meaningful insights using the Dewey Decimal Classification (DDC) system.`;
 
-## DDC Classification Task
-Classify each note into the most appropriate Dewey Decimal Classification (DDC) sections. Each note should be classified with one or more DDC section codes from the reference list below.
+        const contextPrompt = `## DDC Classification Reference
+Use the following DDC sections for classification. Each section has an ID and name:
 
-### Classification Guidelines:
-- Be specific - use the most detailed section that applies
-- A note can belong to multiple sections if it spans different domains
-- Only use DDC codes from the provided reference list
-- Format the knowledgeDomain field as comma-separated DDC codes (e.g., "0-0-4,1-5-1")
-
-**DDC Sections Reference**:
 \`\`\`json
 ${sectionsJson}
 \`\`\`
 
-Notes to analyze:
+## Classification Guidelines:
+- Be specific: use the most detailed section that applies
+- Multi-domain notes: a note can belong to multiple sections if it spans different domains
+- Valid codes only: only use DDC codes from the provided reference list
+- Format: comma-separated DDC codes (e.g., "0-0-4,1-5-1")`;
 
-`;
+        const instructionPrompt = `## Analysis Instructions
+For each note, provide:
+1. **Summary**: A two to three sentence summary of the main concept or purpose (be detailed and insightful)
+2. **Keywords**: 3-6 key terms or phrases (comma-separated)
+3. **Knowledge Domain**: DDC classification codes that best match the content (comma-separated)
 
+## Notes to Analyze:`;
+
+        // Build the complete prompt by combining all components
+        let fullPrompt = `${systemPrompt}\n\n${contextPrompt}\n\n${instructionPrompt}\n\n`;
+        
         // Add each meaningful file to the prompt
         meaningfulFiles.forEach((data, index) => {
-            prompt += `--- Note ${index + 1}: "${data.file.basename}" (${data.wordCount} words) ---\n${data.content}\n\n`;
+            fullPrompt += `--- Note ${index + 1}: "${data.file.basename}" (${data.wordCount} words) ---\n${data.content}\n\n`;
         });
 
         try {
             // Use structured output instead of deprecated generateBatchAnalysis
             const responseSchema = this.aiService.createVaultSemanticAnalysisSchema(meaningfulFiles.length);
             
-            // Add debugging info
-            console.log(`Structured analysis: ${meaningfulFiles.length} files, prompt length: ${prompt.length} chars`);
+                                        // Add debugging info
+            console.log(`Structured analysis: ${meaningfulFiles.length} notes, prompt length: ${fullPrompt.length} chars`);
             console.log('Response schema:', JSON.stringify(responseSchema, null, 2));
             
             const response = await this.aiService.generateStructuredAnalysis<Array<{
@@ -1004,14 +1018,16 @@ Notes to analyze:
                 keywords: string;
                 knowledgeDomain: string;
             }>>(
-                prompt,
+                fullPrompt,
                 responseSchema,
                 meaningfulFiles.length * 150 + 300, // Calculate appropriate token limit
                 0.2, // Low temperature for consistent results
                 0.72 // Default topP
             );
 
-            console.log(`Batch analysis completed with DDC classification using structured output. Token usage: ${response.tokenUsage.totalTokens} total (${response.tokenUsage.promptTokens} prompt + ${response.tokenUsage.candidatesTokens} response)`);
+            // Use actual token usage from API response instead of estimation
+            const actualTokenUsage = response.tokenUsage;
+            console.log(`Batch analysis completed with DDC classification using structured output. Actual token usage: ${actualTokenUsage.totalTokens} total (${actualTokenUsage.promptTokens} prompt + ${actualTokenUsage.candidatesTokens} response)`);
 
             return {
                 results: response.result.map(item => ({
@@ -1019,96 +1035,23 @@ Notes to analyze:
                     keywords: item.keywords || '',
                     knowledgeDomain: item.knowledgeDomain || ''
                 })),
-                tokenUsage: response.tokenUsage
+                tokenUsage: actualTokenUsage
             };
 
         } catch (structuredError) {
             console.error('Structured output batch analysis failed:', structuredError);
             
-            // Fallback: try with legacy generateAnalysis method for individual files
-            console.log('Attempting fallback to individual file analysis...');
-            try {
-                const fallbackResults: Array<{
-                    summary: string;
-                    keywords: string;
-                    knowledgeDomain: string;
-                }> = [];
-                let fallbackTokenUsage: TokenUsage = { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 };
-                
-                for (const fileData of meaningfulFiles) {
-                    try {
-                        const individualPrompt = `Analyze this note and provide:
-1. A two to three sentence summary of the main concept or purpose (be detailed)
-2. 3-6 key terms or phrases (comma-separated)
-3. DDC classification codes that best match the content (comma-separated)
-
-**DDC Sections Reference**:
-\`\`\`json
-${sectionsJson}
-\`\`\`
-
-Respond in JSON format:
-{
-  "summary": "Two to three sentence summary",
-  "keywords": "keyword1, keyword2, keyword3", 
-  "knowledgeDomain": "0-0-4,1-5-1"
-}
-
-Note: "${fileData.file.basename}" (${fileData.wordCount} words)
-${fileData.content}`;
-
-                        const individualResponse = await this.aiService.generateAnalysis(
-                            individualPrompt,
-                            400, // Smaller token limit for individual files
-                            0.2
-                        );
-                        
-                        // Accumulate token usage
-                        fallbackTokenUsage.promptTokens += individualResponse.tokenUsage.promptTokens;
-                        fallbackTokenUsage.candidatesTokens += individualResponse.tokenUsage.candidatesTokens;
-                        fallbackTokenUsage.totalTokens += individualResponse.tokenUsage.totalTokens;
-                        
-                        // Parse the JSON response
-                        const parsedResult = JSON.parse(individualResponse.result);
-                        fallbackResults.push({
-                            summary: parsedResult.summary || '',
-                            keywords: parsedResult.keywords || '',
-                            knowledgeDomain: parsedResult.knowledgeDomain || ''
-                        });
-                        
-                        // Rate limiting between individual requests
-                        if (meaningfulFiles.length > 1) {
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-                        
-                    } catch (individualError) {
-                        console.error(`Failed to analyze individual file ${fileData.file.basename}:`, individualError);
-                        fallbackResults.push({
-                            summary: `Analysis failed for ${fileData.file.basename}`,
-                            keywords: '',
-                            knowledgeDomain: ''
-                        });
-                    }
-                }
-                
-                console.log(`Fallback analysis completed for ${fallbackResults.length} files using ${fallbackTokenUsage.totalTokens} tokens`);
-                return {
-                    results: fallbackResults,
-                    tokenUsage: fallbackTokenUsage
-                };
-                
-            } catch (fallbackError) {
-                console.error('Fallback analysis also failed:', fallbackError);
-                // Final fallback: create default results for each file
-                return {
-                    results: meaningfulFiles.map((data) => ({
-                        summary: `Analysis failed for ${data.file.basename}`,
-                        keywords: '',
-                        knowledgeDomain: ''
-                    })),
-                    tokenUsage: { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 }
-                };
-            }
+            console.log('Structured analysis failed - no fallback available. Creating default results.');
+            
+            // Create default results for each file when structured analysis fails
+            return {
+                results: meaningfulFiles.map((data) => ({
+                    summary: `Analysis failed for ${data.file.basename} - structured analysis error`,
+                    keywords: '',
+                    knowledgeDomain: ''
+                })),
+                tokenUsage: { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 }
+            };
         }
     }
 }

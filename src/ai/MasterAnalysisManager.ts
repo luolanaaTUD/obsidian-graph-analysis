@@ -1,5 +1,5 @@
 import { App, Notice, TFile } from 'obsidian';
-import { GraphAnalysisSettings, HierarchicalDomain } from '../types/types';
+import { GraphAnalysisSettings } from '../types/types';
 import { AIModelService, TokenUsage } from '../services/AIModelService';
 import { KnowledgeStructureData } from './visualization/KnowledgeStructureManager';
 import { 
@@ -11,7 +11,7 @@ import {
     EvolutionInsight
 } from './visualization/KnowledgeEvolutionManager';
 import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
-import { DDCHelper, DDCClass, DDCSectionListItem } from './DDCHelper';
+import { DDCHelper } from './DDCHelper';
 
 
 export interface VaultAnalysisResult {
@@ -75,23 +75,11 @@ export interface ActionsAnalysisData extends TabAnalysisData {
 
 export class MasterAnalysisManager {
     private app: App;
-    private settings: GraphAnalysisSettings;
     private aiService: AIModelService;
-    private ddcHelper: DDCHelper;
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
-        this.settings = settings;
         this.aiService = new AIModelService(settings);
-        this.ddcHelper = DDCHelper.getInstance(app);
-    }
-
-    public getAllDDCSections(): DDCSectionListItem[] {
-        return this.ddcHelper.getAllDDCSections();
-    }
-
-    private async loadDDCTemplate(): Promise<void> {
-        await this.ddcHelper.loadDDCTemplate();
     }
 
     // NEW: Ensure responses directory exists
@@ -216,145 +204,12 @@ export class MasterAnalysisManager {
         }
     }
 
-    /**
-     * Build hierarchical domain structure directly from vault analysis data
-     * This builds a 3-level hierarchy: Main Class > Division > Section
-     */
-    public buildHierarchyFromVaultData(
-        analysisData: VaultAnalysisData
-    ): HierarchicalDomain[] {
-        // Create maps for DDC hierarchy - we'll only use class and section now
-        const classMap = new Map<string, HierarchicalDomain>();
-        const sectionMap = new Map<string, HierarchicalDomain>();
-        
-        // Count notes per DDC section
-        const sectionCounts = new Map<string, number>();
-        const sectionNotes = new Map<string, VaultAnalysisResult[]>();
-        
-        // Get DDC name to code mapping for reverse lookup
-        const nameToCodeMap = new Map<string, string>();
-        const codeToNameMap = this.ddcHelper.getDDCCodeToNameMap();
-        
-        // Add main class names to the code-to-name map
-        const ddcTemplate = this.ddcHelper.getDDCTemplate();
-        if (ddcTemplate && ddcTemplate.ddc_23_summaries && ddcTemplate.ddc_23_summaries.classes) {
-            ddcTemplate.ddc_23_summaries.classes.forEach((cls: DDCClass) => {
-                // Store main class names with their IDs (0, 1, 2, etc.)
-                codeToNameMap.set(cls.id, cls.name);
-            });
-        }
-        
-        // Build reverse lookup map
-        codeToNameMap.forEach((name, code) => {
-            nameToCodeMap.set(name, code);
-        });
-        
-        // Process each note to extract its DDC codes or names
-        analysisData.results.forEach(note => {
-            if (note.knowledgeDomains && note.knowledgeDomains.length > 0) {
-                // Process each domain in the array
-                note.knowledgeDomains.forEach(domain => {
-                    let sectionId = '';
-                    // Try to use domain as a DDC code first
-                    if (this.ddcHelper.isValidDDCSectionId(domain)) {
-                        sectionId = domain;
-                    } 
-                    // If not a valid code, try to look up by name
-                    else if (nameToCodeMap.has(domain)) {
-                        sectionId = nameToCodeMap.get(domain) || '';
-                    } 
-                    // If still not found, skip this domain (do NOT create synthetic IDs)
-                    else {
-                        // Skip this domain
-                        return;
-                    }
-                    // Skip if we couldn't determine a section ID
-                    if (!sectionId) return;
-                    // Get class ID from section ID
-                    const classId = this.ddcHelper.getClassIdFromSection(sectionId);
-                    // Update section counts
-                    sectionCounts.set(sectionId, (sectionCounts.get(sectionId) || 0) + 1);
-                    // Update section notes
-                    if (!sectionNotes.has(sectionId)) {
-                        sectionNotes.set(sectionId, []);
-                    }
-                    sectionNotes.get(sectionId)?.push(note);
-                    // Create class node if it doesn't exist
-                    if (!classMap.has(classId)) {
-                        // Get the proper name for the class - for standard DDC classes (0-9),
-                        // this will be the proper main class name
-                        const className = codeToNameMap.get(classId) || classId;
-                        classMap.set(classId, {
-                            ddcCode: classId,
-                            name: className,
-                            noteCount: 0,
-                            level: 1, // Main class level
-                            children: []
-                        });
-                    }
-                    // Create section node if it doesn't exist
-                    if (!sectionMap.has(sectionId)) {
-                        const sectionNode: HierarchicalDomain = {
-                            ddcCode: sectionId,
-                            name: codeToNameMap.get(sectionId) || sectionId,
-                            noteCount: 0,
-                            level: 2, // Section level (was 3 before)
-                            parent: classMap.get(classId)?.ddcCode // Fix: Use ddcCode string instead of the HierarchicalDomain object
-                        };
-                        sectionMap.set(sectionId, sectionNode);
-                        // Add section as child of class
-                        classMap.get(classId)?.children?.push(sectionNode);
-                    }
-                    // Update note count for section and class
-                    if (sectionMap.has(sectionId)) {
-                        const section = sectionMap.get(sectionId);
-                        if (section) {
-                            section.noteCount = (section.noteCount || 0) + 1;
-                        }
-                    }
-                    if (classMap.has(classId)) {
-                        const classNode = classMap.get(classId);
-                        if (classNode) {
-                            classNode.noteCount = (classNode.noteCount || 0) + 1;
-                        }
-                    }
-                });
-            }
-        });
-        
-        // Extract keywords for each section
-        sectionMap.forEach((section, sectionId) => {
-            const notes = sectionNotes.get(sectionId) || [];
-            const keywords = new Set<string>();
-            
-            notes.forEach(note => {
-                if (note.keywords) {
-                    note.keywords.split(',').forEach(keyword => {
-                        const trimmed = keyword.trim();
-                        if (trimmed) {
-                            keywords.add(trimmed);
-                        }
-                    });
-                }
-            });
-            
-            section.keywords = Array.from(keywords); // Fix: Use string array instead of comma-joined string
-        });
-        
-        // Convert class map to array and sort by note count
-        const result = Array.from(classMap.values())
-            .filter(cls => cls.noteCount && cls.noteCount > 0)
-            .sort((a, b) => (b.noteCount || 0) - (a.noteCount || 0));
-        
-        return result;
-    }
-
     public updateSettings(settings: GraphAnalysisSettings): void {
-        this.settings = settings;
         this.aiService.updateSettings(settings);
     }
 
  
+
     /**
      * NEW: Generate Knowledge Structure Analysis using structured output
      */
@@ -362,6 +217,8 @@ export class MasterAnalysisManager {
         try {
             console.log('Generating Knowledge Structure Analysis with structured output...');
             
+
+            //TODO: We need to extract most important info from vault data, some fields can be excluded while sending to AI model.
             const analysisData = await this.loadVaultAnalysisData();
             if (!analysisData) {
                 throw new Error('No vault analysis data found. Please generate vault analysis first.');
@@ -382,7 +239,7 @@ ${JSON.stringify(analysisData)}`;
 
 **Instructions:**
 1. Identify top-ranking domains for each centrality type based on the provided data
-2. For each domain, collect the contributing notes internally and output top 3 notes for each domain
+2. For each domain, output top 3 contributing notes with the highest centrality ranking for each domain
 3. Explain why each domain qualifies as a bridge/foundation/authority based on its network position
 4. Use only domains explicitly present in the vault data - do not invent domains
 5. Treat domains as independent entities (multiple domains from one note are separate)`;
@@ -397,7 +254,7 @@ ${JSON.stringify(analysisData)}`;
             const response = await this.aiService.generateStructuredAnalysis<any>(
                 prompt,
                 responseSchema,
-                8000, // maxOutputTokens
+                8192, // maxOutputTokens
                 0.3,  // temperature
                 0.72  // topP
             );
@@ -452,6 +309,9 @@ ${JSON.stringify(analysisData)}`;
             throw new Error(`Failed to parse structured knowledge network: ${error.message}`);
         }
     }
+
+
+
 
     // NEW: Cache tab-specific analysis
     private async cacheTabAnalysis(tabName: string, data: TabAnalysisData): Promise<void> {
