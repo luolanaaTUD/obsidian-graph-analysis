@@ -16,6 +16,12 @@ pub struct GraphManager {
 // Static reference to store the graph manager
 pub static GRAPH_MANAGER: Lazy<Mutex<Option<GraphManager>>> = Lazy::new(|| Mutex::new(None));
 
+impl Default for GraphManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GraphManager {
     /// Create a new empty graph manager
     pub fn new() -> Self {

@@ -224,8 +224,10 @@ pub fn calculate_degree_centrality_cached() -> String {
         let node_idx = manager.graph.node_indices().nth(idx).unwrap();
         let degree_centrality = centrality_scores[node_idx.index()];
         
-        let mut centrality = CentralityScores::default();
-        centrality.degree = Some(degree_centrality);
+        let centrality = CentralityScores {
+            degree: Some(degree_centrality),
+            ..Default::default()
+        };
         
         results.push(Node {
             node_id: idx,
@@ -264,13 +266,18 @@ pub fn calculate_eigenvector_centrality_cached() -> String {
 
     // Create nodes with eigenvector centrality scores
     for (idx, node_name) in manager.node_names.iter().enumerate() {
-        let mut centrality = CentralityScores::default();
-        
         // Get the centrality score if available
-        if let Ok(Some(centrality_scores)) = &centrality_result {
+        let eigenvector_score = if let Ok(Some(centrality_scores)) = &centrality_result {
             let node_idx = manager.graph.node_indices().nth(idx).unwrap();
-            centrality.eigenvector = Some(centrality_scores[node_idx.index()]);
-        }
+            Some(centrality_scores[node_idx.index()])
+        } else {
+            None
+        };
+        
+        let centrality = CentralityScores {
+            eigenvector: eigenvector_score,
+            ..Default::default()
+        };
         
         results.push(Node {
             node_id: idx,
@@ -311,11 +318,12 @@ pub fn calculate_betweenness_centrality_cached() -> String {
     
     // Create nodes with betweenness centrality scores
     for (idx, node_name) in manager.node_names.iter().enumerate() {
-        let mut centrality = CentralityScores::default();
-        
         // Get the centrality score if available
         let node_idx = manager.graph.node_indices().nth(idx).unwrap();
-        centrality.betweenness = centrality_scores[node_idx.index()];
+        let centrality = CentralityScores {
+            betweenness: centrality_scores[node_idx.index()],
+            ..Default::default()
+        };
         
         results.push(Node {
             node_id: idx,
@@ -355,11 +363,12 @@ pub fn calculate_closeness_centrality_cached() -> String {
     
     // Create nodes with closeness centrality scores
     for (idx, node_name) in manager.node_names.iter().enumerate() {
-        let mut centrality = CentralityScores::default();
-        
         // Get the centrality score if available
         let node_idx = manager.graph.node_indices().nth(idx).unwrap();
-        centrality.closeness = centrality_scores[node_idx.index()];
+        let centrality = CentralityScores {
+            closeness: centrality_scores[node_idx.index()],
+            ..Default::default()
+        };
         
         results.push(Node {
             node_id: idx,
