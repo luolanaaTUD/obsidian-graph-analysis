@@ -151,6 +151,37 @@ const pathAliasPlugin = {
   },
 };
 
+// Copy CSS file to the correct location for Obsidian
+const copyCssFile = {
+  name: 'copy-css-file',
+  setup(build) {
+    build.onEnd(() => {
+      const outputDir = path.join(process.cwd(), 'dist');
+      const cssSourcePath = path.join(outputDir, 'styles', 'styles.css');
+      const cssTargetPath = path.join(outputDir, 'styles.css');
+      
+      try {
+        // Check if the source CSS file exists (from the entry point)
+        if (fs.existsSync(cssSourcePath)) {
+          fs.copyFileSync(cssSourcePath, cssTargetPath);
+          console.log(`✅ Copied CSS from ${cssSourcePath} to ${cssTargetPath}`);
+        } else {
+          // Fallback: check if main.css exists (from CSS import in main.ts)
+          const mainCssPath = path.join(outputDir, 'main.css');
+          if (fs.existsSync(mainCssPath)) {
+            fs.copyFileSync(mainCssPath, cssTargetPath);
+            console.log(`✅ Copied CSS from ${mainCssPath} to ${cssTargetPath}`);
+          } else {
+            console.warn(`⚠️  CSS file not found. Expected at ${cssSourcePath} or ${mainCssPath}`);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Error copying CSS file: ${error.message}`);
+      }
+    });
+  },
+};
+
 const context = await esbuild.context({
   banner: {
     js: banner,
@@ -178,7 +209,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outdir: "dist",
-  plugins: [pathAliasPlugin, injectWasmCode, copyWasmFiles, copyDDCTemplate],
+  plugins: [pathAliasPlugin, injectWasmCode, copyWasmFiles, copyDDCTemplate, copyCssFile],
 });
 
 if (prod) {
