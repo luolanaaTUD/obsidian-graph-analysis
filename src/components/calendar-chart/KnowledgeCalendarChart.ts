@@ -44,50 +44,59 @@ export class KnowledgeCalendarChart {
     }
 
     async generateCalendarData(): Promise<CalendarData[]> {
-        const files = this.app.vault.getMarkdownFiles();
+        const allFiles = this.app.vault.getMarkdownFiles();
         const dailyActivity = new Map<string, CalendarData>();
         
-        console.log(`Processing ${files.length} files for calendar chart...`);
+        console.log(`Processing ${allFiles.length} files for calendar chart...`);
         
-        for (const file of files) {
-            if (this.isFileExcluded(file)) {
-                continue;
-            }
-            
-            try {
-                const content = await this.app.vault.read(file);
-                const wordCount = this.calculateWordCount(content);
-                
-                const modifiedDate = new Date(file.stat.mtime);
-                const dateKey = modifiedDate.toISOString().split('T')[0];
-                
-                if (!dailyActivity.has(dateKey)) {
-                    dailyActivity.set(dateKey, {
-                        date: new Date(dateKey),
-                        value: 0,
-                        wordCount: 0,
-                        fileCount: 0
-                    });
-                }
-                
-                const dayData = dailyActivity.get(dateKey)!;
-                dayData.wordCount += wordCount;
-                dayData.fileCount++;
-                
-            } catch (error) {
-                console.warn(`Could not read file ${file.path}:`, error);
-            }
+        // Filter excluded files first to reduce processing
+        const files = allFiles.filter(file => !this.isFileExcluded(file));
+        
+        // Process files in parallel batches to improve performance
+        const BATCH_SIZE = 10;
+        const batches: TFile[][] = [];
+        for (let i = 0; i < files.length; i += BATCH_SIZE) {
+            batches.push(files.slice(i, i + BATCH_SIZE));
         }
         
-        // Calculate activity scores - keep original word counts as values
+        // Process batches in parallel
+        await Promise.all(batches.map(async (batch) => {
+            await Promise.all(batch.map(async (file) => {
+                try {
+                    const content = await this.app.vault.read(file);
+                    const wordCount = this.calculateWordCount(content);
+                    
+                    const modifiedDate = new Date(file.stat.mtime);
+                    const dateKey = modifiedDate.toISOString().split('T')[0];
+                    
+                    // Use Map's get-or-create pattern more efficiently
+                    let dayData = dailyActivity.get(dateKey);
+                    if (!dayData) {
+                        dayData = {
+                            date: new Date(dateKey),
+                            value: 0,
+                            wordCount: 0,
+                            fileCount: 0
+                        };
+                        dailyActivity.set(dateKey, dayData);
+                    }
+                    
+                    dayData.wordCount += wordCount;
+                    dayData.fileCount++;
+                    // Set value directly during processing to avoid extra iteration
+                    dayData.value = dayData.wordCount;
+                    
+                } catch (error) {
+                    console.warn(`Could not read file ${file.path}:`, error);
+                }
+            }));
+        }));
+        
+        // Convert to sorted array - single pass with value already set
         const dailyActivities = Array.from(dailyActivity.values());
+        dailyActivities.sort((a, b) => a.date.getTime() - b.date.getTime());
         
-        dailyActivities.forEach(day => {
-            // Use word count directly as the value for color scaling
-            day.value = day.wordCount;
-        });
-        
-        this.data = dailyActivities.sort((a, b) => a.date.getTime() - b.date.getTime());
+        this.data = dailyActivities;
         console.log(`Generated calendar data for ${dailyActivities.length} active days`);
         
         return this.data;

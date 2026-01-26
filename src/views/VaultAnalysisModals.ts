@@ -20,7 +20,7 @@ export interface VaultSemanticAnalysisManager {
 export class VaultAnalysisModal extends Modal {
     private analysisData: VaultAnalysisData | null;
     private currentView: string = 'semantic';
-    private contentContainer: HTMLElement;
+    private contentContainer!: HTMLElement;
     private hasExistingData: boolean;
     private vaultSemanticAnalysisManager: VaultSemanticAnalysisManager;
     private settings: GraphAnalysisSettings;

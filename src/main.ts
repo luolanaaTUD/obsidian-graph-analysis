@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import { Notice, Plugin, TFile, TAbstractFile, WorkspaceLeaf } from 'obsidian';
 import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata, VaultData, VaultNote, CentralityScores } from './types/types';
 import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
@@ -31,9 +31,9 @@ export default class GraphAnalysisPlugin extends Plugin {
     vaultAnalysisManager: VaultSemanticAnalysisManager | null = null;
     exclusionUtils: ExclusionUtils | null = null;
     
-    private fileCreatedHandler: ((file: TFile) => void) | null = null;
-    private fileDeletedHandler: ((file: TFile) => void) | null = null;
-    private fileModifiedHandler: ((file: TFile) => void) | null = null;
+    private fileCreatedHandler: ((file: TAbstractFile) => void) | null = null;
+    private fileDeletedHandler: ((file: TAbstractFile) => void) | null = null;
+    private fileModifiedHandler: ((file: TAbstractFile) => void) | null = null;
     private metadataChangedHandler: ((file: TFile) => void) | null = null;
     
     private graphDataNeedsRefresh: boolean = false;
@@ -295,26 +295,26 @@ export default class GraphAnalysisPlugin extends Plugin {
     }
 
     private registerVaultEventListeners() {
-        this.fileCreatedHandler = (file: TFile) => {
+        this.fileCreatedHandler = (file: TAbstractFile) => {
             if (!this.pluginIsLoaded) return;
             
-            if (file.extension === 'md' && !this.isFileExcluded(file)) {
+            if (file instanceof TFile && file.extension === 'md' && !this.isFileExcluded(file)) {
                 this.scheduleGraphDataRefresh('File created');
             }
         };
         
-        this.fileDeletedHandler = (file: TFile) => {
+        this.fileDeletedHandler = (file: TAbstractFile) => {
             if (!this.pluginIsLoaded) return;
             
-            if (file.extension === 'md') {
+            if (file instanceof TFile && file.extension === 'md') {
                 this.scheduleGraphDataRefresh('File deleted');
             }
         };
         
-        this.fileModifiedHandler = (file: TFile) => {
+        this.fileModifiedHandler = (file: TAbstractFile) => {
             if (!this.pluginIsLoaded) return;
             
-            if (file.extension === 'md' && !this.isFileExcluded(file)) {
+            if (file instanceof TFile && file.extension === 'md' && !this.isFileExcluded(file)) {
                 this.scheduleGraphDataRefresh('File modified');
             }
         };

@@ -39,7 +39,8 @@ export interface KnowledgeActionsData {
 
 export class KnowledgeActionsManager {
     private app: App;
-    private container: HTMLElement;
+    private container!: HTMLElement;
+    private settings: GraphAnalysisSettings;
     private data: KnowledgeActionsData | null = null;
     private createEmptyStateFn: (container: HTMLElement, message: string) => void;
 

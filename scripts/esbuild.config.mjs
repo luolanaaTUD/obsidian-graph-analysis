@@ -110,6 +110,8 @@ const injectWasmCode = {
       // Create a modified version of the WASM JS code that works with CommonJS
       const modifiedWasmJsCode = wasmJsCode
         .replace('export default __wbg_init;', '')
+        .replace(/export\s*{\s*initSync\s*,\s*__wbg_init\s+as\s+default\s*};?/g, '') // Remove combined export with default
+        .replace(/export\s*{\s*__wbg_init\s+as\s+default\s*};?/g, '') // Remove default export only
         .replace('export { initSync };', '')
         .replace(/export function ([a-zA-Z_]+)/g, 'function $1')
         .replace(/export async function ([a-zA-Z_]+)/g, 'async function $1')

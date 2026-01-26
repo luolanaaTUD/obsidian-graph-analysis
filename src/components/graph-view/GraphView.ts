@@ -1,4 +1,4 @@
-import { App, Notice, TFile, setIcon } from 'obsidian';
+import { App, Notice, TFile, TAbstractFile, EventRef, setIcon } from 'obsidian';
 import * as d3 from 'd3';
 import * as ss from 'simple-statistics';
 import { 
@@ -102,6 +102,8 @@ export class GraphView {
     private visibilityObserver: IntersectionObserver | null = null;
     private lastVisibilityChange: number = 0;
     private wasInvisible: boolean = false;
+    private graphMetadata: GraphMetadata | null = null;
+    private activeButton: HTMLElement | null = null;
     private isVisible: boolean = false;
     
     // Animation frame request reference
@@ -121,10 +123,14 @@ export class GraphView {
     private _hideTooltipTimeout: number | null = null;
 
     // Event handlers
-    private vaultModifyHandler!: (file: TFile) => void;
-    private vaultCreateHandler!: (file: TFile) => void;
-    private vaultDeleteHandler!: (file: TFile) => void;
-    private vaultRenameHandler!: (file: TFile, oldPath: string) => void;
+    private vaultModifyHandler!: (file: TAbstractFile) => void;
+    private vaultCreateHandler!: (file: TAbstractFile) => void;
+    private vaultDeleteHandler!: (file: TAbstractFile) => void;
+    private vaultRenameHandler!: (file: TAbstractFile, oldPath: string) => void;
+    private vaultModifyEventRef: EventRef | null = null;
+    private vaultCreateEventRef: EventRef | null = null;
+    private vaultDeleteEventRef: EventRef | null = null;
+    private vaultRenameEventRef: EventRef | null = null;
     private debounceTimeout: number | null = null;
 
     // Control panel elements
@@ -265,11 +271,13 @@ export class GraphView {
         let totalRadius = 0;
         let nodeCount = this.nodes.length;
         
-        this.nodes.forEach(node => {
+        // Use for loop for better performance
+        for (let i = 0; i < nodeCount; i++) {
+            const node = this.nodes[i];
             const radius = this.getNodeRadius(node);
             maxRadius = Math.max(maxRadius, radius);
             totalRadius += radius;
-        });
+        }
         
         // Use average node radius for min zoom (to see entire graph)
         const avgRadius = totalRadius / nodeCount;
@@ -1176,17 +1184,20 @@ export class GraphView {
         // Update simulation with new data
         if (this.simulation) {
             // Assign initial positions in a circle layout
+            // Use for loop instead of forEach for better performance
             const radius = Math.min(this.width, this.height) / 6;
             const angleStep = (2 * Math.PI) / this.nodes.length;
+            const nodeCount = this.nodes.length;
             
-            this.nodes.forEach((node, i) => {
+            for (let i = 0; i < nodeCount; i++) {
+                const node = this.nodes[i];
                 const angle = i * angleStep;
                 node.x = Math.cos(angle) * radius;
                 node.y = Math.sin(angle) * radius;
                 // Clear any fixed positions
                 node.fx = null;
                 node.fy = null;
-            });
+            }
 
             // Update the simulation with our nodes and links
             this.simulation.nodes(this.nodes);
@@ -1320,15 +1331,18 @@ export class GraphView {
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
         
-        this.nodes.forEach(node => {
-            if (node.x === undefined || node.y === undefined) return;
+        // Use for loop for better performance
+        const nodeCount = this.nodes.length;
+        for (let i = 0; i < nodeCount; i++) {
+            const node = this.nodes[i];
+            if (node.x === undefined || node.y === undefined) continue;
             const radius = this.getNodeRadius(node);
             
             minX = Math.min(minX, node.x - radius);
             minY = Math.min(minY, node.y - radius);
             maxX = Math.max(maxX, node.x + radius);
             maxY = Math.max(maxY, node.y + radius);
-        });
+        }
         
         // Only proceed if we have valid bounds
         if (!isFinite(minX) || !isFinite(minY)) return;
@@ -1432,10 +1446,18 @@ export class GraphView {
     
     public onunload() {
         // Remove vault event handlers
-        this.app.vault.off('modify', this.vaultModifyHandler);
-        this.app.vault.off('create', this.vaultCreateHandler);
-        this.app.vault.off('delete', this.vaultDeleteHandler);
-        this.app.vault.off('rename', this.vaultRenameHandler);
+        if (this.vaultModifyEventRef) {
+            this.app.vault.offref(this.vaultModifyEventRef);
+        }
+        if (this.vaultCreateEventRef) {
+            this.app.vault.offref(this.vaultCreateEventRef);
+        }
+        if (this.vaultDeleteEventRef) {
+            this.app.vault.offref(this.vaultDeleteEventRef);
+        }
+        if (this.vaultRenameEventRef) {
+            this.app.vault.offref(this.vaultRenameEventRef);
+        }
 
         // Clear any pending debounce timeout
         if (this.debounceTimeout) {
@@ -1564,35 +1586,35 @@ export class GraphView {
 
     private setupVaultEventHandlers() {
         // Create handlers that debounce updates
-        this.vaultModifyHandler = (file: TFile) => {
-            if (file.extension === 'md') {
+        this.vaultModifyHandler = (file: TAbstractFile) => {
+            if (file instanceof TFile && file.extension === 'md') {
                 this.debouncedUpdate();
             }
         };
 
-        this.vaultCreateHandler = (file: TFile) => {
-            if (file.extension === 'md') {
+        this.vaultCreateHandler = (file: TAbstractFile) => {
+            if (file instanceof TFile && file.extension === 'md') {
                 this.debouncedUpdate();
             }
         };
 
-        this.vaultDeleteHandler = (file: TFile) => {
-            if (file.extension === 'md') {
+        this.vaultDeleteHandler = (file: TAbstractFile) => {
+            if (file instanceof TFile && file.extension === 'md') {
                 this.debouncedUpdate();
             }
         };
 
-        this.vaultRenameHandler = (file: TFile, oldPath: string) => {
-            if (file.extension === 'md') {
+        this.vaultRenameHandler = (file: TAbstractFile, oldPath: string) => {
+            if (file instanceof TFile && file.extension === 'md') {
                 this.debouncedUpdate();
             }
         };
 
-        // Register the event handlers
-        this.app.vault.on('modify', this.vaultModifyHandler);
-        this.app.vault.on('create', this.vaultCreateHandler);
-        this.app.vault.on('delete', this.vaultDeleteHandler);
-        this.app.vault.on('rename', this.vaultRenameHandler);
+        // Register the event handlers and store EventRefs for cleanup
+        this.vaultModifyEventRef = this.app.vault.on('modify', this.vaultModifyHandler);
+        this.vaultCreateEventRef = this.app.vault.on('create', this.vaultCreateHandler);
+        this.vaultDeleteEventRef = this.app.vault.on('delete', this.vaultDeleteHandler);
+        this.vaultRenameEventRef = this.app.vault.on('rename', this.vaultRenameHandler);
     }
 
     private debouncedUpdate() {
@@ -1978,11 +2000,13 @@ export class GraphView {
                     break;
             }
 
-            // Store the scores for later use
+            // Store the scores for later use - use for loop for better performance
             this.lastCentralityScores = {};
-            results.forEach(node => {
+            const resultCount = results.length;
+            for (let i = 0; i < resultCount; i++) {
+                const node = results[i];
                 this.lastCentralityScores[node.node_id] = node.centrality[type] || 0;
-            });
+            }
 
             // Find min and max scores for normalization
             const scores = Object.values(this.lastCentralityScores);

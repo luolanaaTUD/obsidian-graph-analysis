@@ -44,26 +44,37 @@ export class GraphDataBuilder {
         const allFiles = this.getAllMarkdownFiles();
         const plugin = this.pluginService.getPlugin();
         
-        // Filter files using exclusion logic
-        const files = allFiles.filter(file => !plugin.isFileExcluded(file));
-        
+        // Filter files using exclusion logic - single pass
+        const files: TFile[] = [];
         const nodes: string[] = [];
-        const edges = new Set<string>();
         const pathToIndex = new Map<string, number>();
+        const edges = new Set<string>();
 
-        // Build nodes array and path-to-index mapping
-        for (const file of files) {
+        // Build nodes array, path-to-index mapping, and filter in single pass
+        for (const file of allFiles) {
+            if (plugin.isFileExcluded(file)) continue;
+            
             const index = nodes.length;
             nodes.push(file.path);
             pathToIndex.set(file.path, index);
+            files.push(file);
         }
 
-        // Build edges using metadata cache
+        // Build edges using metadata cache - memoize link resolution
+        const linkCache = new Map<string, Set<string>>();
         for (const file of files) {
             const sourceIndex = pathToIndex.get(file.path);
             if (sourceIndex === undefined) continue;
 
-            const linkedPaths = this.getLinksFromFile(file);
+            // Cache link resolution to avoid repeated lookups
+            let linkedPaths: Set<string>;
+            if (linkCache.has(file.path)) {
+                linkedPaths = linkCache.get(file.path)!;
+            } else {
+                linkedPaths = this.getLinksFromFile(file);
+                linkCache.set(file.path, linkedPaths);
+            }
+
             for (const linkedPath of linkedPaths) {
                 const targetIndex = pathToIndex.get(linkedPath);
                 if (targetIndex === undefined) continue;
@@ -75,11 +86,13 @@ export class GraphDataBuilder {
             }
         }
 
-        // Convert edges set to array format
-        const edgesArray: [number, number][] = Array.from(edges).map(edge => {
+        // Convert edges set to array format - single pass with pre-allocated array
+        const edgesArray: [number, number][] = new Array(edges.size);
+        let edgeIndex = 0;
+        for (const edge of edges) {
             const [source, target] = edge.split(',').map(Number);
-            return [source, target];
-        });
+            edgesArray[edgeIndex++] = [source, target];
+        }
 
         // Build final graph data structure
         const graphData: GraphData = {

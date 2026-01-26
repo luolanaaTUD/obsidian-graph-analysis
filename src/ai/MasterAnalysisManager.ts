@@ -117,7 +117,7 @@ export class MasterAnalysisManager {
             return data;
         } catch (error) {
             // Check if this is a file not found error (ENOENT)
-            if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+            if (error && typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'ENOENT') {
                 console.log(`No cached ${tabName} analysis found yet. This is normal for first-time use.`);
             } else {
                 // Log other unexpected errors

@@ -42,6 +42,9 @@ export interface KnowledgeStructureData {
 export class KnowledgeStructureManager {
     private app: App;
     private container!: HTMLElement;
+    private settings: GraphAnalysisSettings;
+    private domainHierarchy: HierarchicalDomain[] = [];
+    private domainConnections: DomainConnection[] = [];
     private data: KnowledgeStructureData | null = null;
     private createEmptyStateFn: (container: HTMLElement, message: string) => void;
 

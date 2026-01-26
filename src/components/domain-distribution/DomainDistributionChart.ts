@@ -42,8 +42,8 @@ interface D3HierarchyNode {
 // type TypedHierarchyNode = d3.HierarchyRectangularNode<D3HierarchyNode>;
 
 export class DomainDistributionChart {
-    // private app: App;
-    // private settings: GraphAnalysisSettings;
+    private app: App;
+    private settings: GraphAnalysisSettings;
     private container: HTMLElement;
     private data: DomainDistributionData | null = null;
     private options: DomainChartOptions;
