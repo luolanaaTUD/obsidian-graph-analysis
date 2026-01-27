@@ -192,18 +192,17 @@
     align-items: center;
 }
 
+/* Removed old emoji icon - now using Lucide icon instead */
 .network-notes-header::before {
-    content: "📝";
-    margin-right: 6px;
-    font-size: 14px;
+    content: none;
 }
 
 .network-notes-list {
     list-style: none;
-    padding: 8px 12px;
+    padding: 0;
     margin: 0;
-    background: var(--background-secondary-alt, #f6f8fa);
-    border-radius: 6px;
+    background: transparent; /* Background provided by parent container */
+    border-radius: 0;
 }
 
 .network-note-item {
@@ -1304,6 +1303,35 @@
     border-radius: 6px;
     background-color: var(--background-primary);
     margin-bottom: 16px;
+}
+
+/* KDE Chart Container */
+.kde-chart-container {
+    margin: 20px 0;
+    padding: 20px;
+    background: var(--background-primary);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.kde-chart-title {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.kde-chart-svg-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.kde-chart-no-data {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 40px 20px;
+    font-size: 14px;
 }
 
 .vault-analysis-results {

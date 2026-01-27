@@ -677,16 +677,21 @@ export class VaultAnalysisModal extends Modal {
         // ALWAYS display domain distribution chart using KnowledgeStructureManager
         await this.knowledgeStructureManager.createDomainDistributionChart(domainDistributionSection);
         
+        // ALWAYS display KDE distribution chart (independent of AI analysis, like DDC chart)
+        // This fetches data directly from vault-analysis.json and displays without AI interference
+        await this.knowledgeStructureManager.renderKDEDistributionChart(networkAnalysisSection);
+        
         // For the other sections, check if we have cached structure analysis data
         if (this.structureAnalysisData?.knowledgeStructure) {
             // Display network analysis and gaps from cached data
+            // Note: This will append network cards below the KDE chart
             await this.displayNetworkAnalysis(networkAnalysisSection);
             await this.displayKnowledgeGaps(gapsSection);
             
             // Show Update Analysis button below the results
             await this.createUpdateAnalysisButtonSection(structureContainer, 'structure');
         } else {
-            // Show placeholder for network analysis and gaps
+            // Show placeholder for network analysis and gaps (KDE chart already displayed above)
             this.showNetworkAnalysisPlaceholder(networkAnalysisSection);
             this.showKnowledgeGapsPlaceholder(gapsSection);
             
@@ -921,12 +926,30 @@ export class VaultAnalysisModal extends Modal {
     /**
      * Show placeholder for network analysis section
      * Uses the centralized empty state method
+     * Note: KDE chart is already displayed above, so this placeholder is for AI-generated network cards
      */
     private showNetworkAnalysisPlaceholder(container: HTMLElement): void {
-        this.createEmptyState(
-            container, 
-            'Generate AI analysis to identify knowledge bridges, foundations, and authorities in your vault\'s network structure.'
-        );
+        // Only show placeholder if container doesn't already have content (KDE chart)
+        // Check if there's already a KDE chart or other content
+        const hasContent = container.querySelector('.kde-chart-container') !== null;
+        if (hasContent) {
+            // KDE chart is already there, just add a separator and placeholder message
+            const separator = container.createEl('div', { cls: 'network-placeholder-separator' });
+            separator.style.marginTop = '20px';
+            separator.style.paddingTop = '20px';
+            separator.style.borderTop = '1px solid var(--background-modifier-border)';
+            
+            this.createEmptyState(
+                separator, 
+                'Generate AI analysis to identify knowledge bridges, foundations, and authorities in your vault\'s network structure.'
+            );
+        } else {
+            // No content yet, show normal placeholder
+            this.createEmptyState(
+                container, 
+                'Generate AI analysis to identify knowledge bridges, foundations, and authorities in your vault\'s network structure.'
+            );
+        }
     }
     
     /**

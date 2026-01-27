@@ -12,6 +12,7 @@ import {
 } from './visualization/KnowledgeEvolutionManager';
 import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
 import { DDCHelper } from './DDCHelper';
+import { KDECalculationService } from '../utils/KDECalculationService';
 
 
 export interface VaultAnalysisResult {
@@ -232,11 +233,18 @@ export class MasterAnalysisManager {
                 throw new Error('No vault analysis data found. Please generate vault analysis first.');
             }
             
+            // Calculate comprehensive statistics for centrality scores
+            const kdeService = new KDECalculationService();
+            const comprehensiveStats = kdeService.getComprehensiveStats(analysisData);
+            
             // Build the system, context, and instruction like in test-ai-model.js
             const system = "You are an expert in knowledge management. You are highly skilled in applying graph theory and network analysis to knowledge graphs. Use your expertise to extract insights from the provided context which contains knowledge domains and centrality rankings. Please focus on network analysis and determining knowledge gaps.";
             
             const context = `VAULT ANALYSIS DATA:
-${JSON.stringify(analysisData)}`;
+${JSON.stringify(analysisData)}
+
+CENTRALITY DISTRIBUTION ANALYSIS (Comprehensive Statistics):
+${comprehensiveStats}`;
             
             const instruction = `Analyze the vault data to identify key knowledge domains using network centrality metrics. Return a JSON object matching the required schema.
 
