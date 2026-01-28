@@ -755,144 +755,6 @@ export class VaultAnalysisModal extends Modal {
         }
     }
     
-
-
-    /**
-     * Helper to create network subsection (kept for backward compatibility)
-     */
-    private createNetworkSubsection(parent: HTMLElement, title: string, nodes: any[], description: string): void {
-        // Create card container if it doesn't exist
-        let cardsContainer = parent.querySelector('.network-cards-container');
-        if (!cardsContainer) {
-            cardsContainer = parent.createEl('div', { cls: 'network-cards-container' });
-        }
-        
-        // Create a card for this network category
-        const card = cardsContainer.createEl('div', { cls: 'network-card' });
-        
-        // Card header with icon
-        const header = card.createEl('div', { cls: 'network-card-header' });
-        
-        // Determine icon based on title
-        let icon = '🔗';
-        if (title.includes('Bridge')) icon = '🌉';
-        if (title.includes('Foundation')) icon = '🏗️';
-        if (title.includes('Authority')) icon = '👑';
-        
-        // Icon with background
-        header.createEl('span', { 
-            cls: 'network-card-icon',
-            text: icon
-        });
-        
-        // Title container
-        const titleContainer = header.createEl('div', { cls: 'network-card-title-container' });
-        
-        titleContainer.createEl('h4', { 
-            cls: 'network-card-title',
-            text: title
-        });
-        
-        titleContainer.createEl('span', { 
-            cls: 'network-card-count',
-            text: `${nodes.length} ${nodes.length === 1 ? 'item' : 'items'}`
-        });
-
-        // Description
-        card.createEl('p', { 
-            cls: 'network-card-description',
-            text: description
-        });
-
-        // Content container
-        const content = card.createEl('div', { cls: 'network-card-content' });
-        
-        // Show nodes
-        nodes.slice(0, 5).forEach(node => {
-            const domainItem = content.createEl('div', { cls: 'network-domain-item' });
-            
-            // Domain header
-            const domainHeader = domainItem.createEl('div', { cls: 'network-domain-header' });
-            
-            // Handle both old note-based and new domain-based data structures
-            const displayText = node.domain || node.title || 'Unknown';
-            const score = node.averageScore || node.score || 0;
-            
-            domainHeader.createEl('strong', { 
-                cls: 'network-domain-name',
-                text: displayText
-            });
-            
-            // Add score and additional info
-            if (node.domain) {
-                // Domain-based structure
-                domainHeader.createEl('span', { 
-                    cls: 'network-domain-stats',
-                    text: `${score.toFixed(3)} • ${node.noteCount || 0} notes`
-                });
-                
-                // Add explanation if available
-                if (node.explanation) {
-                    domainItem.createEl('p', { 
-                        cls: 'network-domain-explanation',
-                        text: node.explanation
-                    });
-                }
-                
-                // Add top notes if available
-                if (node.topNotes && node.topNotes.length > 0) {
-                    const notesHeader = domainItem.createEl('div', { 
-                        cls: 'network-notes-header',
-                        text: 'Top Notes'
-                    });
-                    
-                    const notesList = domainItem.createEl('ul', { cls: 'network-notes-list' });
-                    
-                    node.topNotes.slice(0, 3).forEach((note: { title: string; score: number; path: string }) => {
-                        const noteItem = notesList.createEl('li', { cls: 'network-note-item' });
-                        
-                        const noteLink = noteItem.createEl('span', { 
-                            cls: 'network-note-link',
-                            text: note.title
-                        });
-                        
-                        noteItem.createEl('span', { 
-                            cls: 'network-note-score',
-                            text: note.score.toFixed(3)
-                        });
-                        
-                        // Make note clickable
-                        noteLink.addEventListener('click', async () => {
-                            const file = this.app.vault.getAbstractFileByPath(note.path);
-                            if (file && file instanceof TFile) {
-                                this.app.workspace.getLeaf().openFile(file);
-                            }
-                        });
-                    });
-                }
-            } else {
-                // Legacy note-based structure
-                domainHeader.createEl('span', { 
-                    cls: 'network-domain-stats',
-                    text: score.toFixed(3)
-                });
-                
-                // Make node clickable
-                domainHeader.querySelector('.network-domain-name')?.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    
-                    const note = this.analysisData?.results.find(r => r.title === node.title);
-                    if (note) {
-                        const file = this.app.vault.getAbstractFileByPath(note.path);
-                        if (file && file instanceof TFile) {
-                            this.app.workspace.getLeaf().openFile(file);
-                        }
-                    }
-                });
-            }
-        });
-    }
-    
     /**
      * Create a consistent empty state with icon and message for all analysis tabs
      * Public method to be used by all knowledge analysis components
@@ -1057,56 +919,34 @@ export class VaultAnalysisModal extends Modal {
     }
 
     private async createAnalysisButtonSection(container: HTMLElement, tabName: string = ''): Promise<void> {
-        const buttonSection = container.createEl('div', { 
-            cls: 'vault-analysis-section analysis-button-section' 
+        // Add informational message about AI analysis
+        const infoSection = container.createEl('div', { 
+            cls: 'vault-analysis-section' 
         });
 
-        buttonSection.createEl('h3', {
-            text: 'AI-Powered Knowledge Analysis',
-            cls: 'vault-analysis-section-title'
+        const infoContainer = infoSection.createEl('div', {
+            cls: 'vault-analysis-summary'
         });
 
-        // Add token usage warning
-        const warningContainer = buttonSection.createEl('div', {
-            cls: 'analysis-token-warning'
+        infoContainer.createEl('p', {
+            text: 'This analysis uses Google Gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
+            cls: 'analysis-info-text'
         });
 
-        warningContainer.innerHTML = `
-            <div style="background: var(--background-modifier-info); 
-                        border: 1px solid var(--background-modifier-border); 
-                        border-radius: 8px; 
-                        padding: 16px; 
-                        margin: 16px 0;
-                        color: var(--text-normal);">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                    <span style="font-size: 18px;">🧪</span>
-                    <strong>TEST MODE - Minimal Token Usage</strong>
-                </div>
-                <p style="margin: 8px 0; font-size: 14px;">
-                    This test analysis will process only the first 3 notes from your vault 
-                    to verify API connectivity and basic functionality.
-                </p>
-                <p style="margin: 8px 0; font-size: 14px;">
-                    <strong>Estimated cost:</strong> Very minimal (~200-500 tokens, <$0.01)
-                </p>
-                <p style="margin: 0; font-size: 13px; color: var(--text-muted);">
-                    If successful, you can disable test mode for full analysis.
-                </p>
-            </div>
-        `;
-
-        const buttonContainer = buttonSection.createEl('div', { 
-            cls: 'analysis-button-container' 
+        infoContainer.createEl('p', {
+            text: 'Before AI analysis, we use deterministic methods (graph theory, statistical analysis, KDE distributions) to preprocess your vault data, ensuring accurate and efficient insights.',
+            cls: 'analysis-info-text'
         });
 
-        // Show "Generate Analysis" button
+        // Use same button style as Update Analysis (modal-button-container with mod-cta)
+        const buttonContainer = container.createEl('div', { 
+            cls: 'modal-button-container' 
+        });
+
         const analysisButton = buttonContainer.createEl('button', {
-            cls: 'analysis-trigger-button',
-            text: '🧠 Generate AI Analysis'
+            cls: 'mod-cta',
+            text: 'Generate Analysis'
         });
-
-        // Store reference to the container for later use
-        this.analysisResultsContainer = container;
 
         analysisButton.addEventListener('click', async () => {
             // Use close-reopen pattern for structure, evolution, and actions tabs
@@ -1137,7 +977,7 @@ export class VaultAnalysisModal extends Modal {
                 }
             } else {
                 // Fallback to inline loading for other cases
-                await this.triggerAIAnalysis(buttonSection, false, tabName);
+                await this.triggerAIAnalysis(container, false, tabName);
             }
         });
     }
@@ -1241,7 +1081,7 @@ export class VaultAnalysisModal extends Modal {
     private getTabDescription(tabName: string): string {
         switch (tabName) {
             case 'structure': return 'domain classification, hierarchical structure, and network analysis';
-            case 'evolution': return 'timeline analysis, topic patterns, and learning velocity';
+            case 'evolution': return 'timeline analysis, topic patterns, and focus shifts';
             case 'actions': return 'maintenance tasks, connection opportunities, and learning paths';
             default: return 'comprehensive knowledge analysis';
         }
@@ -1253,14 +1093,14 @@ export class VaultAnalysisModal extends Modal {
         // Access the data properties directly (new KnowledgeEvolutionData structure)
         const data = this.knowledgeEvolutionData;
         
-        // Create analysis sections with structured data
-        this.createStructuredAnalysisSection(container, 'Knowledge Development Timeline', data.timeline);
-        this.createStructuredAnalysisSection(container, 'Topic Introduction Patterns', data.topicPatterns);
-        this.createStructuredAnalysisSection(container, 'Focus Shift Analysis', data.focusShift);
-        this.createStructuredAnalysisSection(container, 'Learning Velocity Analysis', data.learningVelocity);
+        // Create analysis sections with structured data (3 sections only, no Learning Velocity)
+        // First section includes the calendar
+        await this.createStructuredAnalysisSection(container, 'Knowledge Development Timeline', data.timeline, true);
+        await this.createStructuredAnalysisSection(container, 'Topic Introduction Patterns', data.topicPatterns, false);
+        await this.createStructuredAnalysisSection(container, 'Focus Shift Analysis', data.focusShift, false);
     }
 
-    private createStructuredAnalysisSection(container: HTMLElement, title: string, analysisData: any): void {
+    private async createStructuredAnalysisSection(container: HTMLElement, title: string, analysisData: any, includeCalendar: boolean = false): Promise<void> {
         const section = container.createEl('div', { cls: 'vault-analysis-section' });
         
         section.createEl('h3', {
@@ -1268,49 +1108,72 @@ export class VaultAnalysisModal extends Modal {
             cls: 'vault-analysis-section-title'
         });
         
-        // AI Insights Section
-        const insightsContainer = section.createEl('div', { cls: 'ai-insights-container' });
-        insightsContainer.createEl('h4', { 
-            text: '🧠 AI Analysis',
-            cls: 'ai-insights-title'
-        });
+        // Outer container wrapping calendar (if Timeline) + details + conclusion
+        const insightsContainer = section.createEl('div', { cls: 'ai-insights-container-rounded' });
         
-        const insightsText = insightsContainer.createEl('div', { 
-            cls: 'ai-insights-text'
-        });
-        
-        // Display the narrative content
-        if (analysisData.narrative || analysisData.exploration || analysisData.trends) {
-            const narrative = analysisData.narrative || analysisData.exploration || analysisData.trends;
-            insightsText.innerHTML = narrative.content.replace(/\n/g, '<br>');
+        // Add calendar if this is the Timeline section (inside the outer container)
+        if (includeCalendar) {
+            const chartContainer = insightsContainer.createEl('div', { 
+                cls: 'knowledge-calendar-wrapper' 
+            });
+
+            // Create calendar chart with settings
+            const calendarChart = new KnowledgeCalendarChart(
+                this.app,
+                chartContainer,
+                { cellSize: 11 },
+                this.settings.excludeFolders,
+                this.settings.excludeTags
+            );
+
+            // Render the calendar chart
+            await calendarChart.render();
         }
         
-        // Add structured data visualizations based on analysis type
+        // Add details first (phases, timeline, shifts) - each item in its own rounded container
         if (title.includes('Timeline') && analysisData.phases) {
-            this.addTimelineVisualization(section, analysisData.phases);
+            this.addTimelineVisualization(insightsContainer, analysisData.phases);
         } else if (title.includes('Topic') && analysisData.introductionTimeline) {
-            this.addTopicVisualization(section, analysisData.introductionTimeline);
+            this.addTopicVisualization(insightsContainer, analysisData.introductionTimeline);
         } else if (title.includes('Focus') && analysisData.shifts) {
-            this.addFocusShiftVisualization(section, analysisData.shifts);
-        } else if (title.includes('Velocity') && analysisData.metrics) {
-            this.addVelocityVisualization(section, analysisData.metrics);
+            this.addFocusShiftVisualization(insightsContainer, analysisData.shifts);
+        }
+        
+        // Then add conclusion section (only if there's content)
+        const narrative = analysisData.narrative || analysisData.exploration || analysisData.trends;
+        if (narrative && narrative.content) {
+            const conclusionSection = insightsContainer.createEl('div', { cls: 'ai-conclusion-section' });
+            
+            // Create title with Lucide icon
+            const conclusionTitle = conclusionSection.createEl('div', { cls: 'ai-conclusion-title' });
+            const iconContainer = conclusionTitle.createEl('span', { cls: 'ai-conclusion-icon' });
+            setIcon(iconContainer, 'sparkle');
+            conclusionTitle.createEl('span', { 
+                text: 'Conclusion',
+                cls: 'ai-conclusion-text'
+            });
+            
+            // Display the narrative/conclusion content
+            const conclusionText = conclusionSection.createEl('div', { 
+                cls: 'ai-conclusion-content'
+            });
+            conclusionText.innerHTML = narrative.content.replace(/\n/g, '<br>');
         }
     }
 
-    // Visualization helper methods (simplified for now)
+    // Visualization helper methods - each item in its own rounded container
     private addTimelineVisualization(section: HTMLElement, phases: any[]): void {
-        const viz = section.createEl('div', { cls: 'timeline-visualization' });
         phases.forEach(phase => {
-            const phaseEl = viz.createEl('div', { cls: 'timeline-phase' });
-            phaseEl.innerHTML = `<strong>${phase.period}</strong>: ${phase.description}`;
+            const phaseEl = section.createEl('div', { cls: 'ai-bullet-item-container' });
+            // Format as markdown-style list item
+            phaseEl.innerHTML = `- <strong>${phase.period}</strong>: ${phase.description}`;
         });
     }
 
     private addTopicVisualization(section: HTMLElement, timeline: any[]): void {
-        const viz = section.createEl('div', { cls: 'topic-visualization' });
         timeline.forEach(item => {
             if (item.newDomains.length > 0) {
-                const itemEl = viz.createEl('div', { cls: 'topic-period' });
+                const itemEl = section.createEl('div', { cls: 'ai-bullet-item-container' });
                 
                 // Parse domain names for cleaner display
                 const cleanDomains = item.newDomains.map((domain: string) => {
@@ -1318,27 +1181,20 @@ export class VaultAnalysisModal extends Modal {
                     return domainParts[1] || domain;
                 });
                 
-                itemEl.innerHTML = `<strong>${item.period}</strong>: ${cleanDomains.join(', ')}`;
+                // Format as markdown-style list item
+                itemEl.innerHTML = `- <strong>${item.period}</strong>: ${cleanDomains.join(', ')}`;
             }
         });
     }
 
     private addFocusShiftVisualization(section: HTMLElement, shifts: any[]): void {
-        const viz = section.createEl('div', { cls: 'focus-visualization' });
         shifts.forEach(shift => {
-            const shiftEl = viz.createEl('div', { cls: 'focus-shift' });
-            shiftEl.innerHTML = `<strong>${shift.period}</strong>: ${shift.newAreas.length} new areas, ${shift.decreasedFocus.length} reduced`;
+            const shiftEl = section.createEl('div', { cls: 'ai-bullet-item-container' });
+            // Format as markdown-style list item
+            shiftEl.innerHTML = `- <strong>${shift.period}</strong>: ${shift.newAreas.length} new areas, ${shift.decreasedFocus.length} reduced`;
         });
     }
 
-    private addVelocityVisualization(section: HTMLElement, metrics: any[]): void {
-        const viz = section.createEl('div', { cls: 'velocity-visualization' });
-        metrics.forEach(metric => {
-            const metricEl = viz.createEl('div', { cls: 'velocity-metric' });
-            const trend = metric.trendIndicator === 'up' ? '📈' : metric.trendIndicator === 'down' ? '📉' : '➡️';
-            metricEl.innerHTML = `<strong>${metric.period}</strong>: ${metric.notesCreated} notes, ${metric.wordsWritten} words ${trend}`;
-        });
-    }
 
     private loadRecommendedActionsView(): void {
         // Create the main container with a scrollable layout
@@ -1487,28 +1343,58 @@ export class VaultAnalysisModal extends Modal {
             text: 'Recommended Actions require AI-powered analysis to be completed first.',
             cls: 'analysis-required'
         });
-        
-        const featureList = emptyState.createEl('ul');
-        const features = [
-            'Knowledge Maintenance - notes that need review, updates, or improvements',
-            'Connection Opportunities - suggestions for linking related concepts',
-            'Learning Paths - recommended sequences for exploring new topics',
-            'Organization Suggestions - ways to improve your vault structure'
+
+        // Placeholders for each actions category (titles + purpose)
+        const categories: Array<{ title: string; message: string }> = [
+            {
+                title: '🔧 Knowledge Maintenance',
+                message: 'Generate analysis to surface notes that may need review, updates, or cleanup.'
+            },
+            {
+                title: '🔗 Connection Opportunities',
+                message: 'Generate analysis to suggest links between related concepts and notes.'
+            },
+            {
+                title: '📚 Learning Paths',
+                message: 'Generate analysis to propose guided sequences for exploring topics in your vault.'
+            },
+            {
+                title: '📁 Organization Suggestions',
+                message: 'Generate analysis to recommend structural improvements for folders, tags, and grouping.'
+            }
         ];
-        
-        features.forEach(feature => {
-            featureList.createEl('li', { text: feature });
+
+        categories.forEach(({ title, message }) => {
+            const section = emptyState.createEl('div', { cls: 'actions-category' });
+            section.createEl('h4', { text: title });
+            this.createEmptyState(section, message);
         });
 
-        // Generate Analysis Button
+        // Add informational message about AI analysis
+        const infoContainer = emptyState.createEl('div', {
+            cls: 'vault-analysis-summary',
+            attr: { style: 'margin-top: 16px;' }
+        });
+
+        infoContainer.createEl('p', {
+            text: 'This analysis uses Google Gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
+            cls: 'analysis-info-text'
+        });
+
+        infoContainer.createEl('p', {
+            text: 'Before AI analysis, we use deterministic methods (graph theory, statistical analysis, KDE distributions) to preprocess your vault data, ensuring accurate and efficient insights.',
+            cls: 'analysis-info-text'
+        });
+
+        // Use same button style as Update Analysis (modal-button-container with mod-cta)
         const buttonContainer = emptyState.createEl('div', { 
-            cls: 'analysis-button-container',
-            attr: { style: 'margin-top: 24px;' }
+            cls: 'modal-button-container',
+            attr: { style: 'margin-top: 16px;' }
         });
 
         const generateButton = buttonContainer.createEl('button', {
-            cls: 'analysis-trigger-button',
-            text: '🧠 Generate AI Analysis'
+            cls: 'mod-cta',
+            text: 'Generate Analysis'
         });
 
         generateButton.addEventListener('click', async () => {
@@ -1532,10 +1418,7 @@ export class VaultAnalysisModal extends Modal {
             return;
         }
 
-        // 1. Calendar Section (shown by default)
-        await this.createCalendarSection(evolutionContainer);
-        
-        // 2. Check for cached tab-specific analysis
+        // Check for cached tab-specific analysis
         try {
             this.evolutionAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('evolution') as EvolutionAnalysisData;
             if (this.evolutionAnalysisData) {
@@ -1552,15 +1435,44 @@ export class VaultAnalysisModal extends Modal {
         }
         
         if (this.knowledgeEvolutionData) {
-            // Show cached analysis directly
+            // Show cached analysis directly (calendar is included in the Timeline section)
             await this.displayCachedAnalysis(evolutionContainer);
             
             // Show Update Analysis button below the results
             await this.createUpdateAnalysisButtonSection(evolutionContainer, 'evolution');
         } else {
+            // Show calendar section first, then placeholders for each analysis type
+            await this.createCalendarSection(evolutionContainer);
+            this.showEvolutionAnalysisPlaceholders(evolutionContainer);
+
             // Show Generate Analysis button
             await this.createAnalysisButtonSection(evolutionContainer, 'evolution');
         }
+    }
+
+    private showEvolutionAnalysisPlaceholders(container: HTMLElement): void {
+        // Skip the first section (Knowledge Development Timeline) as it's already handled by createCalendarSection
+        const sections: Array<{ title: string; message: string }> = [
+            {
+                title: 'Topic Introduction Patterns',
+                message: 'Generate analysis to highlight when new topics and knowledge domains first appeared in your vault.'
+            },
+            {
+                title: 'Focus Shift Analysis',
+                message: 'Generate analysis to compare recent focus areas with earlier periods and identify notable shifts.'
+            }
+        ];
+
+        sections.forEach(({ title, message }) => {
+            const section = container.createEl('div', { cls: 'vault-analysis-section' });
+
+            section.createEl('h3', {
+                text: title,
+                cls: 'vault-analysis-section-title'
+            });
+
+            this.createEmptyState(section, message);
+        });
     }
 
     private showEvolutionEmptyState(container: HTMLElement): void {
@@ -1582,8 +1494,7 @@ export class VaultAnalysisModal extends Modal {
         const features = [
             'Knowledge Development Timeline - track how your understanding evolved',
             'Topic Introduction Patterns - see when different subjects entered your system',
-            'Focus Shift Analysis - compare current interests vs historical patterns',
-            'Learning Velocity - analyze the pace of knowledge acquisition over time'
+            'Focus Shift Analysis - compare current interests vs historical patterns'
         ];
         
         features.forEach(feature => {
@@ -1612,7 +1523,7 @@ export class VaultAnalysisModal extends Modal {
         });
 
         calendarSection.createEl('h3', {
-            text: 'Knowledge Evolution Calendar',
+            text: 'Knowledge Development Timeline',
             cls: 'vault-analysis-section-title'
         });
 
@@ -1631,6 +1542,9 @@ export class VaultAnalysisModal extends Modal {
 
         // Render the calendar chart
         await calendarChart.render();
+        
+        // Add placeholder for Timeline analysis below the calendar
+        this.createEmptyState(calendarSection, 'Generate analysis to summarize key phases and milestones in how your vault developed over time.');
     }
 
     onClose() {

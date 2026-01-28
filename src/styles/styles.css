@@ -661,10 +661,17 @@
   color: var(--text-normal);
 }
 
+.centrality-results-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .centrality-results-list {
   display: flex;
   flex-direction: column;
-  counter-reset: result-counter;
+  flex: 1;
 }
 
 .centrality-result-item {
@@ -676,15 +683,6 @@
   font-size: var(--font-ui-small);
   border-radius: 2px;
   position: relative;
-}
-
-.centrality-result-item::before {
-  counter-increment: result-counter;
-  content: counter(result-counter) ".";
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  margin-right: 8px;
-  min-width: 20px;
 }
 
 .centrality-result-item:hover {
@@ -708,6 +706,56 @@
   color: var(--interactive-accent);
   font-size: var(--font-ui-smaller);
   margin-left: 8px;
+}
+
+/* Centrality Sidebar Pagination - Compact */
+.centrality-pagination {
+  margin-top: 8px;
+  padding: 6px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.centrality-pagination-button {
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.centrality-pagination-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.centrality-pagination-button:hover:not(:disabled) {
+  background-color: var(--background-modifier-hover);
+  border-color: var(--text-accent);
+}
+
+.centrality-pagination-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.centrality-pagination-info {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  text-align: center;
+  flex: 1;
 }
 
 /* 7. Color Settings Panel
@@ -1729,7 +1777,10 @@
   margin: 16px 0;
   padding: 16px;
   border-radius: var(--radius-m);
-  background-color: var(--background-secondary);
+  background-color: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 /* Timeline Section */
@@ -1997,7 +2048,7 @@
 .theme-dark .velocity-month,
 .theme-dark .patterns-summary,
 .theme-dark .knowledge-calendar-wrapper {
-  background-color: var(--background-primary-alt);
+  background-color: transparent;
 }
 
 .theme-dark .timeline-domain-item,
@@ -2040,6 +2091,69 @@
 
 .ai-insights-text br {
   margin-bottom: 8px;
+}
+
+/* Rounded AI Insights Container - Outline only, no solid background */
+.ai-insights-container-rounded {
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* Conclusion Section */
+.ai-conclusion-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.ai-conclusion-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ai-conclusion-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-accent);
+}
+
+.ai-conclusion-text {
+  color: var(--text-accent);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+}
+
+.ai-conclusion-content {
+  color: var(--text-normal);
+  line-height: 1.6;
+  font-size: var(--font-ui-small);
+  text-align: left;
+}
+
+.ai-conclusion-content br {
+  margin-bottom: 8px;
+}
+
+/* Individual bullet item containers - each item in its own rounded container */
+.ai-bullet-item-container {
+  background: var(--background-secondary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  color: var(--text-normal);
+  line-height: 1.6;
+  font-size: var(--font-ui-small);
+}
+
+.ai-bullet-item-container strong {
+  color: var(--text-accent);
+  font-weight: var(--font-semibold);
 }
 
 
@@ -2178,9 +2292,20 @@
     line-height: 1.5;
 }
 
-/* Analysis Token Warning */
-.analysis-token-warning {
-    margin: 16px 0;
+/* Analysis Info Text */
+.analysis-info-text {
+    margin: 8px 0;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+    line-height: 1.5;
+}
+
+.analysis-info-text:first-child {
+    margin-top: 0;
+}
+
+.analysis-info-text:last-child {
+    margin-bottom: 0;
 }
 
 /* Structure Analysis Sections */

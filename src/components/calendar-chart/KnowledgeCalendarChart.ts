@@ -184,20 +184,8 @@ export class KnowledgeCalendarChart {
             const timeDiff = today.getTime() - firstNoteDate.getTime();
             const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
             
-            if (daysDiff < 30) {
-                vaultDuration = `${daysDiff} days`;
-            } else if (daysDiff < 365) {
-                const months = Math.floor(daysDiff / 30);
-                vaultDuration = `${months} month${months !== 1 ? 's' : ''}`;
-            } else {
-                const years = Math.floor(daysDiff / 365);
-                const remainingMonths = Math.floor((daysDiff % 365) / 30);
-                if (remainingMonths > 0) {
-                    vaultDuration = `${years} year${years !== 1 ? 's' : ''}, ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
-                } else {
-                    vaultDuration = `${years} year${years !== 1 ? 's' : ''}`;
-                }
-            }
+            // Always display in days
+            vaultDuration = `${daysDiff.toLocaleString()} days`;
         }
         
         // Create summary stats HTML
@@ -223,12 +211,12 @@ export class KnowledgeCalendarChart {
         const cellSize = this.options.cellSize!;
         const containerWidth = container.clientWidth || 800;
         
-        // Use minimal margins for consistent section layout
+        // Use margins with enough left space for full year labels
         const margin = { 
             top: 30, 
             right: 20, 
             bottom: 0, 
-            left: 20 
+            left: 50 
         };
         const contentWidth = containerWidth - margin.left - margin.right;
         
@@ -377,7 +365,8 @@ export class KnowledgeCalendarChart {
                 .attr('fill', d => {
                     const dateKey = d.toISOString().split('T')[0];
                     const dayData = dataMap.get(dateKey);
-                    return dayData ? this.getObsidianAccentColor(dayData.value, minValue, maxValue) : 'var(--background-secondary)';
+                    // Use consistent empty cell color
+                    return dayData ? this.getObsidianAccentColor(dayData.value, minValue, maxValue) : 'var(--background-modifier-border)';
                 })
                 .attr('rx', 2)
                 .attr('ry', 2)
@@ -433,21 +422,27 @@ export class KnowledgeCalendarChart {
     }
 
     private getObsidianAccentColor(value: number, minValue: number, maxValue: number): string {
+        // Empty cells use a subtle visible grey
         if (value === 0) {
-            return 'var(--background-secondary)';
+            return 'var(--background-modifier-border)';
         }
         
+        // Base color for mixing (subtle grey that works in both themes)
+        const baseColor = 'var(--background-secondary-alt)';
+        
         if (maxValue === minValue) {
-            // If all non-zero values are the same, use full opacity
+            // If all non-zero values are the same, use full accent color
             return 'var(--text-accent)';
         }
         
         // Linear interpolation from min to max value
-        // minValue gets 20% opacity, maxValue gets 100% opacity
+        // minValue gets lighter tint (mix with base), maxValue gets full accent color
         const normalizedValue = (value - minValue) / (maxValue - minValue);
-        const opacity = 0.2 + normalizedValue * 0.8; // From 0.2 to 1.0
+        // Percentage of accent color: 30% for min activity, 100% for max activity
+        const accentPercentage = 30 + normalizedValue * 70; // From 30% to 100%
         
-        return `color-mix(in srgb, var(--text-accent) ${Math.round(opacity * 100)}%, transparent)`;
+        // Mix accent color with base color (solid, no transparency)
+        return `color-mix(in srgb, var(--text-accent) ${Math.round(accentPercentage)}%, ${baseColor})`;
     }
 
     private showTooltip(event: MouseEvent, date: Date, dayData: CalendarData | undefined): void {

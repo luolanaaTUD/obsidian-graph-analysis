@@ -7,7 +7,6 @@ import {
     TimelineAnalysis,
     TopicPatternsAnalysis,
     FocusShiftAnalysis,
-    LearningVelocityAnalysis,
     EvolutionInsight
 } from './visualization/KnowledgeEvolutionManager';
 import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
@@ -394,10 +393,120 @@ ${formattedContext}`;
     // TODO: Implement these methods tomorrow with structured output approach
     
     /**
-     * TODO: Generate Knowledge Evolution Analysis using structured output (to be implemented)
+     * Generate Knowledge Evolution Analysis using structured output
      */
     public async generateKnowledgeEvolutionAnalysis(): Promise<EvolutionAnalysisData> {
-        throw new Error('Knowledge Evolution Analysis not yet implemented with structured output. Will be implemented tomorrow.');
+        try {
+            console.log('Generating Knowledge Evolution Analysis with structured output...');
+
+            const analysisData = await this.loadVaultAnalysisData();
+            if (!analysisData) {
+                throw new Error('No vault analysis data found. Please generate vault analysis first.');
+            }
+
+            // Prepare evolution-specific context
+            const contextService = new AIContextPreparationService();
+            const evolutionContext = contextService.prepareEvolutionContext(analysisData);
+            const formattedContext = contextService.formatEvolutionContextForAI(evolutionContext);
+
+            // Build the system, context, and instruction
+            const system = "You are an expert in knowledge management and learning analytics. You specialize in analyzing how knowledge evolves over time, identifying patterns in topic introduction, and detecting shifts in intellectual focus. Use your expertise to extract insights from the provided temporal context which contains notes grouped by period and domain evolution data.";
+
+            const context = `VAULT EVOLUTION DATA (Optimized):
+${formattedContext}`;
+
+            const instruction = `Analyze the vault evolution data to identify knowledge development patterns over time. Return a JSON object matching the required schema.
+
+**Analysis Framework:**
+
+1. **Knowledge Development Timeline**: Identify distinct phases in the knowledge development journey, describing key periods, dominant domains, and overall trends in productivity, diversity, and depth.
+
+2. **Topic Introduction Patterns**: Analyze when different knowledge domains first appeared, identify acquisition patterns (burst, gradual, or project-based), and assess the learning strategy (depth-first, breadth-first, or balanced).
+
+3. **Focus Shift Analysis**: Detect significant changes in knowledge focus between periods, identify new areas being explored, areas with increased/decreased attention, and consistent areas. Determine the frequency and direction of focus shifts.
+
+**Instructions:**
+1. Group notes into meaningful phases (typically 3-6 phases) based on domain activity and note creation patterns
+2. For each phase, provide key domains, metrics (note count, word count), and a narrative description
+3. Identify when domains first appeared and characterize the acquisition pattern
+4. Detect focus shifts by comparing domain activity across periods
+5. Use only domains and data explicitly present in the vault data - do not invent domains or metrics
+6. Provide insights that are specific, actionable, and grounded in the actual data`;
+
+            // Combine system, context, and instruction
+            const prompt = `${system}\n\n${context}\n\n${instruction}`;
+
+            // Get the response schema for knowledge evolution analysis
+            const responseSchema = this.aiService.createKnowledgeEvolutionSchema();
+
+            // Use the structured output method
+            const response = await this.aiService.generateStructuredAnalysis<any>(
+                prompt,
+                responseSchema,
+                8192, // maxOutputTokens
+                0.3,  // temperature
+                0.72  // topP
+            );
+
+            // Parse the structured response directly (it's already JSON)
+            const evolutionData = this.parseStructuredKnowledgeEvolution(response.result, analysisData);
+
+            // Create structured analysis data
+            const tabData: EvolutionAnalysisData = {
+                generatedAt: new Date().toISOString(),
+                sourceAnalysisId: this.generateAnalysisId(analysisData),
+                apiProvider: 'Google Gemini',
+                knowledgeEvolution: evolutionData
+            };
+
+            // Cache the results
+            await this.cacheTabAnalysis('evolution', tabData);
+
+            return tabData;
+        } catch (error) {
+            console.error('Failed to generate Knowledge Evolution Analysis:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Parse structured knowledge evolution response
+     */
+    private parseStructuredKnowledgeEvolution(structuredResponse: any, analysisData: VaultAnalysisData): KnowledgeEvolutionData {
+        try {
+            // The response is already parsed JSON from structured output
+            const timeline = structuredResponse.timeline || {
+                narrative: { title: '', content: '', keyPoints: [] },
+                phases: [],
+                trends: { productivity: 'stable', diversity: 'stable', depth: 'stable' }
+            };
+
+            const topicPatterns = structuredResponse.topicPatterns || {
+                exploration: { title: '', content: '', keyPoints: [] },
+                introductionTimeline: [],
+                strategy: { style: 'balanced', consistency: 'mixed' }
+            };
+
+            const focusShift = structuredResponse.focusShift || {
+                narrative: { title: '', content: '', keyPoints: [] },
+                shifts: [],
+                patterns: { frequency: 'occasional', direction: 'expanding' }
+            };
+
+            const insights = structuredResponse.insights || [];
+
+            return {
+                timeline,
+                topicPatterns,
+                focusShift,
+                insights
+            };
+        } catch (error) {
+            console.error('Error parsing structured knowledge evolution:', error);
+            console.error('Structured response:', structuredResponse);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to parse structured knowledge evolution: ${errorMessage}`);
+        }
     }
 
     /**

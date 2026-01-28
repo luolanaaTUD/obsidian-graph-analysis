@@ -4,6 +4,7 @@ import { createKnowledgeNetworkSchema } from '../ai/schemas/knowledge-network.sc
 import { createVaultSemanticAnalysisSchema } from '../ai/schemas/vault-semantic-analysis.schema';
 import { createNoteSummarySchema } from '../ai/schemas/note-summary.schema';
 import { createDomainClassificationSchema, KnowledgeSubdivision } from '../ai/schemas/domain-classification.schema';
+import { createKnowledgeEvolutionSchema } from '../ai/schemas/knowledge-evolution.schema';
 
 export interface TokenUsage {
     promptTokens: number;
@@ -175,6 +176,13 @@ export class AIModelService {
      */
     public createNoteSummarySchema(): any {
         return createNoteSummarySchema();
+    }
+
+    /**
+     * Create response schema for knowledge evolution analysis
+     */
+    public createKnowledgeEvolutionSchema(): any {
+        return createKnowledgeEvolutionSchema();
     }
 
     /**

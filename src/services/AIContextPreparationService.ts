@@ -488,4 +488,252 @@ export class AIContextPreparationService {
 
         return sections.join('\n');
     }
+
+    /**
+     * Prepare evolution-specific context from vault analysis data
+     * Focuses on temporal data: notes grouped by period, domain first appearance, growth trends
+     */
+    public prepareEvolutionContext(analysisData: VaultAnalysisData): EvolutionContext {
+        const results = analysisData.results.filter(r => r.created);
+
+        // Extract metadata
+        const metadata = this.extractEvolutionMetadata(results);
+
+        // Group notes by time period (quarterly)
+        const timelinePeriods = this.groupNotesByPeriod(results);
+
+        // Track domain evolution
+        const domainEvolution = this.calculateDomainEvolution(results);
+
+        return {
+            metadata,
+            timelinePeriods,
+            domainEvolution
+        };
+    }
+
+    /**
+     * Extract evolution-specific metadata
+     */
+    private extractEvolutionMetadata(results: VaultAnalysisResult[]): EvolutionContext['metadata'] {
+        const dates = results
+            .map(r => new Date(r.created))
+            .filter(d => !isNaN(d.getTime()))
+            .sort((a, b) => a.getTime() - b.getTime());
+
+        let dateRange: string | undefined;
+        let timeSpan: string | undefined;
+        
+        if (dates.length > 0) {
+            const start = dates[0];
+            const end = dates[dates.length - 1];
+            const startStr = start.toISOString().substring(0, 7); // YYYY-MM
+            const endStr = end.toISOString().substring(0, 7);
+            dateRange = startStr === endStr ? startStr : `${startStr} to ${endStr}`;
+            
+            // Calculate time span in months
+            const monthsDiff = (end.getFullYear() - start.getFullYear()) * 12 + 
+                              (end.getMonth() - start.getMonth());
+            if (monthsDiff < 1) {
+                timeSpan = 'Less than 1 month';
+            } else if (monthsDiff === 1) {
+                timeSpan = '1 month';
+            } else {
+                timeSpan = `${monthsDiff} months`;
+            }
+        }
+
+        return {
+            totalNotes: results.length,
+            dateRange: dateRange || 'Unknown',
+            timeSpan: timeSpan || 'Unknown'
+        };
+    }
+
+    /**
+     * Group notes by time period (quarterly)
+     */
+    private groupNotesByPeriod(results: VaultAnalysisResult[]): EvolutionContext['timelinePeriods'] {
+        const periodMap = new Map<string, {
+            notes: VaultAnalysisResult[];
+            domains: Set<string>;
+            keywords: Map<string, number>;
+        }>();
+
+        // Track domain first appearance
+        const domainFirstAppearance = new Map<string, string>();
+
+        // Group notes by quarter and track domain first appearance
+        results.forEach(note => {
+            const date = new Date(note.created);
+            if (isNaN(date.getTime())) return;
+
+            const year = date.getFullYear();
+            const quarter = Math.floor(date.getMonth() / 3) + 1;
+            const period = `${year}-Q${quarter}`;
+
+            if (!periodMap.has(period)) {
+                periodMap.set(period, {
+                    notes: [],
+                    domains: new Set(),
+                    keywords: new Map()
+                });
+            }
+
+            const periodData = periodMap.get(period)!;
+            periodData.notes.push(note);
+
+            // Track domains and first appearance
+            (note.knowledgeDomains || []).forEach(domain => {
+                periodData.domains.add(domain);
+                
+                // Track first appearance
+                if (!domainFirstAppearance.has(domain)) {
+                    domainFirstAppearance.set(domain, period);
+                }
+            });
+
+            // Track keywords
+            note.keywords.split(',').forEach(keyword => {
+                const trimmed = keyword.trim();
+                if (trimmed) {
+                    periodData.keywords.set(trimmed, (periodData.keywords.get(trimmed) || 0) + 1);
+                }
+            });
+        });
+
+        // Convert to array format and calculate newDomains
+        const sortedPeriods = Array.from(periodMap.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]));
+
+        return sortedPeriods.map(([period, data]) => {
+            // Get top keywords
+            const topKeywords = Array.from(data.keywords.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([keyword]) => keyword);
+
+            // Get top domains
+            const topDomains = Array.from(data.domains).slice(0, 5);
+
+            // Calculate newDomains (domains that first appeared in this period)
+            const newDomains = Array.from(data.domains).filter(domain => 
+                domainFirstAppearance.get(domain) === period
+            );
+
+            return {
+                period,
+                noteCount: data.notes.length,
+                topDomains,
+                newDomains,
+                topKeywords
+            };
+        });
+    }
+
+    /**
+     * Calculate domain evolution (first appearance and total notes - factual data only)
+     */
+    private calculateDomainEvolution(results: VaultAnalysisResult[]): EvolutionContext['domainEvolution'] {
+        const domainMap = new Map<string, {
+            firstAppeared: Date;
+            notes: VaultAnalysisResult[];
+        }>();
+
+        // Track first appearance and all notes for each domain
+        results.forEach(note => {
+            const noteDate = new Date(note.created);
+            if (isNaN(noteDate.getTime())) return;
+
+            (note.knowledgeDomains || []).forEach(domain => {
+                if (!domainMap.has(domain)) {
+                    domainMap.set(domain, {
+                        firstAppeared: noteDate,
+                        notes: []
+                    });
+                }
+
+                const domainData = domainMap.get(domain)!;
+                domainData.notes.push(note);
+
+                // Update first appearance if this note is earlier
+                if (noteDate < domainData.firstAppeared) {
+                    domainData.firstAppeared = noteDate;
+                }
+            });
+        });
+
+        // Return only factual data: domain name, first appearance date, and total notes
+        return Array.from(domainMap.entries())
+            .map(([domain, data]) => ({
+                domain,
+                firstAppeared: data.firstAppeared.toISOString().substring(0, 7), // YYYY-MM
+                totalNotes: data.notes.length
+            }))
+            .sort((a, b) => new Date(a.firstAppeared).getTime() - new Date(b.firstAppeared).getTime());
+    }
+
+    /**
+     * Format evolution context for AI consumption
+     */
+    public formatEvolutionContextForAI(context: EvolutionContext): string {
+        const sections: string[] = [];
+
+        // Metadata
+        sections.push('=== EVOLUTION METADATA ===');
+        sections.push(`Total Notes: ${context.metadata.totalNotes}`);
+        sections.push(`Date Range: ${context.metadata.dateRange}`);
+        sections.push(`Time Span: ${context.metadata.timeSpan}`);
+        sections.push('');
+
+        // Timeline Periods
+        sections.push('=== TIMELINE PERIODS (Quarterly) ===');
+        context.timelinePeriods.forEach(period => {
+            sections.push(`\n${period.period}:`);
+            sections.push(`  Notes: ${period.noteCount}`);
+            sections.push(`  Top Domains: ${period.topDomains.join(', ')}`);
+            if (period.newDomains.length > 0) {
+                sections.push(`  New Domains (first appeared): ${period.newDomains.join(', ')}`);
+            }
+            sections.push(`  Top Keywords: ${period.topKeywords.join(', ')}`);
+        });
+        sections.push('');
+
+        // Domain Evolution
+        sections.push('=== DOMAIN EVOLUTION ===');
+        sections.push(`Total Domains: ${context.domainEvolution.length}`);
+        sections.push('\nDomain First Appearance:');
+        context.domainEvolution.slice(0, 30).forEach((domain, index) => {
+            sections.push(`  ${index + 1}. ${domain.domain}`);
+            sections.push(`     First Appeared: ${domain.firstAppeared}, Total Notes: ${domain.totalNotes}`);
+        });
+        if (context.domainEvolution.length > 30) {
+            sections.push(`  ... and ${context.domainEvolution.length - 30} more domains`);
+        }
+
+        return sections.join('\n');
+    }
+}
+
+/**
+ * Evolution-specific context structure
+ */
+export interface EvolutionContext {
+    metadata: {
+        totalNotes: number;
+        dateRange: string;
+        timeSpan: string; // e.g., "18 months"
+    };
+    timelinePeriods: Array<{
+        period: string;  // "2024-Q1"
+        noteCount: number;
+        topDomains: string[];
+        newDomains: string[];  // First appeared this period (calculated separately)
+        topKeywords: string[];
+    }>;
+    domainEvolution: Array<{
+        domain: string;
+        firstAppeared: string;  // YYYY-MM
+        totalNotes: number;
+    }>;
 }

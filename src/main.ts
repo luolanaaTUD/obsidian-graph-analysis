@@ -577,10 +577,8 @@ export default class GraphAnalysisPlugin extends Plugin {
     }
     
     displayResults(results: Node[], algorithmName: string) {
-        const limitedResults = results.slice(0, this.settings.resultLimit);
-        
-        // Show results in the right sidebar
-        this.activateCentralityView(limitedResults, algorithmName);
+        // Show results in the right sidebar (all results, pagination handled in view)
+        this.activateCentralityView(results, algorithmName);
         
         console.log(`Graph Analysis Results (${algorithmName}):`, results);
     }

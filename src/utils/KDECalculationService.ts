@@ -64,24 +64,46 @@ export class KDECalculationService {
 
     /**
      * Extract centrality values from vault analysis data
+     * Filters out zero and null values for better KDE estimation
      */
     private extractCentralityValues(
         analysisData: VaultAnalysisData,
-        centralityType: 'betweennessCentrality' | 'closenessCentrality' | 'eigenvectorCentrality'
+        centralityType: 'betweennessCentrality' | 'closenessCentrality' | 'eigenvectorCentrality',
+        includeZeros: boolean = false
     ): number[] {
         const values: number[] = [];
 
         for (const result of analysisData.results) {
             if (result.graphMetrics && result.graphMetrics[centralityType] !== undefined) {
                 const value = result.graphMetrics[centralityType];
-                // Filter out zero and null values for better KDE estimation
-                if (value !== null && value !== undefined && value > 0) {
+                // Include zeros if requested, otherwise filter them out for better KDE estimation
+                if (value !== null && value !== undefined && (includeZeros || value > 0)) {
                     values.push(value);
                 }
             }
         }
 
         return values;
+    }
+
+    /**
+     * Count all notes that have a specific centrality metric defined (including zeros)
+     */
+    private countNotesWithMetric(
+        analysisData: VaultAnalysisData,
+        centralityType: 'betweennessCentrality' | 'closenessCentrality' | 'eigenvectorCentrality'
+    ): number {
+        let count = 0;
+        for (const result of analysisData.results) {
+            if (result.graphMetrics && result.graphMetrics[centralityType] !== undefined) {
+                const value = result.graphMetrics[centralityType];
+                // Count all notes with the metric defined, including zeros
+                if (value !== null && value !== undefined) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /**
@@ -485,29 +507,44 @@ export class KDECalculationService {
         };
 
         for (const { name, key, kdeData, resultKey } of centralityTypes) {
-            const values = this.extractCentralityValues(analysisData, key);
-
-            if (values.length === 0) {
+            // Count all notes with this metric (including zeros)
+            const totalCount = this.countNotesWithMetric(analysisData, key);
+            
+            if (totalCount === 0) {
                 continue; // Leave as null
             }
 
+            // Extract all values (including zeros) for range calculation
+            const allValues = this.extractCentralityValues(analysisData, key, true);
+            
+            // Extract filtered values (excluding zeros) for mean/median/stdDev calculations
+            const values = this.extractCentralityValues(analysisData, key, false);
+
             // Basic Statistics
-            const count = values.length;
-            const min = Math.min(...values);
-            const max = Math.max(...values);
-            const mean = ss.mean(values);
-            const median = ss.median(values);
-            const stdDev = ss.standardDeviation(values);
+            // Use totalCount for N (all notes with metric)
+            const count = totalCount;
+            
+            // Range should include zeros
+            const min = allValues.length > 0 ? Math.min(...allValues) : 0;
+            const max = allValues.length > 0 ? Math.max(...allValues) : 0;
+            
+            // Mean/Median/StdDev use filtered values (excluding zeros) for better statistical analysis
+            const mean = values.length > 0 ? ss.mean(values) : 0;
+            const median = values.length > 0 ? ss.median(values) : 0;
+            const stdDev = values.length > 0 ? ss.standardDeviation(values) : 0;
 
             // Distribution Shape (Skewness)
-            let skewness: number;
-            try {
-                skewness = ss.sampleSkewness(values);
-            } catch {
-                skewness = this.calculateSkewness(values, mean, stdDev);
+            // Use filtered values for skewness calculation
+            let skewness: number = 0;
+            let skewnessDesc = 'Symmetric';
+            if (values.length > 0) {
+                try {
+                    skewness = ss.sampleSkewness(values);
+                } catch {
+                    skewness = this.calculateSkewness(values, mean, stdDev);
+                }
+                skewnessDesc = skewness > 0.5 ? 'Right-skewed' : skewness < -0.5 ? 'Left-skewed' : 'Symmetric';
             }
-
-            const skewnessDesc = skewness > 0.5 ? 'Right-skewed' : skewness < -0.5 ? 'Left-skewed' : 'Symmetric';
 
             // KDE Modality
             let modality = 'unimodal';
@@ -517,15 +554,22 @@ export class KDECalculationService {
             }
 
             // Percentiles for interpretation
+            // Use filtered values for percentile calculation
             const percentiles = [10, 25, 50, 75, 90, 95];
-            const sortedValues = values.slice().sort((a, b) => a - b);
-            const percentileValues = percentiles.map(p => {
-                try {
-                    return ss.quantileSorted(sortedValues, p / 100);
-                } catch {
-                    return ss.quantile(values, p / 100);
-                }
-            });
+            const percentileValues: number[] = [];
+            if (values.length > 0) {
+                const sortedValues = values.slice().sort((a, b) => a - b);
+                percentileValues.push(...percentiles.map(p => {
+                    try {
+                        return ss.quantileSorted(sortedValues, p / 100);
+                    } catch {
+                        return ss.quantile(values, p / 100);
+                    }
+                }));
+            } else {
+                // If all values are zero, percentiles are all zero
+                percentileValues.push(...percentiles.map(() => 0));
+            }
 
             // Interpretation
             const interpretation = this.generateInterpretation(name, mean, median, stdDev, skewness, percentileValues);

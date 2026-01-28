@@ -59,28 +59,10 @@ export interface FocusShiftAnalysis {
     };
 }
 
-export interface LearningVelocityAnalysis {
-    trends: EvolutionInsight;
-    metrics: Array<{
-        period: string;
-        notesCreated: number;
-        wordsWritten: number;
-        domainsExplored: number;
-        avgComplexity: number;
-        trendIndicator: 'up' | 'down' | 'stable';
-    }>;
-    optimization: {
-        peakPeriods: string[];
-        recommendations: string[];
-        productivityScore: number;
-    };
-}
-
 export interface KnowledgeEvolutionData {
     timeline: TimelineAnalysis;
     topicPatterns: TopicPatternsAnalysis;
     focusShift: FocusShiftAnalysis;
-    learningVelocity: LearningVelocityAnalysis;
     insights: EvolutionInsight[];
 }
 
@@ -134,13 +116,19 @@ export class KnowledgeEvolutionManager {
 
     public async loadCachedEvolutionData(): Promise<KnowledgeEvolutionData | null> {
         try {
-            // Use the tab-specific analysis file instead of master-analysis.json
+            // Use the tab-specific analysis file (evolution-analysis.json)
+            // The file structure is: { knowledgeEvolution: KnowledgeEvolutionData, ... }
             const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/evolution-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
             const data = JSON.parse(content);
             
             if (data?.knowledgeEvolution) {
                 this.data = data.knowledgeEvolution;
+                return this.data;
+            }
+            // Fallback: if the file structure is different, try direct access
+            if (data?.timeline && data?.topicPatterns && data?.focusShift) {
+                this.data = data as KnowledgeEvolutionData;
                 return this.data;
             }
             return null;
@@ -338,8 +326,7 @@ export class KnowledgeEvolutionManager {
         const tabHeaders = tabsContainer.createEl('div', { cls: 'tab-headers' });
         const tabs = [
             { id: 'focus-shifts', label: '🎯 Focus Shifts', data: this.data!.focusShift },
-            { id: 'topic-patterns', label: '🌱 Topic Patterns', data: this.data!.topicPatterns },
-            { id: 'learning-velocity', label: '⚡ Learning Velocity', data: this.data!.learningVelocity }
+            { id: 'topic-patterns', label: '🌱 Topic Patterns', data: this.data!.topicPatterns }
         ];
 
         tabs.forEach((tab, index) => {
@@ -373,9 +360,6 @@ export class KnowledgeEvolutionManager {
                     break;
                 case 'topic-patterns':
                     this.renderTopicPatternsTab(contentArea);
-                    break;
-                case 'learning-velocity':
-                    this.renderLearningVelocityTab(contentArea);
                     break;
             }
         }
@@ -451,60 +435,6 @@ export class KnowledgeEvolutionManager {
         `;
     }
 
-    private renderLearningVelocityTab(container: HTMLElement): void {
-        container.empty();
-        container.innerHTML = `
-            <div class="learning-velocity-content">
-                <h4>${this.data!.learningVelocity.trends.title}</h4>
-                <p>${this.data!.learningVelocity.trends.content}</p>
-                
-                <div class="velocity-metrics">
-                    <div class="optimization-panel">
-                        <h5>🎯 Productivity Optimization</h5>
-                        <div class="productivity-score">
-                            Score: ${this.data!.learningVelocity.optimization.productivityScore}/10
-                        </div>
-                        <div class="peak-periods">
-                            <strong>Peak Periods:</strong> ${this.data!.learningVelocity.optimization.peakPeriods.join(', ')}
-                        </div>
-                        <div class="recommendations">
-                            ${this.data!.learningVelocity.optimization.recommendations.map(rec => 
-                                `<div class="recommendation">💡 ${rec}</div>`
-                            ).join('')}
-                        </div>
-                    </div>
-                    
-                    <div class="metrics-table">
-                        <h5>📊 Period Metrics</h5>
-                        <table class="velocity-table">
-                            <thead>
-                                <tr>
-                                    <th>Period</th>
-                                    <th>Notes</th>
-                                    <th>Words</th>
-                                    <th>Domains</th>
-                                    <th>Trend</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${this.data!.learningVelocity.metrics.map(metric => `
-                                    <tr>
-                                        <td>${metric.period}</td>
-                                        <td>${metric.notesCreated}</td>
-                                        <td>${metric.wordsWritten.toLocaleString()}</td>
-                                        <td>${metric.domainsExplored}</td>
-                                        <td class="trend-${metric.trendIndicator}">
-                                            ${this.getTrendIcon(metric.trendIndicator)}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
 
     private getTrendIcon(trend: string): string {
         switch (trend) {

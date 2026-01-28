@@ -39,18 +39,6 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     this.updateExclusionStats();
                 }));
-                
-        new Setting(containerEl)
-            .setName('Result Limit')
-            .setDesc('Maximum number of results to display')
-            .addSlider(slider => slider
-                .setLimits(5, 50, 5)
-                .setValue(this.plugin.settings.resultLimit)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.resultLimit = value;
-                    await this.plugin.saveSettings();
-                }));
 
         // AI Summary Settings
         containerEl.createEl('h3', { text: 'AI Summary Settings' });
