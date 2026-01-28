@@ -2009,28 +2009,11 @@
 
 /* AI Insights Components */
 .ai-insights-container {
-  background: linear-gradient(135deg, 
-    var(--background-secondary) 0%, 
-    var(--background-primary-alt) 100%);
-  border: 1px solid var(--text-accent-hover);
+  background: var(--background-secondary);
+  border: 1px solid var(--interactive-accent);
   border-radius: var(--radius-m);
   padding: 16px;
   margin-bottom: 20px;
-  position: relative;
-  overflow: hidden;
-}
-
-.ai-insights-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, 
-    var(--text-accent) 0%, 
-    var(--color-purple) 50%, 
-    var(--text-accent) 100%);
 }
 
 .ai-insights-title {
@@ -2041,6 +2024,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.ai-insights-icon {
+  display: inline-flex;
+  align-items: center;
 }
 
 .ai-insights-text {
@@ -2054,21 +2042,6 @@
   margin-bottom: 8px;
 }
 
-/* Enhanced styling for dark theme */
-.theme-dark .ai-insights-container {
-  background: linear-gradient(135deg, 
-    var(--background-primary-alt) 0%, 
-    var(--background-modifier-border) 100%);
-  border-color: var(--text-accent);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.theme-dark .ai-insights-container::before {
-  background: linear-gradient(90deg, 
-    var(--text-accent) 0%, 
-    var(--color-purple) 50%, 
-    var(--color-blue) 100%);
-}
 
 /* Loading state for AI insights */
 .ai-insights-loading {

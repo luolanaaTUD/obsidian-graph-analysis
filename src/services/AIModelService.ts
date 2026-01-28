@@ -3,7 +3,7 @@ import { GraphAnalysisSettings } from '../types/types';
 import { createKnowledgeNetworkSchema } from '../ai/schemas/knowledge-network.schema';
 import { createVaultSemanticAnalysisSchema } from '../ai/schemas/vault-semantic-analysis.schema';
 import { createNoteSummarySchema } from '../ai/schemas/note-summary.schema';
-import { createDomainClassificationSchema, DDCSection } from '../ai/schemas/domain-classification.schema';
+import { createDomainClassificationSchema, KnowledgeSubdivision } from '../ai/schemas/domain-classification.schema';
 
 export interface TokenUsage {
     promptTokens: number;
@@ -22,7 +22,7 @@ export class AIModelService {
     private settings: GraphAnalysisSettings;
     private readonly RATE_LIMIT_DELAY = 2500; // 2.5 seconds between requests for 30 RPM
     private readonly MAX_RETRIES = 3;
-    private readonly MODEL_NAME = 'gemini-2.5-flash'; // Centralized model name
+    private readonly MODEL_NAME = 'gemini-flash-lite-latest'; // Centralized model name
     
     /**
      * Get the current model name for logging and display purposes
@@ -178,10 +178,10 @@ export class AIModelService {
     }
 
     /**
-     * Create response schema for domain classification with DDC validation
+     * Create response schema for domain classification with knowledge domain validation
      */
-    public createDomainClassificationSchema(availableDDCSections: DDCSection[]): any {
-        return createDomainClassificationSchema(availableDDCSections);
+    public createDomainClassificationSchema(availableSubdivisions: KnowledgeSubdivision[]): any {
+        return createDomainClassificationSchema(availableSubdivisions);
     }
 
 

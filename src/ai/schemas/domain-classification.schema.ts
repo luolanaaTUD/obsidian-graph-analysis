@@ -1,20 +1,20 @@
 import { Type } from '@google/genai';
 
 /**
- * Interface for a single DDC section classification
+ * Interface for a single knowledge domain subdivision classification
  */
-export interface DDCSection {
-    id: string;          // "0-0-4"
-    name: string;        // "Computer science"
+export interface KnowledgeSubdivision {
+    id: string;          // "1-1" (domain-subdivision)
+    name: string;       // "Software Development"
 }
 
 /**
  * Interface for domain classification result 
- * Stores section-level DDC codes and names for hierarchy building
+ * Stores subdivision-level codes and names for hierarchy building
  */
 export interface DomainClassificationResult {
-    primaryDomain: DDCSection;
-    secondaryDomains: DDCSection[];
+    primaryDomain: KnowledgeSubdivision;
+    secondaryDomains: KnowledgeSubdivision[];
 }
 
 /**
@@ -27,16 +27,19 @@ export interface ClassifiedNote {
     domains: DomainClassificationResult;
 }
 
+// Legacy alias for backward compatibility
+export type DDCSection = KnowledgeSubdivision;
+
 /**
  * Schema for domain classification using Google Gemini structured output
- * This constrains AI responses to valid DDC section codes from the template
+ * This constrains AI responses to valid knowledge domain subdivision codes from the template
  * 
- * @param availableDDCSections - Array of valid DDC sections from the loaded template
- * @returns Schema that ensures only valid DDC section codes are returned
+ * @param availableSubdivisions - Array of valid knowledge domain subdivisions from the loaded template
+ * @returns Schema that ensures only valid subdivision codes are returned
  */
-export function createDomainClassificationSchema(availableDDCSections: DDCSection[]): any {
-    // Extract valid DDC section IDs for enum constraint
-    const validSectionIds = availableDDCSections.map(section => section.id);
+export function createDomainClassificationSchema(availableSubdivisions: KnowledgeSubdivision[]): any {
+    // Extract valid subdivision IDs for enum constraint
+    const validSubdivisionIds = availableSubdivisions.map(subdivision => subdivision.id);
     
     return {
         type: Type.OBJECT,
@@ -46,12 +49,12 @@ export function createDomainClassificationSchema(availableDDCSections: DDCSectio
                 properties: {
                     id: {
                         type: Type.STRING,
-                        enum: validSectionIds,
-                        description: "Primary DDC section code (e.g., '0-0-4')"
+                        enum: validSubdivisionIds,
+                        description: "Primary knowledge domain subdivision code (e.g., '1-1')"
                     },
                     name: {
                         type: Type.STRING,
-                        description: "DDC section name (e.g., 'Computer science')"
+                        description: "Knowledge domain subdivision name (e.g., 'Software Development')"
                     }
                 },
                 required: ["id", "name"],
@@ -64,12 +67,12 @@ export function createDomainClassificationSchema(availableDDCSections: DDCSectio
                     properties: {
                         id: {
                             type: Type.STRING,
-                            enum: validSectionIds,
-                            description: "Secondary DDC section code"
+                            enum: validSubdivisionIds,
+                            description: "Secondary knowledge domain subdivision code"
                         },
                         name: {
                             type: Type.STRING,
-                            description: "DDC section name"
+                            description: "Knowledge domain subdivision name"
                         }
                     },
                     required: ["id", "name"],

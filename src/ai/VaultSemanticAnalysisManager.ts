@@ -9,7 +9,7 @@ import {
 import { AIModelService } from '../services/AIModelService';
 import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
-import { DDCHelper } from './DDCHelper';
+import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
 
 export class VaultSemanticAnalysisManager {
     private app: App;
@@ -18,10 +18,10 @@ export class VaultSemanticAnalysisManager {
     private graphDataBuilder: GraphDataBuilder;
     private pluginService: PluginService;
     private masterAnalysisManager: MasterAnalysisManager;
-    private ddcSectionsList: Array<{id: string, name: string, division: string, mainClass: string}> = [];
-    private ddcTemplateLoaded: boolean = false;
+    private subdivisionsList: Array<{id: string, name: string, domain: string, domainId: string}> = [];
+    private domainTemplateLoaded: boolean = false;
     private readonly MAX_WORDS_PER_NOTE = 1000;
-    private readonly MAX_NOTES_PER_BATCH = 50;
+    private readonly MAX_NOTES_PER_BATCH = 30;
     private readonly DELAY_BETWEEN_BATCHES = 3000; // 3 seconds between batches for 30 RPM rate limiting
     private readonly RATE_LIMIT_RETRY_DELAY = 8000; // 8 second delay for rate limit retry
 
@@ -58,30 +58,30 @@ export class VaultSemanticAnalysisManager {
     }
 
     /**
-     * Load DDC template from MasterAnalysisManager
+     * Load knowledge domain template
      */
-    private async loadDDCTemplate(): Promise<boolean> {
-        if (this.ddcTemplateLoaded && this.ddcSectionsList.length > 0) {
+    private async loadDomainTemplate(): Promise<boolean> {
+        if (this.domainTemplateLoaded && this.subdivisionsList.length > 0) {
             return true; // Already loaded
         }
 
         try {
-            // Ensure DDC template is loaded using DDCHelper directly
-            const ddcHelper = DDCHelper.getInstance(this.app);
-            const loaded = await ddcHelper.ensureDDCTemplateLoaded();
+            // Ensure knowledge domain template is loaded using KnowledgeDomainHelper directly
+            const domainHelper = KnowledgeDomainHelper.getInstance(this.app);
+            const loaded = await domainHelper.ensureDomainTemplateLoaded();
             if (!loaded) {
-                console.error('Failed to load DDC template from DDCHelper');
+                console.error('Failed to load knowledge domain template from KnowledgeDomainHelper');
                 return false;
             }
 
-            // Get the DDC sections list
-            this.ddcSectionsList = ddcHelper.getAllDDCSections();
-            this.ddcTemplateLoaded = this.ddcSectionsList.length > 0;
+            // Get the knowledge domain subdivisions list
+            this.subdivisionsList = domainHelper.getAllSubdivisions();
+            this.domainTemplateLoaded = this.subdivisionsList.length > 0;
             
-            console.log(`📚 DDC template loaded for VaultSemanticAnalysisManager: ${this.ddcSectionsList.length} sections available`);
-            return this.ddcTemplateLoaded;
+            console.log(`📚 Knowledge domain template loaded for VaultSemanticAnalysisManager: ${this.subdivisionsList.length} subdivisions available`);
+            return this.domainTemplateLoaded;
         } catch (error) {
-            console.error('Failed to load DDC template for VaultSemanticAnalysisManager:', error);
+            console.error('Failed to load knowledge domain template for VaultSemanticAnalysisManager:', error);
             return false;
         }
     }
@@ -650,8 +650,8 @@ export class VaultSemanticAnalysisManager {
                     if (batchError instanceof Error && batchError.message.includes('429')) {
                         console.log(`Rate limit hit, retrying batch ${batchIndex + 1} after longer delay...`);
                         const retryProgressText = isIncrementalUpdate
-                            ? `Rate limit exceeded, waiting before retry... (${processed}/${filesToProcess.length} completed, ${failed} failed, ${unchangedCount} unchanged)`
-                            : `Rate limit exceeded, waiting before retry... (${processed}/${filesToProcess.length} completed, ${failed} failed)`;
+                            ? `Retrying batch ${batchIndex + 1}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed, ${unchangedCount} unchanged)`
+                            : `Retrying batch ${batchIndex + 1}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed)`;
                         progressNotice.setMessage(retryProgressText);
                         
                         // Wait longer for rate limit retry (respecting 30 RPM = max 2 requests per minute)
@@ -692,12 +692,12 @@ export class VaultSemanticAnalysisManager {
                     }
                 }
                 
-                // Rate limiting: wait between batches to respect 30 RPM limit
+                // Wait between batches (rate limiting handled internally)
                 if (batchIndex < totalBatches - 1) {
-                    const rateLimitProgressText = isIncrementalUpdate
-                        ? `Rate limiting: waiting 3s before next batch... (${processed}/${filesToProcess.length} completed, ${failed} failed, ${unchangedCount} unchanged)`
-                        : `Rate limiting: waiting 3s before next batch... (${processed}/${filesToProcess.length} completed, ${failed} failed)`;
-                    progressNotice.setMessage(rateLimitProgressText);
+                    const preparingNextBatchText = isIncrementalUpdate
+                        ? `Preparing batch ${batchIndex + 2}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed, ${unchangedCount} unchanged)`
+                        : `Preparing batch ${batchIndex + 2}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed)`;
+                    progressNotice.setMessage(preparingNextBatchText);
                     await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
                 } else if (totalBatches === 1) {
                     // Single batch - no rate limiting needed
@@ -1106,10 +1106,10 @@ export class VaultSemanticAnalysisManager {
             // Sort results by title for consistent ordering
             const sortedResults = results.sort((a, b) => a.title.localeCompare(b.title));
 
-            // Build DDC code-to-name map using DDCHelper directly
-            const ddcHelper = DDCHelper.getInstance(this.app);
-            await ddcHelper.loadDDCTemplate();
-            const ddcCodeToNameMap = ddcHelper.getDDCCodeToNameMap();
+            // Build knowledge domain code-to-name map using KnowledgeDomainHelper directly
+            const domainHelper = KnowledgeDomainHelper.getInstance(this.app);
+            await domainHelper.loadDomainTemplate();
+            const ddcCodeToNameMap = domainHelper.getDomainCodeToNameMap();
 
             // Convert DDC codes to domain names and store as string array
             const enhancedResults = sortedResults.map(result => {
@@ -1245,38 +1245,38 @@ export class VaultSemanticAnalysisManager {
             };
         }
 
-        // Ensure DDC template is loaded
-        await this.loadDDCTemplate();
+        // Ensure knowledge domain template is loaded
+        await this.loadDomainTemplate();
 
-        // Generate optimized sections list for AI prompt in JSON format
+        // Generate optimized subdivisions list for AI prompt in JSON format
         const sectionsJson = JSON.stringify(
-            this.ddcSectionsList.map(section => ({
-                id: section.id,
-                name: section.name
+            this.subdivisionsList.map(subdivision => ({
+                id: subdivision.id,
+                name: subdivision.name
             }))
         );
 
         // Build optimized prompt with clear system/context/instruction structure
-        const systemPrompt = `You are an expert knowledge analyst specializing in semantic analysis and knowledge classification. Your role is to analyze notes and extract meaningful insights using the Dewey Decimal Classification (DDC) system.`;
+        const systemPrompt = `You are an expert knowledge analyst specializing in semantic analysis and knowledge classification. Your role is to analyze notes and extract meaningful insights using the Modern Knowledge Taxonomy system.`;
 
-        const contextPrompt = `## DDC Classification Reference
-Use the following DDC sections for classification. Each section has an ID and name:
+        const contextPrompt = `## Knowledge Domain Classification Reference
+Use the following knowledge domain subdivisions for classification. Each subdivision has an ID and name:
 
 \`\`\`json
 ${sectionsJson}
 \`\`\`
 
 ## Classification Guidelines:
-- Be specific: use the most detailed section that applies
-- Multi-domain notes: a note can belong to multiple sections if it spans different domains
-- Valid codes only: only use DDC codes from the provided reference list
-- Format: comma-separated DDC codes (e.g., "0-0-4,1-5-1")`;
+- Be specific: use the most detailed subdivision that applies
+- Multi-domain notes: a note can belong to multiple subdivisions if it spans different domains
+- Valid codes only: only use knowledge domain codes from the provided reference list
+- Format: comma-separated knowledge domain codes (e.g., "1-1,3-2")`;
 
         const instructionPrompt = `## Analysis Instructions
 For each note, provide:
 1. **Summary**: A two to three sentence summary of the main concept or purpose (be detailed and insightful)
 2. **Keywords**: 3-6 key terms or phrases (comma-separated)
-3. **Knowledge Domain**: DDC classification codes that best match the content (comma-separated)
+3. **Knowledge Domain**: Knowledge domain subdivision codes that best match the content (comma-separated)
 
 ## Notes to Analyze:`;
 

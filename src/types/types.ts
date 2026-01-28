@@ -119,7 +119,7 @@ export interface HierarchicalDomain {
     keywords?: string[];
     level?: number;
     parent?: string;
-    ddcCode?: string; // DDC (Dewey Decimal Classification) code
+    ddcCode?: string; // Knowledge domain code (e.g., "1" for domain, "1-1" for subdivision)
 }
 
 export interface DomainConnection {

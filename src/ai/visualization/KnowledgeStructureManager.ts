@@ -5,7 +5,7 @@ import {
     DomainDistributionData
 } from '../../components/domain-distribution/DomainDistributionChart';
 // import { MasterAnalysisManager } from '../MasterAnalysisManager';
-import { DDCHelper } from '../DDCHelper';
+import { KnowledgeDomainHelper } from '../KnowledgeDomainHelper';
 import { KDECalculationService, StructuredCentralityStats } from '../../utils/KDECalculationService';
 import { CentralityKDEChart } from '../../components/kde-chart/CentralityKDEChart';
 import { VaultAnalysisData } from '../MasterAnalysisManager';
@@ -206,89 +206,89 @@ export class KnowledgeStructureManager {
                 return null;
             }
 
-            // Ensure DDC template is loaded using DDCHelper singleton
-            const ddcHelper = DDCHelper.getInstance(this.app);
-            await ddcHelper.ensureDDCTemplateLoaded();
+            // Ensure knowledge domain template is loaded using KnowledgeDomainHelper singleton
+            const domainHelper = KnowledgeDomainHelper.getInstance(this.app);
+            await domainHelper.ensureDomainTemplateLoaded();
 
             // Build hierarchy logic (moved from MasterAnalysisManager)
-            // Create maps for DDC hierarchy - we'll only use class and section now
-            const classMap = new Map<string, any>();
-            const sectionMap = new Map<string, any>();
-            // Count notes per DDC section
-            const sectionCounts = new Map<string, number>();
-            const sectionNotes = new Map<string, any[]>();
-            // Get DDC name to code mapping for reverse lookup
+            // Create maps for knowledge domain hierarchy - we'll use domain and subdivision
+            const domainMap = new Map<string, any>();
+            const subdivisionMap = new Map<string, any>();
+            // Count notes per knowledge domain subdivision
+            const subdivisionCounts = new Map<string, number>();
+            const subdivisionNotes = new Map<string, any[]>();
+            // Get knowledge domain name to code mapping for reverse lookup
             const nameToCodeMap = new Map<string, string>();
-            const codeToNameMap = ddcHelper.getDDCCodeToNameMap();
-            // Add main class names to the code-to-name map
-            const ddcTemplate = ddcHelper.getDDCTemplate();
-            if (ddcTemplate && ddcTemplate.ddc_23_summaries && ddcTemplate.ddc_23_summaries.classes) {
-                ddcTemplate.ddc_23_summaries.classes.forEach((cls: any) => {
-                    codeToNameMap.set(cls.id, cls.name);
+            const codeToNameMap = domainHelper.getDomainCodeToNameMap();
+            // Add main domain names to the code-to-name map
+            const domainTemplate = domainHelper.getDomainTemplate();
+            if (domainTemplate && domainTemplate.knowledge_domains && domainTemplate.knowledge_domains.domains) {
+                domainTemplate.knowledge_domains.domains.forEach((domain: any) => {
+                    codeToNameMap.set(domain.id, domain.name);
                 });
             }
             // Build reverse lookup map
             codeToNameMap.forEach((name: string, code: string) => {
                 nameToCodeMap.set(name, code);
             });
-            // Process each note to extract its DDC codes or names
+            // Process each note to extract its knowledge domain codes or names
             analysisData.results.forEach((note: any) => {
                 if (note.knowledgeDomains && note.knowledgeDomains.length > 0) {
                     note.knowledgeDomains.forEach((domain: string) => {
-                        let sectionId = '';
-                        if (ddcHelper.isValidDDCSectionId(domain)) {
-                            sectionId = domain;
+                        let subdivisionId = '';
+                        if (domainHelper.isValidSubdivisionId(domain)) {
+                            subdivisionId = domain;
                         } else if (nameToCodeMap.has(domain)) {
-                            sectionId = nameToCodeMap.get(domain) || '';
+                            subdivisionId = nameToCodeMap.get(domain) || '';
                         } else {
                             return;
                         }
-                        if (!sectionId) return;
-                        const classId = ddcHelper.getClassIdFromSection(sectionId);
-                        sectionCounts.set(sectionId, (sectionCounts.get(sectionId) || 0) + 1);
-                        if (!sectionNotes.has(sectionId)) {
-                            sectionNotes.set(sectionId, []);
+                        if (!subdivisionId) return;
+                        const domainId = domainHelper.getDomainIdFromSubdivision(subdivisionId);
+                        subdivisionCounts.set(subdivisionId, (subdivisionCounts.get(subdivisionId) || 0) + 1);
+                        if (!subdivisionNotes.has(subdivisionId)) {
+                            subdivisionNotes.set(subdivisionId, []);
                         }
-                        sectionNotes.get(sectionId)?.push(note);
-                        if (!classMap.has(classId)) {
-                            const className = codeToNameMap.get(classId) || classId;
-                            classMap.set(classId, {
-                                ddcCode: classId,
-                                name: className,
+                        subdivisionNotes.get(subdivisionId)?.push(note);
+                        if (!domainMap.has(domainId)) {
+                            const domainName = codeToNameMap.get(domainId) || domainId;
+                            domainMap.set(domainId, {
+                                ddcCode: domainId,
+                                name: domainName,
                                 noteCount: 0,
                                 level: 1,
                                 children: []
                             });
                         }
-                        if (!sectionMap.has(sectionId)) {
-                            const sectionNode: any = {
-                                ddcCode: sectionId,
-                                name: codeToNameMap.get(sectionId) || sectionId,
+                        if (!subdivisionMap.has(subdivisionId)) {
+                            const subdivisionNode: any = {
+                                ddcCode: subdivisionId,
+                                name: codeToNameMap.get(subdivisionId) || subdivisionId,
                                 noteCount: 0,
                                 level: 2,
-                                parent: classMap.get(classId)?.ddcCode
+                                parent: domainMap.get(domainId)?.ddcCode
                             };
-                            sectionMap.set(sectionId, sectionNode);
-                            classMap.get(classId)?.children?.push(sectionNode);
+                            subdivisionMap.set(subdivisionId, subdivisionNode);
+                            domainMap.get(domainId)?.children?.push(subdivisionNode);
                         }
-                        if (sectionMap.has(sectionId)) {
-                            const section = sectionMap.get(sectionId);
-                            if (section) {
-                                section.noteCount = (section.noteCount || 0) + 1;
+                        if (subdivisionMap.has(subdivisionId)) {
+                            const subdivision = subdivisionMap.get(subdivisionId);
+                            if (subdivision) {
+                                subdivision.noteCount = (subdivision.noteCount || 0) + 1;
                             }
                         }
-                        if (classMap.has(classId)) {
-                            const classNode = classMap.get(classId);
-                            if (classNode) {
-                                classNode.noteCount = (classNode.noteCount || 0) + 1;
+                        if (domainMap.has(domainId)) {
+                            const domainNode = domainMap.get(domainId);
+                            if (domainNode) {
+                                domainNode.noteCount = (domainNode.noteCount || 0) + 1;
                             }
                         }
                     });
                 }
             });
-            // Extract keywords for each section
-            sectionMap.forEach((section, sectionId) => {
-                const notes = sectionNotes.get(sectionId) || [];
+            // Extract keywords for each subdivision
+            subdivisionMap.forEach((subdivision, subdivisionId) => {
+                const notes = subdivisionNotes.get(subdivisionId) || [];
                 const keywords = new Set<string>();
                 notes.forEach(note => {
                     if (note.keywords) {
@@ -300,11 +300,11 @@ export class KnowledgeStructureManager {
                         });
                     }
                 });
-                section.keywords = Array.from(keywords);
+                subdivision.keywords = Array.from(keywords);
             });
-            // Convert class map to array and sort by note count
-            const domainHierarchy = Array.from(classMap.values())
-                .filter((cls: any) => cls.noteCount && cls.noteCount > 0)
+            // Convert domain map to array and sort by note count
+            const domainHierarchy = Array.from(domainMap.values())
+                .filter((domain: any) => domain.noteCount && domain.noteCount > 0)
                 .sort((a: any, b: any) => (b.noteCount || 0) - (a.noteCount || 0));
             return {
                 domainHierarchy,
@@ -1169,10 +1169,12 @@ export class KnowledgeStructureManager {
                 cls: 'ai-insights-container'
             });
 
-            gapsContainer.createEl('h4', {
-                text: '🎯 Identified Knowledge Gaps',
+            const titleEl = gapsContainer.createEl('h4', {
                 cls: 'ai-insights-title'
             });
+            const iconEl = titleEl.createEl('span', { cls: 'ai-insights-icon' });
+            setIcon(iconEl, 'target');
+            titleEl.createEl('span', { text: 'Identified Knowledge Gaps' });
 
             const gapsList = gapsContainer.createEl('ul', { 
                 cls: 'gaps-list' 

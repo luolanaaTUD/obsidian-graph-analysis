@@ -152,7 +152,7 @@ const responseSchema = {
 async function main() {
   console.log("\n--- SENDING SYSTEM + CONTEXT + INSTRUCTION PROMPT (STRUCTURED OUTPUT) ---\n");
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-flash-lite-latest",
     contents: prompt,
     config: {
       responseMimeType: "application/json",

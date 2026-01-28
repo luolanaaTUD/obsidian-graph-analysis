@@ -65,7 +65,7 @@ const filesToCopy = [
     { source: 'manifest.json', dest: 'manifest.json' },
     { source: 'dist/styles.css', dest: 'styles.css' },
     { source: 'dist/graph_analysis_wasm_bg.wasm', dest: 'graph_analysis_wasm_bg.wasm' },
-    { source: 'dist/DDC-template.json', dest: 'DDC-template.json', critical: true, validate: true },
+    { source: 'dist/knowledge-domains.json', dest: 'knowledge-domains.json', critical: true, validate: true },
     { source: 'README.md', dest: 'README.md' },
     { source: 'LICENSE', dest: 'LICENSE' }
 ];
@@ -83,8 +83,8 @@ filesToCopy.forEach(file => {
             console.error(`This file is required for the plugin to function correctly`);
             
             // Exit with error for critical files
-            if (file.source.includes('DDC-template.json')) {
-                console.error(`❌ DDC template file is missing. Please ensure it exists in the src/ai directory and was properly built.`);
+            if (file.source.includes('knowledge-domains.json')) {
+                console.error(`❌ Knowledge domains template file is missing. Please ensure it exists in the src/ai directory and was properly built.`);
                 process.exit(1);
             }
         } else {
@@ -96,21 +96,21 @@ filesToCopy.forEach(file => {
     try {
         fs.copyFileSync(sourcePath, destPath);
         
-        // Special handling for DDC template
-        if (file.validate && file.source.includes('DDC-template.json')) {
-            console.log(`✅ Copied DDC template from ${sourcePath} to ${destPath}`);
+        // Special handling for knowledge domains template
+        if (file.validate && file.source.includes('knowledge-domains.json')) {
+            console.log(`✅ Copied knowledge domains template from ${sourcePath} to ${destPath}`);
             
             // Verify the file was copied correctly
             try {
                 const fileContent = fs.readFileSync(destPath, 'utf8');
                 const jsonContent = JSON.parse(fileContent);
-                if (jsonContent && jsonContent.ddc_23_summaries && jsonContent.ddc_23_summaries.classes) {
-                    console.log(`✅ DDC template JSON is valid with ${jsonContent.ddc_23_summaries.classes.length} classes`);
+                if (jsonContent && jsonContent.knowledge_domains && jsonContent.knowledge_domains.domains) {
+                    console.log(`✅ Knowledge domains template JSON is valid with ${jsonContent.knowledge_domains.domains.length} domains`);
                 } else {
-                    console.error(`❌ DDC template JSON structure is invalid. Expected ddc_23_summaries.classes array.`);
+                    console.error(`❌ Knowledge domains template JSON structure is invalid. Expected knowledge_domains.domains array.`);
                 }
             } catch (verifyError) {
-                console.error(`❌ Error verifying DDC template: ${verifyError.message}`);
+                console.error(`❌ Error verifying knowledge domains template: ${verifyError.message}`);
             }
         } else {
             console.log(`Copied ${file.source} to ${destPath}`);

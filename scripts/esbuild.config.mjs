@@ -49,14 +49,14 @@ const copyWasmFiles = {
   },
 };
 
-// Copy DDC template file to the output directory
-const copyDDCTemplate = {
-  name: 'copy-ddc-template',
+// Copy knowledge domains template file to the output directory
+const copyKnowledgeDomainsTemplate = {
+  name: 'copy-knowledge-domains-template',
   setup(build) {
     build.onEnd(() => {
-      const sourceFile = path.join(process.cwd(), 'src', 'ai', 'DDC-template.json');
+      const sourceFile = path.join(process.cwd(), 'src', 'ai', 'knowledge-domains.json');
       const outputDir = path.join(process.cwd(), 'dist');
-      const targetFile = path.join(outputDir, 'DDC-template.json');
+      const targetFile = path.join(outputDir, 'knowledge-domains.json');
       
       // Create the output directory if it doesn't exist
       if (!fs.existsSync(outputDir)) {
@@ -72,13 +72,13 @@ const copyDDCTemplate = {
             
             // Copy the file to the target location
             fs.copyFileSync(sourceFile, targetFile);
-            console.log(`✅ Successfully copied DDC template from ${sourceFile} to ${targetFile}`);
+            console.log(`✅ Successfully copied knowledge domains template from ${sourceFile} to ${targetFile}`);
           } catch (jsonError) {
-            console.error(`❌ ERROR: DDC template JSON is invalid: ${jsonError.message}`);
-            console.error('Build will continue but the plugin may not function correctly without a valid DDC template');
+            console.error(`❌ ERROR: Knowledge domains template JSON is invalid: ${jsonError.message}`);
+            console.error('Build will continue but the plugin may not function correctly without a valid knowledge domains template');
           }
         } else {
-          console.error(`❌ CRITICAL ERROR: DDC template file not found at ${sourceFile}`);
+          console.error(`❌ CRITICAL ERROR: Knowledge domains template file not found at ${sourceFile}`);
           console.error('This file is required for the plugin to function correctly');
           
           // Make the build fail if in production mode
@@ -87,7 +87,7 @@ const copyDDCTemplate = {
           }
         }
       } catch (error) {
-        console.error(`❌ Error handling DDC template: ${error.message}`);
+        console.error(`❌ Error handling knowledge domains template: ${error.message}`);
         
         // Make the build fail if in production mode
         if (prod) {
@@ -209,7 +209,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outdir: "dist",
-  plugins: [pathAliasPlugin, injectWasmCode, copyWasmFiles, copyDDCTemplate, copyCssFile],
+  plugins: [pathAliasPlugin, injectWasmCode, copyWasmFiles, copyKnowledgeDomainsTemplate, copyCssFile],
 });
 
 if (prod) {

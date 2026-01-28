@@ -50,7 +50,8 @@ export class VaultAnalysisModal extends Modal {
         analysisData: VaultAnalysisData | null, 
         hasExistingData: boolean, 
         vaultSemanticAnalysisManager: VaultSemanticAnalysisManager,
-        settings: GraphAnalysisSettings
+        settings: GraphAnalysisSettings,
+        initialView: string = 'semantic'
     ) {
         super(app);
         this.analysisData = analysisData;
@@ -58,6 +59,7 @@ export class VaultAnalysisModal extends Modal {
         this.vaultSemanticAnalysisManager = vaultSemanticAnalysisManager;
         this.settings = settings;
         this.masterAnalysisManager = new MasterAnalysisManager(app, settings);
+        this.currentView = initialView;
     }
 
     onOpen() {
@@ -85,7 +87,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         // Load initial view
-        this.loadView('semantic');
+        this.loadView(this.currentView);
     }
 
     private createHeader(container: HTMLElement): void {
@@ -677,7 +679,7 @@ export class VaultAnalysisModal extends Modal {
         // ALWAYS display domain distribution chart using KnowledgeStructureManager
         await this.knowledgeStructureManager.createDomainDistributionChart(domainDistributionSection);
         
-        // ALWAYS display KDE distribution chart (independent of AI analysis, like DDC chart)
+        // ALWAYS display KDE distribution chart (independent of AI analysis, like domain chart)
         // This fetches data directly from vault-analysis.json and displays without AI interference
         await this.knowledgeStructureManager.renderKDEDistributionChart(networkAnalysisSection);
         
@@ -734,10 +736,12 @@ export class VaultAnalysisModal extends Modal {
                 cls: 'ai-insights-container'
             });
 
-            gapsContainer.createEl('h4', {
-                text: '🎯 Identified Knowledge Gaps',
+            const titleEl = gapsContainer.createEl('h4', {
                 cls: 'ai-insights-title'
             });
+            const iconEl = titleEl.createEl('span', { cls: 'ai-insights-icon' });
+            setIcon(iconEl, 'target');
+            titleEl.createEl('span', { text: 'Identified Knowledge Gaps' });
 
             const gapsList = gapsContainer.createEl('ul', { 
                 cls: 'gaps-list' 
@@ -1007,28 +1011,48 @@ export class VaultAnalysisModal extends Modal {
     }
 
     private async createUpdateAnalysisButtonSection(container: HTMLElement, tabName: string = ''): Promise<void> {
-        const buttonSection = container.createEl('div', { 
-            cls: 'vault-analysis-section analysis-button-section' 
-        });
-
-        buttonSection.createEl('h3', {
-            text: 'Update Analysis',
-            cls: 'vault-analysis-section-title'
-        });
-
-        const buttonContainer = buttonSection.createEl('div', { 
-            cls: 'analysis-button-container' 
+        // Use modal-button-container style to match Semantic Analysis page
+        // This includes the splitter line (border-top) and right alignment
+        const buttonContainer = container.createEl('div', { 
+            cls: 'modal-button-container' 
         });
 
         const updateButton = buttonContainer.createEl('button', {
-            cls: 'analysis-trigger-button',
-            text: '🔄 Update Analysis'
+            cls: 'mod-cta',
+            text: 'Update Analysis'
         });
-        
-        updateButton.style.background = 'var(--interactive-accent-hover)';
 
         updateButton.addEventListener('click', async () => {
-            await this.triggerAIAnalysis(buttonSection, true, tabName);
+            // Use close-reopen pattern for structure, evolution, and actions tabs
+            if (tabName === 'structure' || tabName === 'evolution' || tabName === 'actions') {
+                // Show notification before closing modal
+                const tabDisplayName = this.getTabDisplayName(tabName);
+                new Notice(`🧪 Updating ${tabDisplayName} Analysis...`);
+                
+                this.close();
+                try {
+                    // Generate the appropriate analysis based on tab
+                    if (tabName === 'structure') {
+                        await this.masterAnalysisManager.generateKnowledgeStructureAnalysis();
+                    } else if (tabName === 'evolution') {
+                        await this.masterAnalysisManager.generateKnowledgeEvolutionAnalysis();
+                    } else if (tabName === 'actions') {
+                        await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                    }
+                    // Reopen modal to the same tab with fresh data
+                    await this.masterAnalysisManager.reopenModalToTab(
+                        this.vaultSemanticAnalysisManager,
+                        this.settings,
+                        tabName
+                    );
+                } catch (error) {
+                    // Error already shown by the analysis method, no need to reopen modal
+                    console.error(`${tabName} analysis failed:`, error);
+                }
+            } else {
+                // Fallback to inline loading for other cases
+                await this.triggerAIAnalysis(buttonContainer, true, tabName);
+            }
         });
     }
 
@@ -1085,7 +1109,36 @@ export class VaultAnalysisModal extends Modal {
         this.analysisResultsContainer = container;
 
         analysisButton.addEventListener('click', async () => {
-            await this.triggerAIAnalysis(buttonSection, false, tabName);
+            // Use close-reopen pattern for structure, evolution, and actions tabs
+            if (tabName === 'structure' || tabName === 'evolution' || tabName === 'actions') {
+                // Show notification before closing modal
+                const tabDisplayName = this.getTabDisplayName(tabName);
+                new Notice(`🧪 Generating ${tabDisplayName} Analysis...`);
+                
+                this.close();
+                try {
+                    // Generate the appropriate analysis based on tab
+                    if (tabName === 'structure') {
+                        await this.masterAnalysisManager.generateKnowledgeStructureAnalysis();
+                    } else if (tabName === 'evolution') {
+                        await this.masterAnalysisManager.generateKnowledgeEvolutionAnalysis();
+                    } else if (tabName === 'actions') {
+                        await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                    }
+                    // Reopen modal to the same tab with fresh data
+                    await this.masterAnalysisManager.reopenModalToTab(
+                        this.vaultSemanticAnalysisManager,
+                        this.settings,
+                        tabName
+                    );
+                } catch (error) {
+                    // Error already shown by the analysis method, no need to reopen modal
+                    console.error(`${tabName} analysis failed:`, error);
+                }
+            } else {
+                // Fallback to inline loading for other cases
+                await this.triggerAIAnalysis(buttonSection, false, tabName);
+            }
         });
     }
 
@@ -1114,11 +1167,7 @@ export class VaultAnalysisModal extends Modal {
         `;
 
         try {
-            // Ensure DDC template is loaded before proceeding
-            // const templateLoaded = await this.masterAnalysisManager.ensureDDCTemplateLoaded();
-            // if (!templateLoaded) {
-            //     throw new Error('Failed to load DDC template. Please ensure the plugin is correctly installed.');
-            // }
+            // Knowledge domain template loading is handled automatically by KnowledgeDomainHelper
             
             // Generate analysis based on tab name or all analyses
             if (tabName === 'structure') {
@@ -1263,7 +1312,7 @@ export class VaultAnalysisModal extends Modal {
             if (item.newDomains.length > 0) {
                 const itemEl = viz.createEl('div', { cls: 'topic-period' });
                 
-                // Parse DDC-compliant domain names for cleaner display
+                // Parse domain names for cleaner display
                 const cleanDomains = item.newDomains.map((domain: string) => {
                     const domainParts = domain.match(/^(.+?)\s*\((.+)\)$/) || [null, domain, ''];
                     return domainParts[1] || domain;

@@ -10,8 +10,8 @@ export interface DomainData {
 }
 
 export interface DomainDistributionData {
-    // Hierarchical domain structure for sunburst visualization (2 layers: Main Classes, Sections)
-    // Built by MasterAnalysisManager using section-based classification
+    // Hierarchical domain structure for sunburst visualization (2 layers: Domains, Subdivisions)
+    // Built by MasterAnalysisManager using subdivision-based classification
     domainHierarchy: HierarchicalDomain[];
     
     // Cross-domain connections
@@ -174,7 +174,7 @@ export class DomainDistributionChart {
                 <div class="placeholder-icon">📊</div>
                 <div class="placeholder-title">No Domain Hierarchy Available</div>
                 <div class="placeholder-text">
-                    Please generate vault analysis with optimized DDC section classification to see domain distribution.
+                    Please generate vault analysis with knowledge domain classification to see domain distribution.
                 </div>
             </div>
         `;
@@ -303,7 +303,7 @@ export class DomainDistributionChart {
                     `${format(d.value || d.data.noteCount || 0)} notes`,
                 ];
                 if (d.data.ddcCode) {
-                    info.push(`DDC: ${d.data.ddcCode}`);
+                    info.push(`Domain: ${d.data.ddcCode}`);
                 }
                 if (d.data.avgCentrality !== undefined) {
                     info.push(`Centrality: ${d.data.avgCentrality.toFixed(3)}`);
@@ -437,7 +437,7 @@ export class DomainDistributionChart {
             if (data && data !== root) {
                 // Show detailed segment information
                 const percentage = ((data.value || data.data.noteCount || 0) / (root.value || 1) * 100).toFixed(1);
-                const layerNames = ['Root', 'Main Class', 'Division', 'Section', 'User Domain'];
+                const layerNames = ['Root', 'Domain', 'Subdivision', 'User Domain'];
                 const layerName = layerNames[data.depth] || `Layer ${data.depth}`;
                 
                 // Domain name with text wrapping for long names
@@ -548,7 +548,7 @@ export class DomainDistributionChart {
                     .style('font-size', Math.max(centerRadius * 0.14, 11) + 'px')
                     .style('font-weight', '600')
                     .style('fill', 'var(--text-accent)')
-                    .text('DDC Hierarchy');
+                    .text('Knowledge Domains');
 
                 if (totalDomainSections > 0) {
                     textContainer.append('tspan')
@@ -570,7 +570,7 @@ export class DomainDistributionChart {
                         .attr('dy', '1.2em')
                         .style('font-size', Math.max(centerRadius * 0.12, 9) + 'px')
                         .style('fill', 'var(--text-muted)')
-                        .text('domain sections');
+                        .text('subdivisions');
 
                     textContainer.append('tspan')
                         .attr('x', 0)
