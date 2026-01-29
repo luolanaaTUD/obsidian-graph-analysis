@@ -20,10 +20,10 @@ export class VaultSemanticAnalysisManager {
     private masterAnalysisManager: MasterAnalysisManager;
     private subdivisionsList: Array<{id: string, name: string, domain: string, domainId: string}> = [];
     private domainTemplateLoaded: boolean = false;
-    private readonly MAX_WORDS_PER_NOTE = 1000;
+    private readonly MAX_WORDS_PER_NOTE = 1200;
     private readonly MAX_NOTES_PER_BATCH = 30;
     private readonly DELAY_BETWEEN_BATCHES = 3000; // 3 seconds between batches for 30 RPM rate limiting
-    private readonly RATE_LIMIT_RETRY_DELAY = 8000; // 8 second delay for rate limit retry
+    private readonly RATE_LIMIT_RETRY_DELAY = 8100; // 8 second delay for rate limit retry
 
     /**
      * Get the path to vault-analysis.json in the responses folder

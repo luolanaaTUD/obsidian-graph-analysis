@@ -1221,6 +1221,7 @@ export class GraphView {
     
     /**
      * Initialize the node radius scale using Jenks natural breaks
+     * This ensures orphan nodes (degree 0) map to the smallest radius
      * This should be called when the graph data is updated
      */
     private initializeNodeRadiusScale(): void {
@@ -1234,6 +1235,7 @@ export class GraphView {
         if (degrees.length === 0) return;
 
         // Calculate Jenks natural breaks using the number of size categories from NODE constant
+        // Jenks returns n+1 break points for n categories
         const breaks = ss.jenks(degrees, this.NODE.SIZE_CATEGORIES);
 
         // Create an array of radius values based on graph size
@@ -1250,12 +1252,20 @@ export class GraphView {
             maxRadius = this.NODE.RADIUS.LARGE_GRAPH.MAX;
         }
 
+        // Create radius steps: breaks.length values (one for each break point)
+        // These will be mapped so that low degree values get small radii
         const radiusSteps = Array.from({ length: breaks.length }, (_, i) => {
             const t = i / (breaks.length - 1);
             return minRadius + (maxRadius - minRadius) * t;
         });
 
-        // Create the scale
+        // Create the threshold scale
+        // Domain: breaks.slice(1) gives us n thresholds (excluding the minimum break point)
+        // Range: radiusSteps gives us n+1 radius values
+        // Mapping: values < first threshold → radiusSteps[0] (smallest)
+        //          values >= threshold[i] → radiusSteps[i+1]
+        //          values >= last threshold → radiusSteps[n] (largest)
+        // This ensures low degree values (including 0 for orphans) map to small radii
         this.nodeRadiusScale = d3.scaleThreshold<number, number>()
             .domain(breaks.slice(1)) // Remove the first break point (minimum value)
             .range(radiusSteps);
@@ -1275,9 +1285,11 @@ export class GraphView {
         }
 
         // Get the categorized radius based on the node's degree
+        // scaleThreshold maps: low values → small radii, high values → large radii
         const radius = this.nodeRadiusScale(node.degreeCentrality);
 
-        return radius;
+        // Safety check: if scale returns undefined, fall back to base size
+        return radius ?? this.NODE.RADIUS.SMALL_GRAPH.BASE;
     }
     
     public refreshGraphView(): void {
