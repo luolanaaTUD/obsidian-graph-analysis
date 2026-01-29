@@ -240,11 +240,16 @@
 
 /* Empty State */
 .network-empty-state {
-    text-align: center;
+    text-align: center !important;
     padding: 40px 20px;
     background: var(--background-secondary-alt, #f6f8fa);
     border-radius: 12px;
     border: 1px dashed var(--background-modifier-border, #d0d7de);
+}
+
+/* Override parent text-align for empty state inside placeholder */
+.vault-analysis-placeholder .network-empty-state {
+    text-align: center !important;
 }
 
 .network-empty-state-icon {
@@ -257,8 +262,11 @@
     font-size: 16px;
     color: var(--text-muted, #656d76);
     max-width: 400px;
+    width: 100%;
     margin: 0 auto;
     line-height: 1.5;
+    text-align: center !important;
+    display: block;
 }
 
 /* Theme consistency */
@@ -1094,9 +1102,44 @@
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  align-items: center;
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Analysis status indicator */
+.analysis-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-current .status-dot {
+  background-color: var(--color-green);
+}
+
+.status-outdated .status-dot {
+  background-color: var(--color-orange);
+}
+
+.status-empty .status-dot {
+  background-color: var(--text-muted);
+}
+
+button.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 9. Graph Analysis View Status Bar Control

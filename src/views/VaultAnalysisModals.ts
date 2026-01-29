@@ -692,7 +692,11 @@ export class VaultAnalysisModal extends Modal {
             await this.displayKnowledgeGaps(gapsSection);
             
             // Show Update Analysis button below the results
-            await this.createUpdateAnalysisButtonSection(structureContainer, 'structure');
+            await this.createUpdateAnalysisButtonSection(
+                structureContainer, 
+                'structure',
+                this.structureAnalysisData?.isOutdated ?? false
+            );
         } else {
             // Show placeholder for network analysis and gaps (KDE chart already displayed above)
             this.showNetworkAnalysisPlaceholder(networkAnalysisSection);
@@ -787,6 +791,11 @@ export class VaultAnalysisModal extends Modal {
         textEl.style.color = 'var(--text-muted)';
         textEl.style.fontSize = '14px';
         textEl.style.lineHeight = '1.5';
+        textEl.style.textAlign = 'center';
+        textEl.style.display = 'block';
+        textEl.style.width = '100%';
+        textEl.style.maxWidth = '400px';
+        textEl.style.margin = '0 auto';
         emptyState.appendChild(textEl);
     }
 
@@ -873,19 +882,45 @@ export class VaultAnalysisModal extends Modal {
         this.contentContainer = originalContentContainer;
     }
 
-    private async createUpdateAnalysisButtonSection(container: HTMLElement, tabName: string = ''): Promise<void> {
+    private async createUpdateAnalysisButtonSection(container: HTMLElement, tabName: string = '', isOutdated: boolean = false): Promise<void> {
         // Use modal-button-container style to match Semantic Analysis page
         // This includes the splitter line (border-top) and right alignment
         const buttonContainer = container.createEl('div', { 
             cls: 'modal-button-container' 
         });
 
+        // Add status indicator
+        const statusIndicator = buttonContainer.createEl('div', {
+            cls: 'analysis-status-indicator'
+        });
+
+        if (!isOutdated) {
+            statusIndicator.addClass('status-current');
+            statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis is current';
+        } else {
+            statusIndicator.addClass('status-outdated');
+            statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis needs update';
+        }
+
         const updateButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
             text: 'Update Analysis'
         });
 
+        // Disable button if analysis is current
+        if (!isOutdated) {
+            updateButton.disabled = true;
+            updateButton.addClass('is-disabled');
+            updateButton.setAttribute('title', 'Analysis is up to date with current vault');
+        } else {
+            updateButton.setAttribute('title', 'Click to update analysis with recent vault changes');
+        }
+
         updateButton.addEventListener('click', async () => {
+            // Prevent action if button is disabled
+            if (updateButton.disabled) {
+                return;
+            }
             // Use close-reopen pattern for structure, evolution, and actions tabs
             if (tabName === 'structure' || tabName === 'evolution' || tabName === 'actions') {
                 // Show notification before closing modal
@@ -944,10 +979,18 @@ export class VaultAnalysisModal extends Modal {
             cls: 'modal-button-container' 
         });
 
+        // Add status indicator for empty state
+        const statusIndicator = buttonContainer.createEl('div', {
+            cls: 'analysis-status-indicator'
+        });
+        statusIndicator.addClass('status-empty');
+        statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis not generated yet';
+
         const analysisButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
             text: 'Generate Analysis'
         });
+        analysisButton.setAttribute('title', 'Click to generate analysis for this tab');
 
         analysisButton.addEventListener('click', async () => {
             // Use close-reopen pattern for structure, evolution, and actions tabs
@@ -1042,14 +1085,31 @@ export class VaultAnalysisModal extends Modal {
                 await this.loadKnowledgeStructureView();
             } else if (this.currentView === 'evolution') {
                 await this.displayCachedAnalysis(buttonSection);
-                await this.createUpdateAnalysisButtonSection(buttonSection, 'evolution');
+                await this.createUpdateAnalysisButtonSection(
+                    buttonSection, 
+                    'evolution',
+                    this.evolutionAnalysisData?.isOutdated ?? false
+                );
             } else if (this.currentView === 'actions') {
                 await this.displayRecommendedActionsResults(buttonSection);
-                await this.createUpdateAnalysisButtonSection(buttonSection, 'actions');
+                await this.createUpdateAnalysisButtonSection(
+                    buttonSection, 
+                    'actions',
+                    this.actionsAnalysisData?.isOutdated ?? false
+                );
             } else {
                 // For other views, just display generic cached analysis
                 await this.displayCachedAnalysis(buttonSection);
-                await this.createUpdateAnalysisButtonSection(buttonSection);
+                // Determine isOutdated based on current view
+                let isOutdated = false;
+                if (this.currentView === 'structure') {
+                    isOutdated = this.structureAnalysisData?.isOutdated ?? false;
+                } else if (this.currentView === 'evolution') {
+                    isOutdated = this.evolutionAnalysisData?.isOutdated ?? false;
+                } else if (this.currentView === 'actions') {
+                    isOutdated = this.actionsAnalysisData?.isOutdated ?? false;
+                }
+                await this.createUpdateAnalysisButtonSection(buttonSection, '', isOutdated);
             }
 
         } catch (error) {
@@ -1241,7 +1301,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         chartSection.createEl('h3', {
-            text: 'Note Connectivity Analysis',
+            text: 'Network Metrics Analysis',
             cls: 'vault-analysis-section-title'
         });
 
@@ -1347,7 +1407,11 @@ export class VaultAnalysisModal extends Modal {
         this.loadActionsAnalysisData().then(hasData => {
             if (hasData) {
                 this.displayRecommendedActionsResults(recommendationsSection);
-                this.createUpdateAnalysisButtonSection(recommendationsSection, 'actions');
+                this.createUpdateAnalysisButtonSection(
+                    recommendationsSection, 
+                    'actions',
+                    this.actionsAnalysisData?.isOutdated ?? false
+                );
             } else {
                 this.showActionsEmptyState(recommendationsSection);
             }
@@ -1380,8 +1444,11 @@ export class VaultAnalysisModal extends Modal {
 
         // Knowledge Maintenance Section
         if (actionsData.maintenance && actionsData.maintenance.length > 0) {
-            const maintenanceSection = container.createEl('div', { cls: 'actions-category' });
-            maintenanceSection.createEl('h4', { text: '🔧 Knowledge Maintenance' });
+            const maintenanceSection = container.createEl('div', { cls: 'vault-analysis-section' });
+            maintenanceSection.createEl('h3', {
+                text: 'Knowledge Maintenance',
+                cls: 'vault-analysis-section-title'
+            });
             
             const maintenanceList = maintenanceSection.createEl('div', { cls: 'actions-list' });
             actionsData.maintenance.slice(0, 10).forEach((action: any) => {
@@ -1394,10 +1461,13 @@ export class VaultAnalysisModal extends Modal {
             });
         }
 
-        // Connection Opportunities Section
+        // Connection Recommendations Section
         if (actionsData.connections && actionsData.connections.length > 0) {
-            const connectionsSection = container.createEl('div', { cls: 'actions-category' });
-            connectionsSection.createEl('h4', { text: '🔗 Connection Opportunities' });
+            const connectionsSection = container.createEl('div', { cls: 'vault-analysis-section' });
+            connectionsSection.createEl('h3', {
+                text: 'Connection Recommendations',
+                cls: 'vault-analysis-section-title'
+            });
             
             const connectionsList = connectionsSection.createEl('div', { cls: 'actions-list' });
             actionsData.connections.slice(0, 10).forEach((connection: any) => {
@@ -1409,80 +1479,36 @@ export class VaultAnalysisModal extends Modal {
                 `;
             });
         }
-
-        // Learning Paths Section
-        if (actionsData.learningPaths && actionsData.learningPaths.length > 0) {
-            const pathsSection = container.createEl('div', { cls: 'actions-category' });
-            pathsSection.createEl('h4', { text: '📚 Learning Paths' });
-            
-            const pathsList = pathsSection.createEl('div', { cls: 'learning-paths-list' });
-            actionsData.learningPaths.slice(0, 5).forEach((path: any) => {
-                const pathItem = pathsList.createEl('div', { cls: 'learning-path-item' });
-                pathItem.innerHTML = `
-                    <div class="path-title">${path.title || path.name || 'Learning Path'}</div>
-                    <div class="path-description">${path.description || ''}</div>
-                    <div class="path-steps">${path.steps ? path.steps.join(' → ') : ''}</div>
-                `;
-            });
-        }
-
-        // Organization Suggestions Section
-        if (actionsData.organization && actionsData.organization.length > 0) {
-            const organizationSection = container.createEl('div', { cls: 'actions-category' });
-            organizationSection.createEl('h4', { text: '📁 Organization Suggestions' });
-            
-            const organizationList = organizationSection.createEl('div', { cls: 'actions-list' });
-            actionsData.organization.slice(0, 10).forEach((suggestion: any) => {
-                const suggestionItem = organizationList.createEl('div', { cls: 'action-item' });
-                suggestionItem.innerHTML = `
-                    <div class="action-title">${suggestion.title || suggestion.suggestion || 'Organization Suggestion'}</div>
-                    <div class="action-description">${suggestion.reason || suggestion.description || ''}</div>
-                    <div class="action-impact">${suggestion.impact || ''}</div>
-                `;
-            });
-        }
     }
 
     private showActionsEmptyState(container: HTMLElement): void {
-        const emptyState = container.createEl('div', { 
-            cls: 'vault-analysis-placeholder' 
-        });
-        
-        emptyState.createEl('p', {
-            text: 'Recommended Actions require AI-powered analysis to be completed first.',
-            cls: 'analysis-required'
-        });
-
         // Placeholders for each actions category (titles + purpose)
         const categories: Array<{ title: string; message: string }> = [
             {
-                title: '🔧 Knowledge Maintenance',
+                title: 'Knowledge Maintenance',
                 message: 'Generate analysis to surface notes that may need review, updates, or cleanup.'
             },
             {
-                title: '🔗 Connection Opportunities',
+                title: 'Connection Recommendations',
                 message: 'Generate analysis to suggest links between related concepts and notes.'
-            },
-            {
-                title: '📚 Learning Paths',
-                message: 'Generate analysis to propose guided sequences for exploring topics in your vault.'
-            },
-            {
-                title: '📁 Organization Suggestions',
-                message: 'Generate analysis to recommend structural improvements for folders, tags, and grouping.'
             }
         ];
 
         categories.forEach(({ title, message }) => {
-            const section = emptyState.createEl('div', { cls: 'actions-category' });
-            section.createEl('h4', { text: title });
+            const section = container.createEl('div', { cls: 'vault-analysis-section' });
+            section.createEl('h3', {
+                text: title,
+                cls: 'vault-analysis-section-title'
+            });
             this.createEmptyState(section, message);
         });
 
         // Add informational message about AI analysis
-        const infoContainer = emptyState.createEl('div', {
-            cls: 'vault-analysis-summary',
-            attr: { style: 'margin-top: 16px;' }
+        const infoSection = container.createEl('div', { 
+            cls: 'vault-analysis-section' 
+        });
+        const infoContainer = infoSection.createEl('div', {
+            cls: 'vault-analysis-summary'
         });
 
         infoContainer.createEl('p', {
@@ -1496,15 +1522,25 @@ export class VaultAnalysisModal extends Modal {
         });
 
         // Use same button style as Update Analysis (modal-button-container with mod-cta)
-        const buttonContainer = emptyState.createEl('div', { 
-            cls: 'modal-button-container',
-            attr: { style: 'margin-top: 16px;' }
+        const buttonSection = container.createEl('div', { 
+            cls: 'vault-analysis-section' 
         });
+        const buttonContainer = buttonSection.createEl('div', { 
+            cls: 'modal-button-container'
+        });
+
+        // Add status indicator for empty state
+        const statusIndicator = buttonContainer.createEl('div', {
+            cls: 'analysis-status-indicator'
+        });
+        statusIndicator.addClass('status-empty');
+        statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis not generated yet';
 
         const generateButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
             text: 'Generate Analysis'
         });
+        generateButton.setAttribute('title', 'Click to generate analysis for this tab');
 
         generateButton.addEventListener('click', async () => {
             await this.triggerAIAnalysis(container, false, 'actions');
@@ -1548,7 +1584,11 @@ export class VaultAnalysisModal extends Modal {
             await this.displayCachedAnalysis(evolutionContainer);
             
             // Show Update Analysis button below the results
-            await this.createUpdateAnalysisButtonSection(evolutionContainer, 'evolution');
+            await this.createUpdateAnalysisButtonSection(
+                evolutionContainer, 
+                'evolution',
+                this.evolutionAnalysisData?.isOutdated ?? false
+            );
         } else {
             // Show calendar section first, then placeholders for each analysis type
             await this.createCalendarSection(evolutionContainer);

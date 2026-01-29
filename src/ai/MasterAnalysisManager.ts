@@ -57,6 +57,7 @@ export interface TabAnalysisData {
     generatedAt: string;
     sourceAnalysisId: string;
     apiProvider: string;
+    isOutdated?: boolean;  // Indicates if cache doesn't match current vault state
 }
 
 // NEW: Interface for knowledge structure tab analysis
@@ -110,14 +111,16 @@ export class MasterAnalysisManager {
             const content = await this.app.vault.adapter.read(filePath);
             const data = JSON.parse(content);
             
-            // Validate that the cached analysis matches current semantic analysis
+            // Check if cached analysis matches current vault state
             const currentAnalysisData = await this.loadVaultAnalysisData();
             if (currentAnalysisData && data?.sourceAnalysisId !== this.generateAnalysisId(currentAnalysisData)) {
-                console.log(`Cached ${tabName} analysis is outdated, will regenerate`);
-                return null;
+                console.log(`Cached ${tabName} analysis is outdated but will still be displayed`);
+                data.isOutdated = true;  // Mark as outdated but still return
+            } else {
+                data.isOutdated = false;  // Explicitly mark as current if IDs match
             }
             
-            return data;
+            return data;  // Always return cached data if it exists
         } catch (error) {
             // Check if this is a file not found error (ENOENT)
             if (error && typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'ENOENT') {
