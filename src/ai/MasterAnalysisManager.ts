@@ -513,10 +513,173 @@ ${formattedContext}`;
     }
 
     /**
-     * TODO: Generate Recommended Actions Analysis using structured output (to be implemented)
+     * Generate Recommended Actions Analysis using structured output
      */
     public async generateRecommendedActionsAnalysis(): Promise<ActionsAnalysisData> {
-        throw new Error('Recommended Actions Analysis not yet implemented with structured output. Will be implemented tomorrow.');
+        try {
+            console.log('Generating Recommended Actions Analysis with structured output...');
+
+            const analysisData = await this.loadVaultAnalysisData();
+            if (!analysisData) {
+                throw new Error('No vault analysis data found. Please generate vault analysis first.');
+            }
+
+            // Prepare actions-specific context (includes connectivity insights)
+            const contextService = new AIContextPreparationService();
+            const actionsContext = contextService.prepareActionsContext(this.app, analysisData);
+            const formattedContext = contextService.formatActionsContextForAI(actionsContext);
+
+            // Build the system, context, and instruction
+            const system = "You are an expert in knowledge management and knowledge graph optimization. You specialize in identifying notes that need maintenance, suggesting connections between related concepts, and optimizing knowledge structure. Use your expertise to analyze the provided connectivity and centrality data to generate actionable recommendations.";
+
+            const context = `VAULT ANALYSIS DATA WITH CONNECTIVITY INSIGHTS:
+${formattedContext}`;
+
+            const instruction = `Analyze the vault data and connectivity insights to generate actionable recommendations. Return a JSON object matching the required schema.
+
+**Analysis Framework:**
+
+1. **Knowledge Maintenance**: Identify notes that need attention based on:
+   - Integration opportunities (high outbound, low inbound links) - these notes need incoming connections
+   - Isolated notes (low connectivity) - these need more links
+   - Orphan notes (zero links) - these need urgent attention
+   - Notes with high centrality but low connectivity - important concepts that are underlinked
+   - Notes that haven't been modified recently but are important (check modified dates)
+   - Notes that serve as bridges or authorities but need reinforcement
+
+2. **Connection Recommendations**: Suggest links between notes based on:
+   - Integration opportunities - notes that should receive incoming links
+   - Same knowledge domains but no existing links
+   - Complementary content (based on keywords and summaries)
+   - Missing bridges between knowledge clusters
+   - Notes that would benefit from cross-domain connections
+
+**Instructions:**
+1. For maintenance actions, prioritize based on urgency:
+   - High priority: Orphan notes, important notes with zero inbound links, critical bridges/authorities that are underlinked
+   - Medium priority: Isolated notes, integration opportunities, notes needing updates
+   - Low priority: Notes that could benefit from minor improvements
+
+2. For connection recommendations, provide:
+   - Clear reason why the connection makes sense
+   - Confidence score (0.0-1.0) based on how strong the connection rationale is
+   - Focus on high-value connections (integration opportunities, domain bridges)
+
+3. Use only notes and data explicitly present in the vault data - do not invent notes or paths
+4. Ensure noteId, sourceId, and targetId are valid paths from the vault analysis
+5. Provide specific, actionable recommendations grounded in the connectivity and centrality patterns
+6. For learningPaths and organization, return empty arrays (to be implemented in future)`;
+
+            // Combine system, context, and instruction
+            const prompt = `${system}\n\n${context}\n\n${instruction}`;
+
+            // Get the response schema for recommended actions analysis
+            const responseSchema = this.aiService.createRecommendedActionsSchema();
+
+            // Use the structured output method
+            const response = await this.aiService.generateStructuredAnalysis<any>(
+                prompt,
+                responseSchema,
+                8192, // maxOutputTokens
+                0.3,  // temperature
+                0.72  // topP
+            );
+
+            // Parse the structured response
+            const actionsData = this.parseStructuredRecommendedActions(response.result, analysisData);
+
+            // Create structured analysis data
+            const tabData: ActionsAnalysisData = {
+                generatedAt: new Date().toISOString(),
+                sourceAnalysisId: this.generateAnalysisId(analysisData),
+                apiProvider: 'Google Gemini',
+                recommendedActions: actionsData
+            };
+
+            // Cache the results
+            await this.cacheTabAnalysis('actions', tabData);
+
+            return tabData;
+        } catch (error) {
+            console.error('Failed to generate Recommended Actions Analysis:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Parse structured recommended actions response
+     */
+    private parseStructuredRecommendedActions(structuredResponse: any, analysisData: VaultAnalysisData): KnowledgeActionsData {
+        try {
+            // The response is already parsed JSON from structured output
+            const maintenance = structuredResponse.maintenance || [];
+            const connections = structuredResponse.connections || [];
+            const learningPaths = structuredResponse.learningPaths || [];
+            const organization = structuredResponse.organization || [];
+
+            // Validate and normalize paths
+            const vaultPaths = new Set(analysisData.results.map(r => r.path));
+            const vaultTitles = new Map(analysisData.results.map(r => [r.title.toLowerCase(), r.path]));
+
+            // Validate maintenance actions
+            const validatedMaintenance = maintenance.map((action: any) => {
+                // Ensure noteId is a valid path
+                let noteId = action.noteId || action.path || '';
+                if (!vaultPaths.has(noteId)) {
+                    // Try to find by title
+                    const titleMatch = vaultTitles.get(action.title?.toLowerCase() || '');
+                    if (titleMatch) {
+                        noteId = titleMatch;
+                    }
+                }
+                return {
+                    noteId: noteId || action.noteId || '',
+                    title: action.title || '',
+                    reason: action.reason || '',
+                    priority: (action.priority === 'high' || action.priority === 'medium' || action.priority === 'low') 
+                        ? action.priority 
+                        : 'medium' as 'high' | 'medium' | 'low',
+                    action: action.action || ''
+                };
+            }).filter((action: any) => action.noteId); // Filter out invalid entries
+
+            // Validate connection suggestions
+            const validatedConnections = connections.map((conn: any) => {
+                let sourceId = conn.sourceId || '';
+                let targetId = conn.targetId || '';
+
+                // Validate sourceId
+                if (!vaultPaths.has(sourceId)) {
+                    const sourceMatch = vaultTitles.get(conn.sourceTitle?.toLowerCase() || '');
+                    if (sourceMatch) sourceId = sourceMatch;
+                }
+
+                // Validate targetId
+                if (!vaultPaths.has(targetId)) {
+                    const targetMatch = vaultTitles.get(conn.targetTitle?.toLowerCase() || '');
+                    if (targetMatch) targetId = targetMatch;
+                }
+
+                return {
+                    sourceId: sourceId || conn.sourceId || '',
+                    targetId: targetId || conn.targetId || '',
+                    reason: conn.reason || '',
+                    confidence: Math.max(0, Math.min(1, conn.confidence || 0.5))
+                };
+            }).filter((conn: any) => conn.sourceId && conn.targetId && conn.sourceId !== conn.targetId);
+
+            return {
+                maintenance: validatedMaintenance,
+                connections: validatedConnections,
+                learningPaths: learningPaths, // Keep as-is for now
+                organization: organization // Keep as-is for now
+            };
+        } catch (error) {
+            console.error('Error parsing structured recommended actions:', error);
+            console.error('Structured response:', structuredResponse);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to parse structured recommended actions: ${errorMessage}`);
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ import { createVaultSemanticAnalysisSchema } from '../ai/schemas/vault-semantic-
 import { createNoteSummarySchema } from '../ai/schemas/note-summary.schema';
 import { createDomainClassificationSchema, KnowledgeSubdivision } from '../ai/schemas/domain-classification.schema';
 import { createKnowledgeEvolutionSchema } from '../ai/schemas/knowledge-evolution.schema';
+import { createRecommendedActionsSchema } from '../ai/schemas/recommended-actions.schema';
 
 export interface TokenUsage {
     promptTokens: number;
@@ -183,6 +184,13 @@ export class AIModelService {
      */
     public createKnowledgeEvolutionSchema(): any {
         return createKnowledgeEvolutionSchema();
+    }
+
+    /**
+     * Create response schema for recommended actions analysis
+     */
+    public createRecommendedActionsSchema(): any {
+        return createRecommendedActionsSchema();
     }
 
     /**

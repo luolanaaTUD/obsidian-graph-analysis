@@ -1091,12 +1091,22 @@ export class VaultAnalysisModal extends Modal {
                     this.evolutionAnalysisData?.isOutdated ?? false
                 );
             } else if (this.currentView === 'actions') {
-                await this.displayRecommendedActionsResults(buttonSection);
-                await this.createUpdateAnalysisButtonSection(
-                    buttonSection, 
-                    'actions',
-                    this.actionsAnalysisData?.isOutdated ?? false
-                );
+                // For actions, we need to refresh only the AI results container, preserving scatter charts
+                // Find the AI results container and refresh it
+                const aiResultsContainer = this.contentContainer.querySelector('.actions-ai-results-container');
+                if (aiResultsContainer) {
+                    aiResultsContainer.empty();
+                    this.displayRecommendedActionsResults(aiResultsContainer as HTMLElement);
+                    this.createUpdateAnalysisButtonSection(
+                        aiResultsContainer as HTMLElement, 
+                        'actions',
+                        this.actionsAnalysisData?.isOutdated ?? false
+                    );
+                } else {
+                    // Fallback: reload entire view if container not found
+                    this.contentContainer.empty();
+                    await this.loadRecommendedActionsView();
+                }
             } else {
                 // For other views, just display generic cached analysis
                 await this.displayCachedAnalysis(buttonSection);
@@ -1403,17 +1413,23 @@ export class VaultAnalysisModal extends Modal {
             await scatterChart.setMode('centrality');
         });
 
+        // Create a dedicated container for AI results (placeholder sections)
+        // This will be replaced when AI analysis completes, but scatter charts will remain
+        const aiResultsContainer = recommendationsSection.createEl('div', {
+            cls: 'actions-ai-results-container'
+        });
+
         // Check for cached tab-specific analysis
         this.loadActionsAnalysisData().then(hasData => {
             if (hasData) {
-                this.displayRecommendedActionsResults(recommendationsSection);
+                this.displayRecommendedActionsResults(aiResultsContainer);
                 this.createUpdateAnalysisButtonSection(
-                    recommendationsSection, 
+                    aiResultsContainer, 
                     'actions',
                     this.actionsAnalysisData?.isOutdated ?? false
                 );
             } else {
-                this.showActionsEmptyState(recommendationsSection);
+                this.showActionsEmptyState(aiResultsContainer);
             }
         });
     }
@@ -1543,7 +1559,23 @@ export class VaultAnalysisModal extends Modal {
         generateButton.setAttribute('title', 'Click to generate analysis for this tab');
 
         generateButton.addEventListener('click', async () => {
-            await this.triggerAIAnalysis(container, false, 'actions');
+            // Use close-reopen pattern for actions tab (same as structure and evolution)
+            const tabDisplayName = this.getTabDisplayName('actions');
+            new Notice(`🧪 Generating ${tabDisplayName} Analysis...`);
+            
+            this.close();
+            try {
+                await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                // Reopen modal to the same tab with fresh data
+                await this.masterAnalysisManager.reopenModalToTab(
+                    this.vaultSemanticAnalysisManager,
+                    this.settings,
+                    'actions'
+                );
+            } catch (error) {
+                // Error already shown by the analysis method, no need to reopen modal
+                console.error('Actions analysis failed:', error);
+            }
         });
     }
 

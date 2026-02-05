@@ -1,5 +1,7 @@
+import { App } from 'obsidian';
 import { VaultAnalysisData, VaultAnalysisResult } from '../ai/MasterAnalysisManager';
 import { KDECalculationService } from '../utils/KDECalculationService';
+import { ConnectivityAnalysisService } from '../utils/ConnectivityAnalysisService';
 
 /**
  * Configuration for AI context preparation
@@ -713,6 +715,86 @@ export class AIContextPreparationService {
 
         return sections.join('\n');
     }
+
+    /**
+     * Prepare actions-specific context from vault analysis data
+     * Combines vault data, connectivity insights, and centrality patterns
+     */
+    public prepareActionsContext(app: App, analysisData: VaultAnalysisData): ActionsContext {
+        // Get connectivity insights
+        const connectivityService = new ConnectivityAnalysisService();
+        const connectivitySummary = connectivityService.getComprehensiveConnectivitySummary(app, analysisData);
+
+        // Extract top notes by centrality (reuse existing logic)
+        const results = analysisData.results.filter(r => r.graphMetrics);
+        const topBetweenness = this.extractTopNotes(results, 'betweennessCentrality', 10);
+        const topEigenvector = this.extractTopNotes(results, 'eigenvectorCentrality', 10);
+
+        // Extract metadata
+        const metadata = this.extractMetadata(analysisData, results);
+
+        return {
+            metadata,
+            connectivitySummary,
+            topBetweennessNotes: topBetweenness,
+            topEigenvectorNotes: topEigenvector
+        };
+    }
+
+    /**
+     * Format actions context for AI consumption
+     */
+    public formatActionsContextForAI(context: ActionsContext): string {
+        const sections: string[] = [];
+
+        // Metadata
+        sections.push('=== VAULT METADATA ===');
+        sections.push(`Total Notes: ${context.metadata.totalNotes}`);
+        sections.push(`Analyzed Notes: ${context.metadata.analyzedNotes}`);
+        if (context.metadata.dateRange) {
+            sections.push(`Date Range: ${context.metadata.dateRange}`);
+        }
+        sections.push('');
+
+        // Connectivity insights (from ConnectivityAnalysisService)
+        sections.push(context.connectivitySummary);
+        sections.push('');
+
+        // Top notes by centrality
+        sections.push('=== TOP NOTES BY CENTRALITY ===');
+        
+        if (context.topBetweennessNotes.length > 0) {
+            sections.push(`\nTop Betweenness Centrality Notes (Bridge-type):`);
+            context.topBetweennessNotes.slice(0, 10).forEach(note => {
+                sections.push(`  ${note.rank}. ${note.title} (${note.path})`);
+                sections.push(`     Score: ${note.score.toFixed(4)}, Keywords: ${note.keywords}, Domains: ${note.domains.join(', ')}`);
+            });
+        }
+
+        if (context.topEigenvectorNotes.length > 0) {
+            sections.push(`\nTop Eigenvector Centrality Notes (Authority-type):`);
+            context.topEigenvectorNotes.slice(0, 10).forEach(note => {
+                sections.push(`  ${note.rank}. ${note.title} (${note.path})`);
+                sections.push(`     Score: ${note.score.toFixed(4)}, Keywords: ${note.keywords}, Domains: ${note.domains.join(', ')}`);
+            });
+        }
+
+        return sections.join('\n');
+    }
+}
+
+/**
+ * Actions-specific context structure
+ */
+export interface ActionsContext {
+    metadata: {
+        totalNotes: number;
+        analyzedNotes: number;
+        dateRange?: string;
+    };
+    connectivitySummary: string; // Text summary from ConnectivityAnalysisService
+    topBetweennessNotes: TopNote[];
+    topEigenvectorNotes: TopNote[];
 }
 
 /**
