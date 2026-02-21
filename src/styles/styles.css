@@ -1492,7 +1492,72 @@ button.is-disabled {
     width: 100%;
 }
 
-/* Scatter chart tabs use knowledge-network-tab-bar style (defined elsewhere) */
+/* Minimal tab style: text + icon only, color indicates active */
+.knowledge-network-tab-bar {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    align-self: flex-start;
+    margin-bottom: 12px;
+}
+
+.knowledge-network-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    margin: 0;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+    background: transparent !important;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-muted);
+    transition: color 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.knowledge-network-tab:focus,
+.knowledge-network-tab:focus-visible {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+}
+
+.knowledge-network-tab:hover,
+.knowledge-network-tab:active,
+.knowledge-network-tab.active {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+    background: transparent !important;
+}
+
+.knowledge-network-tab:hover {
+    color: var(--text-normal);
+}
+
+.knowledge-network-tab.active {
+    color: var(--text-accent);
+}
+
+.knowledge-network-tab .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.knowledge-network-tab.active .svg-icon {
+    color: var(--text-accent);
+}
 
 .connectivity-chart-section {
     margin: 0;
@@ -2633,7 +2698,7 @@ button.is-disabled {
 
 .review-card {
     padding: 16px;
-    background: var(--background-primary);
+    background: var(--background-secondary);
     border-radius: 10px;
     border: 1px solid var(--background-modifier-border);
     cursor: pointer;
@@ -2642,29 +2707,6 @@ button.is-disabled {
     flex-direction: column;
     gap: 10px;
     position: relative;
-    overflow: hidden;
-}
-
-.review-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    border-radius: 10px 0 0 10px;
-}
-
-.review-card.priority-high::before {
-    background: var(--color-red);
-}
-
-.review-card.priority-medium::before {
-    background: var(--color-orange);
-}
-
-.review-card.priority-low::before {
-    background: var(--color-green);
 }
 
 .review-card:hover {
@@ -2707,18 +2749,10 @@ button.is-disabled {
     letter-spacing: 0.5px;
 }
 
-.badge-high {
-    background: var(--color-red);
-    color: var(--text-on-accent);
-}
-
-.badge-medium {
-    background: var(--color-orange);
-    color: var(--text-on-accent);
-}
-
+.badge-high,
+.badge-medium,
 .badge-low {
-    background: var(--color-green);
+    background: var(--interactive-accent);
     color: var(--text-on-accent);
 }
 
@@ -2762,16 +2796,10 @@ button.is-disabled {
     height: 12px;
 }
 
-.review-card-role.role-bridge {
-    color: var(--color-purple);
-}
-
-.review-card-role.role-authority {
-    color: var(--color-yellow);
-}
-
+.review-card-role.role-bridge,
+.review-card-role.role-authority,
 .review-card-role.role-hub {
-    color: var(--color-blue);
+    color: var(--text-accent);
 }
 
 /* ═══════════════════════════════════════════════════════

@@ -553,15 +553,8 @@ export class KnowledgeStructureManager {
         tabsContainer.style.marginBottom = '30px';
         section.appendChild(tabsContainer);
 
-        // Create tab bar - same settings as scatter plot tabs
         const tabBar = document.createElement('div');
         tabBar.className = 'knowledge-network-tab-bar';
-        // Ensure tabs are displayed horizontally (flex row) and aligned left
-        tabBar.style.display = 'flex';
-        tabBar.style.flexDirection = 'row';
-        tabBar.style.gap = '3px';
-        tabBar.style.alignSelf = 'flex-start';
-        tabBar.style.marginBottom = '3px'; // Same spacing as scatter plot tabs
         tabsContainer.appendChild(tabBar);
 
         // Create content container - consistent spacing with scatter plot
@@ -642,32 +635,11 @@ export class KnowledgeStructureManager {
         const tabButton = document.createElement('button');
         tabButton.className = `knowledge-network-tab ${isActive ? 'active' : ''}`;
         tabButton.setAttribute('data-tab-id', tab.id);
-        
-        // Base styles (common for all tabs)
-        tabButton.style.display = 'flex';
-        tabButton.style.alignItems = 'center';
-        tabButton.style.gap = '8px';
-        tabButton.style.padding = '8px 16px';
-        tabButton.style.border = 'none';
-        tabButton.style.background = 'transparent';
-        tabButton.style.cursor = 'pointer';
-        tabButton.style.fontSize = '14px';
-        tabButton.style.transition = 'all 0.2s ease';
-        tabButton.style.marginBottom = '0'; // No margin, tabs connect directly to content
 
-        // Dynamic styles (active state)
-        tabButton.style.color = isActive ? 'var(--text-accent)' : 'var(--text-muted)';
-        tabButton.style.fontWeight = isActive ? '600' : '400';
-        tabButton.style.borderBottom = isActive ? '2px solid var(--text-accent)' : '2px solid transparent';
-
-        // Add icon
         const iconEl = document.createElement('span');
-        iconEl.style.display = 'flex';
-        iconEl.style.alignItems = 'center';
         setIcon(iconEl, tab.icon);
         tabButton.appendChild(iconEl);
 
-        // Add label
         const labelEl = document.createElement('span');
         labelEl.textContent = tab.label;
         tabButton.appendChild(labelEl);
@@ -690,14 +662,7 @@ export class KnowledgeStructureManager {
             if (!btn || !panel) return;
 
             const isActive = tab.id === tabId;
-            
-            // Update button state
             btn.classList.toggle('active', isActive);
-            btn.style.color = isActive ? 'var(--text-accent)' : 'var(--text-muted)';
-            btn.style.fontWeight = isActive ? '600' : '400';
-            btn.style.borderBottom = isActive ? '2px solid var(--text-accent)' : '2px solid transparent';
-            
-            // Update panel visibility
             panel.style.display = isActive ? 'block' : 'none';
         });
     }

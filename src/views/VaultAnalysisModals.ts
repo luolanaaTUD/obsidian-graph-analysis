@@ -1322,56 +1322,14 @@ export class VaultAnalysisModal extends Modal {
             cls: 'scatter-chart-wrapper' 
         });
 
-        const tabsContainer = chartWrapper.createEl('div', { 
-            cls: 'knowledge-network-tab-bar' 
-        });
-        // Tab bar settings - same as Knowledge Network Analysis tabs
-        // Ensure tabs are displayed horizontally (flex row) and aligned left
-        tabsContainer.style.display = 'flex';
-        tabsContainer.style.flexDirection = 'row';
-        tabsContainer.style.gap = '3px';
-        tabsContainer.style.alignSelf = 'flex-start';
-        tabsContainer.style.marginBottom = '3px'; // Same spacing as Knowledge Network tabs
+        const tabsContainer = chartWrapper.createEl('div', { cls: 'knowledge-network-tab-bar' });
 
-        // Create tabs with icons matching Knowledge Network Analysis style
-        const linksTab = tabsContainer.createEl('button', {
-            cls: 'knowledge-network-tab active'
-        });
-        linksTab.style.display = 'flex';
-        linksTab.style.alignItems = 'center';
-        linksTab.style.gap = '8px';
-        linksTab.style.padding = '8px 16px';
-        linksTab.style.border = 'none';
-        linksTab.style.background = 'transparent';
-        linksTab.style.cursor = 'pointer';
-        linksTab.style.fontSize = '14px';
-        linksTab.style.transition = 'all 0.2s ease';
-        linksTab.style.color = 'var(--text-accent)';
-        linksTab.style.fontWeight = '600';
-        linksTab.style.borderBottom = '2px solid var(--text-accent)';
-        
-        const linksIcon = linksTab.createEl('span');
-        setIcon(linksIcon, 'link');
+        const linksTab = tabsContainer.createEl('button', { cls: 'knowledge-network-tab active' });
+        setIcon(linksTab.createEl('span'), 'link');
         linksTab.createEl('span', { text: 'Inbound vs Outbound Links' });
 
-        const centralityTab = tabsContainer.createEl('button', {
-            cls: 'knowledge-network-tab'
-        });
-        centralityTab.style.display = 'flex';
-        centralityTab.style.alignItems = 'center';
-        centralityTab.style.gap = '8px';
-        centralityTab.style.padding = '8px 16px';
-        centralityTab.style.border = 'none';
-        centralityTab.style.background = 'transparent';
-        centralityTab.style.cursor = 'pointer';
-        centralityTab.style.fontSize = '14px';
-        centralityTab.style.transition = 'all 0.2s ease';
-        centralityTab.style.color = 'var(--text-muted)';
-        centralityTab.style.fontWeight = '400';
-        centralityTab.style.borderBottom = '2px solid transparent';
-        
-        const centralityIcon = centralityTab.createEl('span');
-        setIcon(centralityIcon, 'activity');
+        const centralityTab = tabsContainer.createEl('button', { cls: 'knowledge-network-tab' });
+        setIcon(centralityTab.createEl('span'), 'activity');
         centralityTab.createEl('span', { text: 'Betweenness vs Eigenvector' });
 
         const chartContainer = chartWrapper.createEl('div', { 
@@ -1392,17 +1350,9 @@ export class VaultAnalysisModal extends Modal {
         );
         await scatterChart.render();
 
-        // Handle tab clicks with proper styling updates
         const updateTabStyles = (activeTab: HTMLElement, inactiveTab: HTMLElement) => {
-            activeTab.style.color = 'var(--text-accent)';
-            activeTab.style.fontWeight = '600';
-            activeTab.style.borderBottom = '2px solid var(--text-accent)';
-            activeTab.addClass('active');
-            
-            inactiveTab.style.color = 'var(--text-muted)';
-            inactiveTab.style.fontWeight = '400';
-            inactiveTab.style.borderBottom = '2px solid transparent';
-            inactiveTab.removeClass('active');
+            activeTab.classList.add('active');
+            inactiveTab.classList.remove('active');
         };
 
         linksTab.addEventListener('click', async () => {
@@ -1496,7 +1446,14 @@ export class VaultAnalysisModal extends Modal {
                 this.app,
                 subgraphContainer,
                 actionsData.connections,
-                { modal: this }
+                {
+                    modal: this,
+                    connectionsAddedAt: this.actionsAnalysisData?.connectionsAddedAt,
+                    actionsAnalysisData: this.actionsAnalysisData ?? undefined,
+                    saveCacheFn: async (data) => {
+                        await this.masterAnalysisManager.cacheTabAnalysis('actions', data);
+                    }
+                }
             );
             subGraph.render();
         }

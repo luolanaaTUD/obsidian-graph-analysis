@@ -12,6 +12,7 @@ import {
 import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
 import { KDECalculationService } from '../utils/KDECalculationService';
+import { NoteResolver } from '../utils/NoteResolver';
 import { AIContextPreparationService } from '../services/AIContextPreparationService';
 import type { VaultSemanticAnalysisManager } from '../views/VaultAnalysisModals';
 
@@ -73,6 +74,7 @@ export interface EvolutionAnalysisData extends TabAnalysisData {
 // NEW: Interface for recommended actions tab analysis
 export interface ActionsAnalysisData extends TabAnalysisData {
     recommendedActions: KnowledgeActionsData;
+    connectionsAddedAt?: string; // ISO timestamp; if set, links have been committed
 }
 
 // DDC Template interfaces - UPDATED for new structured ID system
@@ -337,7 +339,7 @@ ${formattedContext}`;
 
 
     // NEW: Cache tab-specific analysis
-    private async cacheTabAnalysis(tabName: string, data: TabAnalysisData): Promise<void> {
+    public async cacheTabAnalysis(tabName: string, data: TabAnalysisData): Promise<void> {
         try {
             // Ensure responses directory exists
             await this.ensureResponsesDirectory();
@@ -622,52 +624,29 @@ ${formattedContext}`;
             const learningPaths = structuredResponse.learningPaths || [];
             const organization = structuredResponse.organization || [];
 
-            // Validate and normalize paths
-            const vaultPaths = new Set(analysisData.results.map(r => r.path));
-            const vaultTitles = new Map(analysisData.results.map(r => [r.title.toLowerCase(), r.path]));
-
-            // Validate maintenance actions
+            // Validate and normalize paths using NoteResolver (single source of truth)
             const validatedMaintenance = maintenance.map((action: any) => {
-                // Ensure noteId is a valid path
-                let noteId = action.noteId || action.path || '';
-                if (!vaultPaths.has(noteId)) {
-                    // Try to find by title
-                    const titleMatch = vaultTitles.get(action.title?.toLowerCase() || '');
-                    if (titleMatch) {
-                        noteId = titleMatch;
-                    }
-                }
+                const noteId = NoteResolver.resolveToPath(
+                    this.app,
+                    action.noteId || action.path || action.title || ''
+                );
                 return {
-                    noteId: noteId || action.noteId || '',
+                    noteId,
                     title: action.title || '',
                     reason: action.reason || '',
-                    priority: (action.priority === 'high' || action.priority === 'medium' || action.priority === 'low') 
-                        ? action.priority 
-                        : 'medium' as 'high' | 'medium' | 'low',
+                    priority: (action.priority === 'high' || action.priority === 'medium' || action.priority === 'low')
+                        ? action.priority
+                        : ('medium' as 'high' | 'medium' | 'low'),
                     action: action.action || ''
                 };
-            }).filter((action: any) => action.noteId); // Filter out invalid entries
+            }).filter((action: any) => action.noteId);
 
-            // Validate connection suggestions
             const validatedConnections = connections.map((conn: any) => {
-                let sourceId = conn.sourceId || '';
-                let targetId = conn.targetId || '';
-
-                // Validate sourceId
-                if (!vaultPaths.has(sourceId)) {
-                    const sourceMatch = vaultTitles.get(conn.sourceTitle?.toLowerCase() || '');
-                    if (sourceMatch) sourceId = sourceMatch;
-                }
-
-                // Validate targetId
-                if (!vaultPaths.has(targetId)) {
-                    const targetMatch = vaultTitles.get(conn.targetTitle?.toLowerCase() || '');
-                    if (targetMatch) targetId = targetMatch;
-                }
-
+                const sourceId = NoteResolver.resolveToPath(this.app, conn.sourceId || '');
+                const targetId = NoteResolver.resolveToPath(this.app, conn.targetId || '');
                 return {
-                    sourceId: sourceId || conn.sourceId || '',
-                    targetId: targetId || conn.targetId || '',
+                    sourceId,
+                    targetId,
                     reason: conn.reason || '',
                     confidence: Math.max(0, Math.min(1, conn.confidence || 0.5))
                 };

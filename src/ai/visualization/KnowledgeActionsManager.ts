@@ -1,6 +1,7 @@
 import { App, TFile, Notice } from 'obsidian';
 import { GraphAnalysisSettings } from '../../types/types';
 import type { VaultAnalysisResult } from '../MasterAnalysisManager';
+import { NoteResolver } from '../../utils/NoteResolver';
 
 // Interfaces for Knowledge Actions data
 export interface MaintenanceAction {
@@ -257,9 +258,9 @@ export class KnowledgeActionsManager {
                     <div class="connection-item" data-source="${connection.sourceId}" data-target="${connection.targetId}">
                         <div class="connection-header">
                             <div class="connection-flow">
-                                <span class="source-note">${this.getNoteTitleById(connection.sourceId)}</span>
+                                <span class="source-note">${NoteResolver.resolveToTitle(this.app, connection.sourceId)}</span>
                                 <span class="connection-arrow">→</span>
-                                <span class="target-note">${this.getNoteTitleById(connection.targetId)}</span>
+                                <span class="target-note">${NoteResolver.resolveToTitle(this.app, connection.targetId)}</span>
                             </div>
                             <span class="confidence-score">
                                 ${Math.round(connection.confidence * 100)}% confidence
@@ -304,7 +305,7 @@ export class KnowledgeActionsManager {
                             ${path.noteIds.map((noteId, index) => `
                                 <div class="path-step">
                                     <span class="step-number">${index + 1}</span>
-                                    <span class="step-note">${this.getNoteTitleById(noteId)}</span>
+                                    <span class="step-note">${NoteResolver.resolveToTitle(this.app, noteId)}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -363,7 +364,7 @@ export class KnowledgeActionsManager {
                             <span class="affected-count">${suggestion.affectedNotes.length} notes affected</span>
                             <div class="affected-list">
                                 ${suggestion.affectedNotes.slice(0, 3).map(noteId => 
-                                    `<span class="affected-note">${this.getNoteTitleById(noteId)}</span>`
+                                    `<span class="affected-note">${NoteResolver.resolveToTitle(this.app, noteId)}</span>`
                                 ).join('')}
                                 ${suggestion.affectedNotes.length > 3 ? `<span class="more-notes">+${suggestion.affectedNotes.length - 3} more</span>` : ''}
                             </div>
@@ -416,16 +417,6 @@ export class KnowledgeActionsManager {
         });
 
         return grouped;
-    }
-
-    private getNoteTitleById(noteId: string): string {
-        // Try to find the note by ID and return its title
-        // For now, return the ID as placeholder
-        const file = this.app.vault.getAbstractFileByPath(noteId);
-        if (file && file.name) {
-            return file.name.replace('.md', '');
-        }
-        return noteId.split('/').pop()?.replace('.md', '') || noteId;
     }
 
     // Event handlers
@@ -503,7 +494,7 @@ export class KnowledgeActionsManager {
 
     // Action implementations
     private async openNote(noteId: string): Promise<void> {
-        const file = this.app.vault.getAbstractFileByPath(noteId);
+        const file = NoteResolver.resolveToFile(this.app, noteId);
         if (file) {
             await this.app.workspace.openLinkText(file.path, '', false);
         }
@@ -730,18 +721,18 @@ export class KnowledgeActionsManager {
 
         for (const [sourceId, conns] of bySource) {
             try {
-                const file = app.vault.getAbstractFileByPath(sourceId);
-                if (!(file instanceof TFile)) {
+                const file = NoteResolver.resolveToFile(app, sourceId);
+                if (!file) {
                     console.warn(`Source file not found: ${sourceId}`);
                     failed += conns.length;
                     continue;
                 }
 
                 const content = await app.vault.read(file);
-                
-                // Build link lines
-                const linkLines = conns.map(c => {
-                    const targetName = c.targetId.split('/').pop()?.replace('.md', '') || c.targetId;
+
+                // Build link lines using NoteResolver for consistent title resolution
+                const linkLines = conns.map((c) => {
+                    const targetName = NoteResolver.resolveToTitle(app, c.targetId);
                     return `- [[${targetName}]]`;
                 });
 

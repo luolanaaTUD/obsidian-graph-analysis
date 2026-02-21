@@ -1,6 +1,8 @@
 import { App, Notice, TFile, setIcon } from 'obsidian';
 import * as d3 from 'd3';
+import type { ActionsAnalysisData } from '../../ai/MasterAnalysisManager';
 import { ConnectionSuggestion, KnowledgeActionsManager } from '../../ai/visualization/KnowledgeActionsManager';
+import { NoteResolver } from '../../utils/NoteResolver';
 
 interface SubGraphNode extends d3.SimulationNodeDatum {
     id: string;
@@ -22,6 +24,9 @@ interface ConnectionSubGraphOptions {
     width?: number;
     height?: number;
     modal?: { close(): void };
+    connectionsAddedAt?: string;
+    actionsAnalysisData?: ActionsAnalysisData;
+    saveCacheFn?: (data: ActionsAnalysisData) => Promise<void>;
 }
 
 /**
@@ -50,6 +55,7 @@ export class ConnectionSubGraph {
     // Dimensions
     private width: number;
     private height: number;
+    private markerId: string = '';
 
     constructor(
         app: App,
@@ -89,7 +95,7 @@ export class ConnectionSubGraph {
             if (!nodeMap.has(conn.sourceId)) {
                 nodeMap.set(conn.sourceId, {
                     id: conn.sourceId,
-                    title: this.getNoteTitleById(conn.sourceId),
+                    title: NoteResolver.resolveToTitle(this.app, conn.sourceId),
                     path: conn.sourceId,
                     degree: 0,
                     removed: false
@@ -98,7 +104,7 @@ export class ConnectionSubGraph {
             if (!nodeMap.has(conn.targetId)) {
                 nodeMap.set(conn.targetId, {
                     id: conn.targetId,
-                    title: this.getNoteTitleById(conn.targetId),
+                    title: NoteResolver.resolveToTitle(this.app, conn.targetId),
                     path: conn.targetId,
                     degree: 0,
                     removed: false
@@ -116,14 +122,6 @@ export class ConnectionSubGraph {
             confidence: c.confidence,
             removed: false
         }));
-    }
-
-    private getNoteTitleById(noteId: string): string {
-        const file = this.app.vault.getAbstractFileByPath(noteId);
-        if (file && file.name) {
-            return file.name.replace('.md', '');
-        }
-        return noteId.split('/').pop()?.replace('.md', '') || noteId;
     }
 
     // ─────────────────── SVG Setup ───────────────────
@@ -147,6 +145,22 @@ export class ConnectionSubGraph {
             ].join(' '))
             .attr('class', 'connection-subgraph-svg');
 
+        // Arrow marker for directional links (source -> target)
+        this.markerId = `subgraph-arrow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        this.svg.append('defs')
+            .append('marker')
+            .attr('id', this.markerId)
+            .attr('markerUnits', 'userSpaceOnUse')
+            .attr('markerWidth', 10)
+            .attr('markerHeight', 10)
+            .attr('refX', 9)
+            .attr('refY', 0)
+            .attr('orient', 'auto')
+            .attr('viewBox', '0 -4 10 8')
+            .append('path')
+            .attr('d', 'M0,-4 L10,0 L0,4 Z')
+            .attr('fill', 'var(--text-accent)');
+
         this.svgGroup = this.svg.append('g');
 
         // Zoom and pan
@@ -156,19 +170,6 @@ export class ConnectionSubGraph {
                 this.svgGroup.attr('transform', event.transform);
             });
         this.svg.call(zoom);
-
-        // Arrow marker for directed edges
-        this.svg.append('defs').append('marker')
-            .attr('id', 'subgraph-arrow')
-            .attr('viewBox', '0 -5 10 10')
-            .attr('refX', 20)
-            .attr('refY', 0)
-            .attr('markerWidth', 6)
-            .attr('markerHeight', 6)
-            .attr('orient', 'auto')
-            .append('path')
-            .attr('d', 'M0,-5L10,0L0,5')
-            .attr('fill', 'var(--text-accent)');
     }
 
     private createTooltip(): void {
@@ -187,25 +188,63 @@ export class ConnectionSubGraph {
             .force('x', d3.forceX().strength(0.1))
             .force('y', d3.forceY().strength(0.1))
             .force('collision', d3.forceCollide<SubGraphNode>()
-                .radius(d => this.getNodeRadius(d) + 8)
+                .radius(d => this.getNodeRadius(d) + 10)
                 .strength(0.8))
             .on('tick', () => this.tick());
     }
 
     private getNodeRadius(node: SubGraphNode): number {
-        // Size by degree within the sub-graph: min 6, max 16
-        return Math.min(16, Math.max(6, 4 + node.degree * 2.5));
+        // Size by degree within the sub-graph: min 10, max 15 (reduced range)
+        return Math.min(15, Math.max(10, 9 + node.degree * 1.5));
     }
 
     private tick(): void {
         this.linksSelection
-            .attr('x1', d => ((d.source as SubGraphNode).x ?? 0))
-            .attr('y1', d => ((d.source as SubGraphNode).y ?? 0))
-            .attr('x2', d => ((d.target as SubGraphNode).x ?? 0))
-            .attr('y2', d => ((d.target as SubGraphNode).y ?? 0));
+            .attr('x1', d => this.linkStartX(d))
+            .attr('y1', d => this.linkStartY(d))
+            .attr('x2', d => this.linkEndX(d))
+            .attr('y2', d => this.linkEndY(d));
 
         this.nodesSelection
             .attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
+    }
+
+    /** Shorten link to node edge so arrow sits adjacent to circle, not hidden behind it */
+    private linkStartX(d: SubGraphLink): number {
+        const s = d.source as SubGraphNode;
+        const t = d.target as SubGraphNode;
+        const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
+        const dx = tx - sx, dy = ty - sy;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = dx / len, ny = dy / len;
+        return sx + nx * this.getNodeRadius(s);
+    }
+    private linkStartY(d: SubGraphLink): number {
+        const s = d.source as SubGraphNode;
+        const t = d.target as SubGraphNode;
+        const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
+        const dx = tx - sx, dy = ty - sy;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = dx / len, ny = dy / len;
+        return sy + ny * this.getNodeRadius(s);
+    }
+    private linkEndX(d: SubGraphLink): number {
+        const s = d.source as SubGraphNode;
+        const t = d.target as SubGraphNode;
+        const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
+        const dx = tx - sx, dy = ty - sy;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = dx / len;
+        return tx - nx * this.getNodeRadius(t);
+    }
+    private linkEndY(d: SubGraphLink): number {
+        const s = d.source as SubGraphNode;
+        const t = d.target as SubGraphNode;
+        const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
+        const dx = tx - sx, dy = ty - sy;
+        const len = Math.hypot(dx, dy) || 1;
+        const ny = dy / len;
+        return ty - ny * this.getNodeRadius(t);
     }
 
     // ─────────────────── Drawing ───────────────────
@@ -218,26 +257,19 @@ export class ConnectionSubGraph {
             .join('line')
             .attr('class', 'suggested-link')
             .attr('stroke', 'var(--text-accent)')
-            .attr('stroke-width', d => 1 + d.confidence * 3)
+            .attr('stroke-width', 2)
             .attr('stroke-opacity', d => 0.3 + d.confidence * 0.5)
             .attr('stroke-dasharray', '6,3')
-            .attr('marker-end', 'url(#subgraph-arrow)')
-            .style('cursor', 'pointer')
+            .attr('marker-end', 'url(#' + this.markerId + ')')
             .on('mouseover', (event, d) => {
-                this.showTooltip(event, `${this.resolveNodeTitle(d.source)} → ${this.resolveNodeTitle(d.target)}\n${d.reason}\nConfidence: ${Math.round(d.confidence * 100)}%`);
+                this.showLinkTooltip(event, d);
                 d3.select(event.currentTarget)
-                    .attr('stroke-opacity', 1)
-                    .attr('stroke-width', 2 + d.confidence * 4);
+                    .attr('stroke-opacity', 1);
             })
             .on('mouseout', (event, d) => {
                 this.hideTooltip();
                 d3.select(event.currentTarget)
-                    .attr('stroke-opacity', 0.3 + d.confidence * 0.5)
-                    .attr('stroke-width', 1 + d.confidence * 3);
-            })
-            .on('click', (_event, d) => {
-                // Click to dismiss a link
-                this.removeLink(d);
+                    .attr('stroke-opacity', 0.3 + d.confidence * 0.5);
             });
     }
 
@@ -266,12 +298,11 @@ export class ConnectionSubGraph {
                 })
             );
 
-        // Node circles
+        // Node circles (no outline)
         nodeGroups.append('circle')
             .attr('r', d => this.getNodeRadius(d))
             .attr('fill', 'var(--interactive-accent)')
-            .attr('stroke', 'var(--background-primary)')
-            .attr('stroke-width', 2)
+            .attr('stroke', 'none')
             .on('mouseover', (event, d) => {
                 this.showTooltip(event, d.title);
                 d3.select(event.currentTarget)
@@ -288,7 +319,7 @@ export class ConnectionSubGraph {
         // Node labels
         nodeGroups.append('text')
             .attr('class', 'subgraph-node-label')
-            .attr('dy', d => this.getNodeRadius(d) + 14)
+            .attr('dy', d => this.getNodeRadius(d) + 18)
             .attr('text-anchor', 'middle')
             .text(d => d.title.length > 20 ? d.title.slice(0, 18) + '...' : d.title)
             .attr('fill', 'var(--text-muted)')
@@ -349,9 +380,8 @@ export class ConnectionSubGraph {
         const legend = this.container.createEl('div', { cls: 'subgraph-legend' });
 
         const items = [
-            { label: 'Suggested link (click to dismiss)', cls: 'legend-link' },
-            { label: 'Note node (click to open, hover × to remove)', cls: 'legend-node' },
-            { label: 'Thicker line = higher confidence', cls: 'legend-confidence' }
+            { label: 'Suggested link (hover for details)', cls: 'legend-link' },
+            { label: 'Note node (click to open, hover × to remove)', cls: 'legend-node' }
         ];
 
         for (const item of items) {
@@ -370,12 +400,17 @@ export class ConnectionSubGraph {
         const counter = buttonSection.createEl('div', { cls: 'subgraph-counter' });
         this.updateCounter(counter);
 
+        const alreadyAdded = !!this.options.connectionsAddedAt;
         const button = buttonSection.createEl('button', {
-            cls: 'mod-cta subgraph-add-btn',
-            text: 'Add to Main Graph'
+            cls: alreadyAdded ? 'mod-cta subgraph-add-btn subgraph-btn-done' : 'mod-cta subgraph-add-btn',
+            text: alreadyAdded ? 'Connections Added' : 'Add to Main Graph'
         });
-        const iconSpan = button.createEl('span', { cls: 'subgraph-btn-icon' });
-        setIcon(iconSpan, 'plus-circle');
+        if (alreadyAdded) {
+            button.disabled = true;
+        } else {
+            const iconSpan = button.createEl('span', { cls: 'subgraph-btn-icon' });
+            setIcon(iconSpan, 'plus-circle');
+        }
 
         button.addEventListener('click', async () => {
             const remaining = this.getRemainingConnections();
@@ -400,10 +435,16 @@ export class ConnectionSubGraph {
                     new Notice(`Failed to write ${result.failed} connection${result.failed > 1 ? 's' : ''}.`);
                 }
 
-                // Disable button after writing
+                // Disable button and persist status to cache
                 button.textContent = 'Connections Added';
                 button.disabled = true;
                 button.classList.add('subgraph-btn-done');
+
+                const { actionsAnalysisData, saveCacheFn } = this.options;
+                if (actionsAnalysisData && saveCacheFn) {
+                    actionsAnalysisData.connectionsAddedAt = new Date().toISOString();
+                    await saveCacheFn(actionsAnalysisData);
+                }
             } catch (error) {
                 console.error('Failed to write connections:', error);
                 new Notice('Failed to write connections. Check console for details.');
@@ -418,12 +459,29 @@ export class ConnectionSubGraph {
     private removeNode(node: SubGraphNode): void {
         node.removed = true;
 
-        // Also remove all links connected to this node
+        // Collect neighbors (other ends of connections to this node)
+        const neighborsToCheck = new Set<string>();
         for (const link of this.links) {
             const sourceId = typeof link.source === 'string' ? link.source : (link.source as SubGraphNode).id;
             const targetId = typeof link.target === 'string' ? link.target : (link.target as SubGraphNode).id;
             if (sourceId === node.id || targetId === node.id) {
                 link.removed = true;
+                const otherId = sourceId === node.id ? targetId : sourceId;
+                neighborsToCheck.add(otherId);
+            }
+        }
+
+        // If a neighbor is only connected to this node (no other remaining links), remove it too
+        for (const neighborId of neighborsToCheck) {
+            const hasOtherLinks = this.links.some(l => {
+                if (l.removed) return false;
+                const sourceId = typeof l.source === 'string' ? l.source : (l.source as SubGraphNode).id;
+                const targetId = typeof l.target === 'string' ? l.target : (l.target as SubGraphNode).id;
+                return (sourceId === neighborId || targetId === neighborId);
+            });
+            if (!hasOtherLinks) {
+                const neighbor = this.nodes.find(n => n.id === neighborId);
+                if (neighbor) neighbor.removed = true;
             }
         }
 
@@ -484,24 +542,20 @@ export class ConnectionSubGraph {
                 enter => enter.append('line')
                     .attr('class', 'suggested-link')
                     .attr('stroke', 'var(--text-accent)')
-                    .attr('stroke-width', d => 1 + d.confidence * 3)
+                    .attr('stroke-width', 2)
                     .attr('stroke-opacity', d => 0.3 + d.confidence * 0.5)
                     .attr('stroke-dasharray', '6,3')
-                    .attr('marker-end', 'url(#subgraph-arrow)')
-                    .style('cursor', 'pointer')
+                    .attr('marker-end', 'url(#' + this.markerId + ')')
                     .on('mouseover', (event, d) => {
-                        this.showTooltip(event, `${this.resolveNodeTitle(d.source)} → ${this.resolveNodeTitle(d.target)}\n${d.reason}\nConfidence: ${Math.round(d.confidence * 100)}%`);
+                        this.showLinkTooltip(event, d);
                         d3.select(event.currentTarget)
-                            .attr('stroke-opacity', 1)
-                            .attr('stroke-width', 2 + d.confidence * 4);
+                            .attr('stroke-opacity', 1);
                     })
                     .on('mouseout', (event, d) => {
                         this.hideTooltip();
                         d3.select(event.currentTarget)
-                            .attr('stroke-opacity', 0.3 + d.confidence * 0.5)
-                            .attr('stroke-width', 1 + d.confidence * 3);
-                    })
-                    .on('click', (_event, d) => this.removeLink(d)),
+                            .attr('stroke-opacity', 0.3 + d.confidence * 0.5);
+                    }),
                 update => update,
                 exit => exit.remove()
             );
@@ -535,6 +589,17 @@ export class ConnectionSubGraph {
             return node?.title || nodeRef;
         }
         return nodeRef.title;
+    }
+
+    /**
+     * Show structured tooltip for a link: Direction, Rationale, Confidence
+     */
+    private showLinkTooltip(event: MouseEvent, link: SubGraphLink): void {
+        const direction = `${this.resolveNodeTitle(link.source)} → ${this.resolveNodeTitle(link.target)}`;
+        const rationale = link.reason;
+        const confidence = `${Math.round(link.confidence * 100)}%`;
+        const text = `Direction:\n${direction}\nRationale:\n${rationale}\nConfidence:\n${confidence}`;
+        this.showTooltip(event, text);
     }
 
     private showTooltip(event: MouseEvent, text: string): void {
