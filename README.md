@@ -1,24 +1,20 @@
 # Obsidian Graph Analysis Plugin
 
-A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using advanced graph theory algorithms to provide deep insights into note relationships and importance.
+A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using graph algorithms and AI to provide insights into note relationships, importance, and content.
+
+![Graph View](docs/images/graph-view.png)
 
 ## Features
 
-- **Interactive Graph View**: Dynamic visualization of your vault's note relationships
-- **Real-time Analysis**: Automatic updates as you modify your vault
-- **Multiple Centrality Measures**:
-  - Degree Centrality: Identifies the most connected notes
-  - Eigenvector Centrality: Determines note importance based on connections
-  - Betweenness Centrality: Identifies bridge notes between topics
-  - Closeness Centrality: Measures how central notes are to your vault
-- **Smart Performance**: Efficient updates and memory management
-- **Customizable Settings**: Control analysis scope and visualization
-- **Immersive Graph View**: Status bar is automatically hidden when viewing the graph for a distraction-free experience
-- **AI-Powered Summaries**: Generate intelligent summaries of your notes using Google Gemini AI
+- **Interactive Graph View**: Dynamic visualization with node labels, connection arrows, and centrality-based sizing
+- **AI-Powered Vault Analysis**: Semantic Analysis → Knowledge Structure → Evolution → Recommended Actions
+- **Exclusion Rules**: Exclude folders and tags from analysis; graph auto-refreshes when settings change
+- **AI Summaries**: Per-note summaries via Google Gemini (Flash Lite / Flash)
 
 ## Installation
 
 ### From Obsidian Community Plugins
+
 
 *Coming soon*
 
@@ -28,300 +24,118 @@ A plugin for [Obsidian](https://obsidian.md) that analyzes your vault using adva
 2. Extract the zip file into your Obsidian vault's `.obsidian/plugins/` directory
 3. Enable the plugin in Obsidian's settings under "Community Plugins"
 
-## Usage
+## Interactive Graph View
 
-### Accessing the Graph Analysis View
+The graph visualizes your vault as a network: **nodes** are notes, **edges** are links between them. Node size reflects **degree centrality** (more connections = larger node).
 
-1. Click the graph analysis icon in the ribbon (left sidebar)
-2. The graph view will open, showing your vault's note relationships
-3. Interact with the graph to explore relationships and centrality measures
-4. The view updates automatically as you modify your vault
+- **Settings panel** (top-left): Toggle node labels, connection arrows, and color strip
+- **Hover**: Adjacent connections highlight; centrality measures available in the UI
+- **Drag**: Reposition nodes; the layout updates dynamically
 
-### Understanding the Visualization
+![Graph View](docs/images/graph-view.png)
 
-The graph view provides multiple ways to understand your vault's structure:
-- Interactive node exploration
-- Visual relationship indicators
-- Multiple centrality measures
-- Real-time updates
+## AI-Powered Vault Analysis
 
-#### Centrality Measures
+Open the **Vault Analysis** modal from the status bar or via the command palette. The analysis is powered by Google Gemini and organized into **four tabs**. Semantic Analysis runs first and produces the base data; the other three tabs build on it and can be generated independently.
 
-Each centrality measure provides different insights into your notes:
-- **Degree Centrality**: Shows which notes have the most direct connections
-- **Eigenvector Centrality**: Reveals notes connected to other important notes
-- **Betweenness Centrality**: Identifies notes that bridge different topics
-- **Closeness Centrality**: Shows how easily notes can reach others
+### Tab 1: Semantic Analysis
 
-### AI Summary Feature
+The foundation of vault analysis. Each note gets:
 
-The plugin includes an AI-powered summary feature that can generate intelligent summaries of your notes:
+- **Summary**: One-sentence description of the main concept
+- **Keywords**: 3–6 key terms
+- **Knowledge Domains**: 2–4 academic or professional fields
 
-1. **Access**: Click the "AI Summary" button in the status bar (bottom of Obsidian)
-2. **Requirements**: Configure your Google Gemini API key in plugin settings
-3. **Content Processing**: The plugin automatically cleans up markdown formatting and limits content to 1000 words for optimal AI processing
-4. **Fallback**: If no API key is configured, a simple extractive summary is provided instead
+**Details:**
 
-#### Getting a Gemini API Key
+- **Analysis Summary**: Total files, generation date, API provider, token usage
+- **Search & Filter**: Search by title, keywords, or domain
+- **Paginated Results**: Click note titles to open; each result shows summary, keywords, domains, and metadata
+- **Incremental Updates**: Only re-analyzes changed or new notes
 
-1. Visit [Google AI Studio](https://aistudio.google.com/)
-2. Sign in with your Google account
-3. Create a new API key
-4. Copy the key and paste it into the plugin settings
+![Semantic Analysis](docs/images/semantic-analysis.png)
 
-#### Features
+### Tab 2: Knowledge Structure
 
-- **Smart Content Cleanup**: Removes markdown formatting, empty lines, and limits word count
-- **Intelligent Summaries**: Uses Google Gemini AI for high-quality summaries
-- **Secure Storage**: API keys are stored securely in Obsidian settings
-- **Error Handling**: Graceful fallback to simple summaries if AI fails
-- **Copy to Clipboard**: Easy copying of generated summaries
+Explores how your knowledge is organized across domains and the graph.
 
-### Vault Analysis Feature
+- **Knowledge Domain Distribution**: Chart of domains across your vault
+- **Knowledge Network Analysis**: KDE distribution chart plus AI-generated network insights
+- **Knowledge Gaps**: Identified areas for further development
 
-The plugin includes a comprehensive vault analysis feature that provides deep insights into your entire Obsidian vault:
+![Knowledge Structure](docs/images/knowledge-structure.png)
 
-1. **Access Methods**:
-   - Click the "Vault Analysis" button in the status bar
-   - Use the command palette: "Generate AI Analysis for Entire Vault"
-   - Or view existing results: "View Vault Analysis Results"
+### Tab 3: Knowledge Evolution
 
-2. **What It Analyzes**:
-   - **Summary**: One-sentence summary of each note's main concept
-   - **Keywords**: 3-6 key terms extracted from each note
-   - **Knowledge Domains**: 2-4 academic or professional fields the note belongs to
-   - **Metadata**: Creation date, modification date, word count, and file path
+Tracks how your vault evolves over time.
 
-3. **Intelligent Processing**:
-   - Respects your folder and tag exclusion settings
-   - Skips notes with fewer than 10 words
-   - Processes files in batches to respect API rate limits
-   - Provides detailed progress updates during analysis
+- **Knowledge Development Timeline**: Calendar heatmap of note creation; AI phases and narrative
+- **Topic Introduction Patterns**: When new topics and domains first appeared
+- **Focus Shift Analysis**: Recent focus vs earlier periods; notable shifts
+- **Conclusions**: AI-generated summaries per section
 
-4. **Results Management**:
-   - **Search & Filter**: Find notes by title, keywords, or knowledge domain
-   - **Interactive Navigation**: Click note titles to open them directly
-   - **Data Persistence**: Results saved to `data/vault-analysis.json`
-   - **Tab-Specific Cache**: Each analysis tab (Structure, Evolution, Actions) has its own cache file for improved performance and modularity
+![Knowledge Evolution](docs/images/knowledge-evolution.png)
 
-#### Vault Analysis Benefits
+### Tab 4: Recommended Actions
 
-- **Knowledge Discovery**: Identify knowledge gaps and domain coverage
-- **Content Organization**: Better understand your vault's structure
-- **Research Insights**: Find related topics and areas of focus
-- **Second Brain Enhancement**: Get AI-powered insights into your thinking patterns
+Actionable suggestions based on your vault.
 
-#### Usage Tips
+- **Network Metrics Analysis**: Scatter charts—Inbound vs Outbound links, Betweenness vs Eigenvector
+- **Notes Needing Review**: Priority cards (high/medium/low) for hubs, bridges, and authorities; click to open
+- **Suggested Connections**: Interactive sub-graph of notes that could be linked; add connections to your vault
 
-- Run vault analysis periodically to track how your knowledge base evolves
-- Use the search function to find notes related to specific topics
-- Combine with exclusion settings to focus on specific areas of your vault
+![Recommended Actions](docs/images/recommended-actions.png)
 
-### Settings
+## AI Summary (Single Note)
 
-Access plugin settings from the Obsidian settings panel under "Graph Analysis":
+For quick summaries of the current note:
 
-- **Exclude Folders**: Comma-separated list of folders to exclude from analysis
-  - Use folder paths like "Archive", "Templates", "Private/Personal"
-  - Supports nested folders and partial path matching
-- **Exclude Tags**: Comma-separated list of tags to exclude from analysis
-  - Use tag names without # like "private", "draft", "archive"
-  - Supports both frontmatter tags and inline tags
-  - Case-insensitive matching
-- **Result Limit**: Maximum number of results to display
-- **Gemini API Key**: Your Google Gemini API key for AI-powered summaries
-- **Exclusion Statistics**: Real-time view of how many files are excluded and included
-- **Visualization Options**: Customize the graph view appearance
+1. Click **AI Summary** in the status bar
+2. Requires a Gemini API key in plugin settings
+3. Content is cleaned and limited by character count for API calls
 
-#### Exclusion Features
+**Getting a Gemini API Key:** Visit [Google AI Studio](https://aistudio.google.com/), sign in, create an API key, and paste it in plugin settings under "LLM Model Configuration".
 
-The plugin provides robust exclusion capabilities:
+## Settings
 
-- **Folder Exclusion**: Exclude entire folders and their subfolders from analysis
-- **Tag Exclusion**: Exclude files based on tags (both frontmatter and inline tags)
-- **Real-time Statistics**: See how many files are excluded vs included
-- **Exclusion Preview**: View list of excluded files to verify your settings
-- **Automatic Updates**: Graph refreshes automatically when exclusion settings change
+Under Obsidian settings → **Graph Analysis**:
+
+- **Exclude Notes from Analysis**: Folders (e.g. `Archive`, `Templates`) and tags (e.g. `private`, `draft`). Real-time stats show excluded vs included counts.
+- **LLM Model Configuration**: Gemini API key for AI summaries and vault analysis (link to get a key included).
+- **Result Limit**: Maximum number of results to display.
+- **Visualization**: Graph appearance options in the graph view settings panel.
 
 ## Technical Details
 
-This plugin leverages cutting-edge technology for optimal performance:
 - TypeScript for the Obsidian plugin interface
-- Rust compiled to WebAssembly for high-performance graph analysis
-- [rustnetworkx-core](https://github.com/rustworkx/rustworkx) for efficient graph algorithms
-- Modern web technologies for interactive visualizations
-- Modular cache system with tab-specific analysis files
+- Rust compiled to WebAssembly for graph analysis ([rustworkx](https://github.com/rustworkx/rustworkx))
+- Modular cache: tab-specific analysis files and persistent vault analysis JSON
 
-### Performance Features
+## Build
 
-The plugin includes several optimizations for excellent performance:
+To build the plugin from source:
 
-- **Smart Updates**: Efficient graph refresh with debouncing
-- **Memory Management**: Optimized memory usage for large vaults
-- **Fast Calculations**: High-performance centrality algorithms
-- **Responsive Interface**: Non-blocking operations for smooth experience
-- **Modular Cache**: Tab-specific analysis files for independent updates and reduced memory usage
+**Prerequisites:** Node.js, npm, Rust, and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/).
 
-## Development
-
-### Prerequisites
-
-- Node.js and npm
-- Rust and wasm-pack
-- Obsidian development environment
-
-### Getting Started
-
-1. Clone the repository
-   ```bash
-   git clone https://github.com/yourusername/obsidian-graph-analysis.git
-   cd obsidian-graph-analysis
-   ```
-
-2. Install dependencies
-   ```bash
-   npm install
-   ```
-
-### Development Workflow
-
-**For active development:**
 ```bash
-npm run dev
-```
-This command builds the WASM module once, then watches TypeScript files for changes and rebuilds automatically.
-
-**For production builds:**
-```bash
+git clone https://github.com/yourusername/obsidian-graph-analysis.git
+cd obsidian-graph-analysis
+npm install
 npm run build
 ```
-This command runs type checking, builds the WASM module, and then builds the TypeScript plugin with optimizations.
 
-**To test in Obsidian:**
-```bash
-npm run copy-to-vault
-```
-This copies the built files to your Obsidian vault. Restart Obsidian to load the updated plugin.
-
-### Available Scripts
-
-**Build Commands:**
-- `npm run dev` - Development mode with watch (builds WASM + TypeScript, watches for changes)
-- `npm run build` - Production build (validates types, builds WASM + TypeScript)
-- `npm run build:ci` - CI-friendly build (includes linting)
-
-**Test Commands:**
-- `npm run test` - Run all tests (lint + typecheck + Rust unit tests)
-- `npm run test:unit` - Run Rust unit tests only
-- `npm run test:ai` - Test AI model integration (requires `GEMINI_API_KEY` or `GOOGLE_GENAI_API_KEY` environment variable)
-- `npm run test:ci` - CI-friendly test command
-
-**Utility Commands:**
-- `npm run lint` - Lint TypeScript code
-- `npm run typecheck` - Type check without building
-- `npm run copy-to-vault` - Copy built files to Obsidian vault
-- `npm run version` - Bump version and update manifest files
-
-### Environment Variables
-
-The project supports environment variables via `.env` files for easier development and testing.
-
-**Setup:**
-1. Copy `.env.example` to `.env.local`:
-   ```bash
-   cp .env.example .env.local
-   ```
-2. Edit `.env.local` and add your values:
-   ```bash
-   GEMINI_API_KEY=your_api_key_here
-   OBSIDIAN_VAULT_PATH=/path/to/your/vault
-   ```
-
-**Environment Files:**
-- `.env` - Base environment variables (committed to git as `.env.example`)
-- `.env.local` - Local overrides (not committed, highest priority)
-- `.env.development` - Development-specific variables
-- `.env.production` - Production-specific variables
-
-**Available Variables:**
-- `GEMINI_API_KEY` or `GOOGLE_GENAI_API_KEY` - Google Gemini API key for AI testing
-- `OBSIDIAN_VAULT_PATH` - Custom Obsidian vault path (optional, defaults to OS-specific paths)
-
-**Usage in Scripts:**
-Environment variables are automatically loaded when running:
-- `npm run test:ai` - Uses `GEMINI_API_KEY` for AI model testing
-- `npm run copy-to-vault` - Uses `OBSIDIAN_VAULT_PATH` if set
-
-### Testing
-
-**Run all tests:**
-```bash
-npm run test
-```
-
-**Test AI integration:**
-```bash
-# Using .env file (recommended)
-npm run test:ai
-
-# Or with inline environment variable
-GEMINI_API_KEY=your_key_here npm run test:ai
-```
-
-**Run only Rust tests:**
-```bash
-npm run test:unit
-```
-
-### Project Structure
-
-```
-obsidian-graph-analysis/
-├── src/                    # TypeScript source code
-│   ├── ai/                 # AI analysis features
-│   │   ├── schemas/        # AI response schemas
-│   │   └── visualization/  # AI visualization managers
-│   ├── components/         # UI components
-│   │   ├── graph-view/     # Main graph visualization
-│   │   ├── calendar-chart/ # Calendar visualization
-│   │   └── domain-distribution/ # Domain distribution charts
-│   ├── lib/                # Shared utilities and libraries
-│   │   └── color-palette.ts # Color palette system
-│   ├── services/           # Core services
-│   │   ├── AIModelService.ts
-│   │   └── PluginService.ts
-│   ├── settings/           # Settings UI
-│   ├── types/              # TypeScript type definitions
-│   ├── utils/              # Utility functions
-│   ├── views/              # Obsidian views
-│   └── main.ts             # Plugin entry point
-├── graph-analysis-wasm/    # Rust/WASM graph algorithms
-│   ├── src/                # Rust source code
-│   └── tests/              # Rust unit tests
-├── scripts/                # Build and utility scripts
-│   ├── tests/              # Test scripts
-│   └── utils/              # Script utilities
-├── dist/                   # Build output (generated)
-└── .env.example            # Environment variable template
-```
-
-**Key Directories:**
-- `src/lib/` - Shared libraries and utilities (e.g., color palette)
-- `src/types/` - TypeScript type definitions
-- `src/services/` - Core business logic services
-- `src/components/` - Reusable UI components
-- `src/ai/` - AI-powered analysis features
+Output is in `dist/`. To install into a vault: copy the contents of `dist/` and `graph-analysis-wasm/pkg/` into your vault's `.obsidian/plugins/obsidian-graph-analysis/` (or use `npm run copy-to-vault` if you have the vault path configured).
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License — see the LICENSE file for details.
 
 ## Acknowledgments
 
-- The Obsidian team for creating such an amazing knowledge management tool
-- The Rust and WebAssembly communities for their excellent tools and documentation
-- The rustnetworkx-core team for their powerful graph processing library
+- The Obsidian team for the knowledge management platform
+- The Rust and WebAssembly communities
+- The rustworkx team for the graph processing library
