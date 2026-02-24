@@ -26,7 +26,7 @@ export interface VaultAnalysisResult {
     created: string;
     modified: string;
     path: string;
-    wordCount: number;
+    charCount: number;
     graphMetrics?: {
         degreeCentrality?: number;
         betweennessCentrality?: number;
@@ -49,6 +49,11 @@ export interface VaultAnalysisData {
     generatedFiles: number; // Count from first generation
     updatedFiles: number; // Cumulative count of updated files
     apiProvider: string;
+    tokenUsage?: {
+        promptTokens: number;
+        candidatesTokens: number;
+        totalTokens: number;
+    };
     results: VaultAnalysisResult[];
 }
 
@@ -350,48 +355,6 @@ ${formattedContext}`;
             console.log(`${tabName} analysis cached successfully in responses directory`);
         } catch (error) {
             console.error(`Failed to cache ${tabName} analysis:`, error);
-        }
-    }
-
-    /**
-     * Create initial structure-analysis.json file with empty knowledgeNetwork and knowledgeGaps
-     */
-    public async createInitialStructureAnalysis(): Promise<StructureAnalysisData | null> {
-        try {
-            console.log('Creating initial Knowledge Structure Analysis...');
-            
-            const analysisData = await this.loadVaultAnalysisData();
-            if (!analysisData) {
-                console.warn('No vault analysis data found. Cannot create initial structure analysis.');
-                return null;
-            }
-            
-            // Create empty structure data
-            const structureData: KnowledgeStructureData = {
-                knowledgeNetwork: {
-                    bridges: [],
-                    foundations: [],
-                    authorities: []
-                },
-                gaps: []
-            };
-            
-            // Create structured analysis data
-            const tabData: StructureAnalysisData = {
-                generatedAt: new Date().toISOString(),
-                sourceAnalysisId: this.generateAnalysisId(analysisData),
-                apiProvider: 'Google Gemini',
-                knowledgeStructure: structureData
-            };
-            
-            // Cache the results
-            await this.cacheTabAnalysis('structure', tabData);
-            
-            console.log('Initial structure analysis created successfully');
-            return tabData;
-        } catch (error) {
-            console.error('Failed to create initial Knowledge Structure Analysis:', error);
-            return null;
         }
     }
 

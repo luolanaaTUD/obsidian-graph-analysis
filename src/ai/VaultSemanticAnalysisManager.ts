@@ -20,7 +20,7 @@ export class VaultSemanticAnalysisManager {
     private masterAnalysisManager: MasterAnalysisManager;
     private subdivisionsList: Array<{id: string, name: string, domain: string, domainId: string}> = [];
     private domainTemplateLoaded: boolean = false;
-    private readonly MAX_WORDS_PER_NOTE = 1200;
+    private readonly MAX_CHARS_PER_NOTE = 8000;
     private readonly MAX_NOTES_PER_BATCH = 30;
     private readonly DELAY_BETWEEN_BATCHES = 3000; // 3 seconds between batches for 30 RPM rate limiting
     private readonly RATE_LIMIT_RETRY_DELAY = 8100; // 8 second delay for rate limit retry
@@ -355,6 +355,28 @@ export class VaultSemanticAnalysisManager {
     }
 
     /**
+     * Check if there are pending changes (modified or new files) that would require
+     * re-running semantic analysis. Used to enable/disable the Update Analysis button.
+     */
+    public async hasPendingSemanticChanges(): Promise<boolean> {
+        const existingAnalysis = await this.loadExistingAnalysisData();
+        const isIncrementalUpdate = existingAnalysis !== null && existingAnalysis.results && existingAnalysis.results.length > 0;
+
+        if (!isIncrementalUpdate) {
+            // No existing analysis - all files would need processing
+            const allFiles = this.app.vault.getMarkdownFiles();
+            const includedFiles = allFiles.filter(file => !this.isFileExcluded(file));
+            return includedFiles.length > 0;
+        }
+
+        const allFiles = this.app.vault.getMarkdownFiles();
+        const includedFiles = allFiles.filter(file => !this.isFileExcluded(file));
+        const changeInfo = await this.identifyChangedFiles(includedFiles, existingAnalysis);
+        const pendingCount = changeInfo.changedFiles.length + changeInfo.newFiles.length;
+        return pendingCount > 0;
+    }
+
+    /**
      * Merge new analysis results with existing unchanged results
      * Removes deleted files and sorts by title
      */
@@ -523,12 +545,12 @@ export class VaultSemanticAnalysisManager {
             let processed = 0;
             let failed = 0;
 
-            // Prepare file data first to get word counts
+            // Prepare file data first to get char counts
             progressNotice.setMessage('Preparing files for analysis...');
             const fileDataList: Array<{
                 file: TFile;
                 content: string;
-                wordCount: number;
+                charCount: number;
                 created: string;
                 modified: string;
                 isShort: boolean;
@@ -537,9 +559,17 @@ export class VaultSemanticAnalysisManager {
             for (const file of filesToProcess) {
                 try {
                     const content = await this.app.vault.read(file);
+                    const rawCharCount = content.trim().length;
                     const cleanedContent = this.cleanupContent(content);
-                    const wordCount = cleanedContent.split(/\s+/).filter(word => word.length > 0).length;
-                    
+                    const charCount = cleanedContent.length;
+                    const isShort = rawCharCount < 50;
+                    if (isShort) {
+                        console.log(`File "${file.basename}": raw=${rawCharCount} chars, cleaned=${charCount} chars -> isShort=${isShort}`);
+                    }
+                    if (rawCharCount >= 50 && charCount < 50) {
+                        console.warn(`Note "${file.basename}" has ${rawCharCount} raw chars but only ${charCount} after cleanup - content may be structured unusually`);
+                    }
+
                     // Get file stats
                     const stat = await this.app.vault.adapter.stat(file.path);
                     const created = stat?.ctime ? new Date(stat.ctime).toISOString() : '';
@@ -548,17 +578,17 @@ export class VaultSemanticAnalysisManager {
                     fileDataList.push({
                         file,
                         content: cleanedContent,
-                        wordCount,
+                        charCount,
                         created,
                         modified,
-                        isShort: wordCount < 10
+                        isShort
                     });
                 } catch (error) {
                     console.error(`Error reading file ${file.path}:`, error);
                     fileDataList.push({
                         file,
                         content: '',
-                        wordCount: 0,
+                        charCount: 0,
                         created: '',
                         modified: '',
                         isShort: true
@@ -607,26 +637,31 @@ export class VaultSemanticAnalysisManager {
                 console.log(`Batch size distribution: ${batchSizes.join(', ')} notes per batch`);
             }
             
+            // Aggregate token usage across all batches
+            let totalTokenUsage = { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 };
+
             // Process batches sequentially with proper rate limiting
             for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
                 const batch = batches[batchIndex];
                 const batchFileCount = batch.length;
-                const batchWordCount = batch.reduce((sum, f) => sum + f.wordCount, 0);
+                const batchCharCount = batch.reduce((sum, f) => sum + f.charCount, 0);
                 
                 // Update progress with batch info
                 const totalToProcess = filesToProcess.length;
                 const progressText = isIncrementalUpdate 
-                    ? `Processing batch ${batchIndex + 1}/${totalBatches} (${batchFileCount} notes, ${batchWordCount} words)... (${processed}/${totalToProcess} completed, ${failed} failed, ${unchangedCount} unchanged)`
-                    : `Processing batch ${batchIndex + 1}/${totalBatches} (${batchFileCount} notes, ${batchWordCount} words)... (${processed}/${totalToProcess} completed, ${failed} failed)`;
+                    ? `Processing batch ${batchIndex + 1}/${totalBatches} (${batchFileCount} notes, ${batchCharCount} chars)... (${processed}/${totalToProcess} completed, ${failed} failed, ${unchangedCount} unchanged)`
+                    : `Processing batch ${batchIndex + 1}/${totalBatches} (${batchFileCount} notes, ${batchCharCount} chars)... (${processed}/${totalToProcess} completed, ${failed} failed)`;
                 progressNotice.setMessage(progressText);
                 
                 try {
                     // Process entire batch in a single API request
                     const batchResult = await this.analyzeBatch(batch);
                     const batchResults = batchResult.results;
-                    // Note: Token usage is no longer tracked
+                    totalTokenUsage.promptTokens += batchResult.tokenUsage.promptTokens;
+                    totalTokenUsage.candidatesTokens += batchResult.tokenUsage.candidatesTokens;
+                    totalTokenUsage.totalTokens += batchResult.tokenUsage.totalTokens;
                     
-                    console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} notes, ${batchWordCount} words`);
+                    console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} notes, ${batchCharCount} chars`);
                     
                     // Process batch results
                     for (let i = 0; i < batch.length; i++) {
@@ -662,6 +697,9 @@ export class VaultSemanticAnalysisManager {
                             console.log(`Retrying batch ${batchIndex + 1}...`);
                             const retryResult = await this.analyzeBatch(batch);
                             const retryResults = retryResult.results;
+                            totalTokenUsage.promptTokens += retryResult.tokenUsage.promptTokens;
+                            totalTokenUsage.candidatesTokens += retryResult.tokenUsage.candidatesTokens;
+                            totalTokenUsage.totalTokens += retryResult.tokenUsage.totalTokens;
                             
                             console.log(`Batch ${batchIndex + 1} retry completed successfully`);
                             
@@ -742,7 +780,8 @@ export class VaultSemanticAnalysisManager {
                 resultsWithRankings, 
                 isIncrementalUpdate,
                 newCount,
-                changedCount
+                changedCount,
+                totalTokenUsage
             );
             
             enhanceNotice.hide();
@@ -780,12 +819,13 @@ export class VaultSemanticAnalysisManager {
     private async analyzeBatch(fileDataList: Array<{
         file: TFile;
         content: string;
-        wordCount: number;
+        charCount: number;
         created: string;
         modified: string;
         isShort: boolean;
     }>): Promise<{
         results: Array<{ success: boolean; data?: VaultAnalysisResult; error?: string }>;
+        tokenUsage: { promptTokens: number; candidatesTokens: number; totalTokens: number };
     }> {
         try {
             // File data is already prepared, no need to read files again
@@ -795,6 +835,7 @@ export class VaultSemanticAnalysisManager {
             const shortFiles = fileData.filter(data => data.isShort);
             const apiFiles = fileData.filter(data => !data.isShort);
             
+            let batchTokenUsage = this.ZERO_TOKEN_USAGE;
             const results: Array<{ success: boolean; data?: VaultAnalysisResult; error?: string }> = [];
             
             // Handle short files locally without API call
@@ -804,13 +845,13 @@ export class VaultSemanticAnalysisManager {
                     data: {
                         id: this.generateFileId(data.file),
                         title: data.file.basename,
-                        summary: 'Note is empty or too short for semantic analysis',
+                        summary: `Note is empty or too short for semantic analysis (${data.charCount} chars)`,
                         keywords: '',
                         knowledgeDomains: [], // Empty array instead of empty string
                         created: data.created,
                         modified: data.modified,
                         path: data.file.path,
-                        wordCount: data.wordCount
+                        charCount: data.charCount
                     }
                 });
             });
@@ -820,6 +861,7 @@ export class VaultSemanticAnalysisManager {
                 try {
                     // Use structured output instead of deprecated generateBatchAnalysis
                     const batchAnalysisResult = await this.generateStructuredBatchAnalysis(apiFiles);
+                    batchTokenUsage = batchAnalysisResult.tokenUsage;
                     
                     // Process API results
                     for (let i = 0; i < apiFiles.length; i++) {
@@ -843,7 +885,7 @@ export class VaultSemanticAnalysisManager {
                                     created: data.created,
                                     modified: data.modified,
                                     path: data.file.path,
-                                    wordCount: data.wordCount
+                                    charCount: data.charCount
                                 }
                             });
                         } else {
@@ -878,12 +920,13 @@ export class VaultSemanticAnalysisManager {
                 }
             }
             
-            return { results: sortedResults };
+            return { results: sortedResults, tokenUsage: batchTokenUsage };
         } catch (error) {
             console.error('Error in batch analysis:', error);
             // Return error for all files in batch
             return {
-                results: fileDataList.map(() => ({ success: false, error: (error as Error).message }))
+                results: fileDataList.map(() => ({ success: false, error: (error as Error).message })),
+                tokenUsage: this.ZERO_TOKEN_USAGE
             };
         }
     }
@@ -895,39 +938,15 @@ export class VaultSemanticAnalysisManager {
     }
 
     private cleanupContent(content: string): string {
-        // Remove markdown syntax and clean up content
         let cleaned = content
-            // Remove frontmatter
-            .replace(/^---[\s\S]*?---\n?/m, '')
-            // Remove empty lines
-            .replace(/^\s*$/gm, '')
-            // Remove multiple consecutive newlines
-            .replace(/\n{3,}/g, '\n\n')
-            // Remove markdown headers
-            .replace(/^#{1,6}\s+/gm, '')
-            // Remove markdown links but keep text
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            // Remove markdown bold/italic
-            .replace(/\*\*([^*]+)\*\*/g, '$1')
-            .replace(/\*([^*]+)\*/g, '$1')
-            // Remove markdown code blocks
-            .replace(/```[\s\S]*?```/g, '')
-            // Remove inline code
-            .replace(/`([^`]+)`/g, '$1')
-            // Remove bullet points
-            .replace(/^[\s]*[-*+]\s+/gm, '')
-            // Remove numbered lists
-            .replace(/^[\s]*\d+\.\s+/gm, '')
-            // Clean up extra whitespace
-            .replace(/\s+/g, ' ')
+            .replace(/^---[\s\S]*?---\n?/, '')   // Remove frontmatter
+            .replace(/```[\s\S]*?```/g, '')       // Remove code blocks
+            .replace(/\s+/g, ' ')                 // Normalize whitespace
             .trim();
 
-        // Limit to exactly MAX_WORDS_PER_NOTE words per note for consistent batch processing
-        const words = cleaned.split(/\s+/);
-        if (words.length > this.MAX_WORDS_PER_NOTE) {
-            cleaned = words.slice(0, this.MAX_WORDS_PER_NOTE).join(' ') + '...';
+        if (cleaned.length > this.MAX_CHARS_PER_NOTE) {
+            cleaned = cleaned.slice(0, this.MAX_CHARS_PER_NOTE) + '...';
         }
-
         return cleaned;
     }
 
@@ -1086,7 +1105,8 @@ export class VaultSemanticAnalysisManager {
         results: VaultAnalysisResult[], 
         isIncrementalUpdate: boolean,
         newCount: number,
-        changedCount: number
+        changedCount: number,
+        batchTokenUsage?: { promptTokens: number; candidatesTokens: number; totalTokens: number }
     ): Promise<void> {
         try {
             // Ensure the file exists
@@ -1139,7 +1159,7 @@ export class VaultSemanticAnalysisManager {
                     created: result.created,
                     modified: result.modified,
                     path: result.path,
-                    wordCount: result.wordCount
+                    charCount: result.charCount ?? (result as { wordCount?: number }).wordCount ?? 0
                 };
                 
                 // Add optional properties if they exist
@@ -1165,6 +1185,7 @@ export class VaultSemanticAnalysisManager {
                     generatedFiles: enhancedResults.length,
                     updatedFiles: 0,
                     apiProvider: 'Google Gemini',
+                    ...(batchTokenUsage && { tokenUsage: batchTokenUsage }),
                     results: enhancedResults
                 };
             } else {
@@ -1177,6 +1198,14 @@ export class VaultSemanticAnalysisManager {
                     // Add to cumulative updated counts
                     const cumulativeUpdatedFiles = existingUpdatedFiles + newCount + changedCount;
                     
+                    // Add new batch token usage to existing cumulative total
+                    const existingTokens = existingData.tokenUsage ?? { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 };
+                    const tokenUsage = batchTokenUsage ? {
+                        promptTokens: existingTokens.promptTokens + batchTokenUsage.promptTokens,
+                        candidatesTokens: existingTokens.candidatesTokens + batchTokenUsage.candidatesTokens,
+                        totalTokens: existingTokens.totalTokens + batchTokenUsage.totalTokens
+                    } : existingData.tokenUsage;
+                    
                     outputData = {
                         generatedAt: existingData.generatedAt,
                         updatedAt: new Date().toISOString(),
@@ -1184,6 +1213,7 @@ export class VaultSemanticAnalysisManager {
                         generatedFiles: existingGeneratedFiles,
                         updatedFiles: cumulativeUpdatedFiles,
                         apiProvider: 'Google Gemini',
+                        ...(tokenUsage && { tokenUsage }),
                         results: enhancedResults
                     };
                 } else {
@@ -1192,6 +1222,7 @@ export class VaultSemanticAnalysisManager {
                         generatedAt: new Date().toISOString(),
                         totalFiles: enhancedResults.length,
                         generatedFiles: enhancedResults.length,
+                        ...(batchTokenUsage && { tokenUsage: batchTokenUsage }),
                         updatedFiles: 0,
                         apiProvider: 'Google Gemini',
                         results: enhancedResults
@@ -1209,9 +1240,6 @@ export class VaultSemanticAnalysisManager {
             await this.app.vault.adapter.write(filePath, JSON.stringify(outputData, null, 2));
             
             console.log(`Vault analysis results saved to responses folder: ${filePath}`);
-            
-            // Create initial structure-analysis.json file with domain hierarchy
-            await this.masterAnalysisManager.createInitialStructureAnalysis();
         } catch (error) {
             console.error('Failed to save analysis results:', error);
             throw new Error(`Failed to save results: ${(error as Error).message}`);
@@ -1222,10 +1250,12 @@ export class VaultSemanticAnalysisManager {
     // Core analysis function.
     // Core analysis function using structured output API
 
+    private readonly ZERO_TOKEN_USAGE = { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 };
+
     private async generateStructuredBatchAnalysis(fileData: Array<{
         file: TFile;
         content: string;
-        wordCount: number;
+        charCount: number;
         created: string;
         modified: string;
         isShort: boolean;
@@ -1235,13 +1265,15 @@ export class VaultSemanticAnalysisManager {
             keywords: string;
             knowledgeDomain: string;
         }>;
+        tokenUsage: { promptTokens: number; candidatesTokens: number; totalTokens: number };
     }> {
         // Filter out short files (they should already be filtered, but double-check)
         const meaningfulFiles = fileData.filter(data => !data.isShort && data.content.trim().length > 0);
         
         if (meaningfulFiles.length === 0) {
             return {
-                results: []
+                results: [],
+                tokenUsage: this.ZERO_TOKEN_USAGE
             };
         }
 
@@ -1285,7 +1317,7 @@ For each note, provide:
         
         // Add each meaningful file to the prompt
         meaningfulFiles.forEach((data, index) => {
-            fullPrompt += `--- Note ${index + 1}: "${data.file.basename}" (${data.wordCount} words) ---\n${data.content}\n\n`;
+            fullPrompt += `--- Note ${index + 1}: "${data.file.basename}" (${data.charCount} chars) ---\n${data.content}\n\n`;
         });
 
         try {
@@ -1315,7 +1347,8 @@ For each note, provide:
                     summary: item.summary || '',
                     keywords: item.keywords || '',
                     knowledgeDomain: item.knowledgeDomain || ''
-                }))
+                })),
+                tokenUsage: response.tokenUsage
             };
 
         } catch (structuredError) {
@@ -1329,7 +1362,8 @@ For each note, provide:
                     summary: `Analysis failed for ${data.file.basename} - structured analysis error`,
                     keywords: '',
                     knowledgeDomain: ''
-                }))
+                })),
+                tokenUsage: this.ZERO_TOKEN_USAGE
             };
         }
     }

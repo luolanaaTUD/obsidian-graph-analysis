@@ -19,6 +19,7 @@ import { GraphAnalysisSettings } from '../types/types';
 export interface VaultSemanticAnalysisManager {
     generateVaultAnalysis(): Promise<boolean>;
     viewVaultAnalysisResults(): Promise<void>;
+    hasPendingSemanticChanges(): Promise<boolean>;
 }
 
 export class VaultAnalysisModal extends Modal {
@@ -122,8 +123,9 @@ export class VaultAnalysisModal extends Modal {
         ];
         
         tabs.forEach(tab => {
+            const isDisabled = tab.id !== 'semantic' && !this.hasExistingData;
             const tabButton = navContainer.createEl('button', {
-                cls: `vault-analysis-tab${this.currentView === tab.id ? ' active' : ''}`,
+                cls: `vault-analysis-tab${this.currentView === tab.id ? ' active' : ''}${isDisabled ? ' is-disabled' : ''}`,
                 text: tab.label
             });
             
@@ -132,9 +134,14 @@ export class VaultAnalysisModal extends Modal {
             setIcon(icon, tab.icon);
             tabButton.prepend(icon);
             
-            tabButton.addEventListener('click', async () => {
-                await this.switchView(tab.id);
-            });
+            if (isDisabled) {
+                tabButton.setAttribute('aria-disabled', 'true');
+                tabButton.setAttribute('title', 'Run Semantic Analysis first');
+            } else {
+                tabButton.addEventListener('click', async () => {
+                    await this.switchView(tab.id);
+                });
+            }
         });
     }
 
@@ -160,7 +167,7 @@ export class VaultAnalysisModal extends Modal {
         
         switch (viewId) {
             case 'semantic':
-                this.loadSemanticAnalysisView();
+                await this.loadSemanticAnalysisView();
                 break;
             case 'structure':
                 await this.loadKnowledgeStructureView();
@@ -172,11 +179,11 @@ export class VaultAnalysisModal extends Modal {
                 await this.loadRecommendedActionsView();
                 break;
             default:
-                this.loadSemanticAnalysisView();
+                await this.loadSemanticAnalysisView();
         }
     }
 
-    private loadSemanticAnalysisView(): void {
+    private async loadSemanticAnalysisView(): Promise<void> {
         if (!this.hasExistingData || !this.analysisData) {
             // Show empty state
             this.showEmptyState();
@@ -218,6 +225,15 @@ export class VaultAnalysisModal extends Modal {
         summaryContainer.createEl('p', {
             text: `API Provider: ${this.analysisData.apiProvider}`
         });
+
+        // Token usage (if available)
+        if (this.analysisData.tokenUsage) {
+            const { promptTokens, candidatesTokens, totalTokens } = this.analysisData.tokenUsage;
+            const formatted = (n: number) => n.toLocaleString();
+            summaryContainer.createEl('p', {
+                text: `Token usage: ${formatted(totalTokens)} (prompt: ${formatted(promptTokens)} + output: ${formatted(candidatesTokens)})`
+            });
+        }
 
         // Search section
         const searchSection = this.contentContainer.createEl('div', { 
@@ -301,6 +317,10 @@ export class VaultAnalysisModal extends Modal {
         this.currentPage = 1; // Reset to first page on initial load
         displayResults(this.analysisData.results);
         
+        // Update Analysis button with status (disabled when no changes)
+        const isOutdated = await this.vaultSemanticAnalysisManager.hasPendingSemanticChanges();
+        await this.createUpdateAnalysisButtonSection(this.contentContainer, 'semantic', isOutdated);
+        
         // Search functionality
         searchInput.addEventListener('input', (e: Event) => {
             const searchTerm = (e.target as HTMLInputElement).value.toLowerCase();
@@ -324,9 +344,6 @@ export class VaultAnalysisModal extends Modal {
             
             displayResults(filteredResults);
         });
-        
-        // Action buttons
-        this.createActionButtons();
     }
 
     private renderCurrentPage(): void {
@@ -409,7 +426,7 @@ export class VaultAnalysisModal extends Modal {
             });
             
             metaContainer.createEl('span', {
-                text: `${result.wordCount} words`,
+                text: `${result.charCount ?? (result as { wordCount?: number }).wordCount ?? 0} chars`,
                 cls: 'result-word-count'
             });
             
@@ -921,6 +938,19 @@ export class VaultAnalysisModal extends Modal {
         updateButton.addEventListener('click', async () => {
             // Prevent action if button is disabled
             if (updateButton.disabled) {
+                return;
+            }
+            // Semantic analysis: close, run analysis, reopen
+            if (tabName === 'semantic') {
+                this.close();
+                try {
+                    const success = await this.vaultSemanticAnalysisManager.generateVaultAnalysis();
+                    if (success) {
+                        await this.vaultSemanticAnalysisManager.viewVaultAnalysisResults();
+                    }
+                } catch (error) {
+                    console.error('Vault analysis failed:', error);
+                }
                 return;
             }
             // Use close-reopen pattern for structure, evolution, and actions tabs

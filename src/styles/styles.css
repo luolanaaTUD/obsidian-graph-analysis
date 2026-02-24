@@ -1388,6 +1388,12 @@ button.is-disabled {
     -moz-box-shadow: none !important;
 }
 
+.vault-analysis-tab.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .vault-analysis-tab .tab-icon {
     display: flex;
     align-items: center;
