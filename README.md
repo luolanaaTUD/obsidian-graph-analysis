@@ -2,6 +2,8 @@
 
 An [Obsidian](https://obsidian.md) plugin that turns your vault into a knowledge graph, then feeds those graph-theory metrics to AI — giving it structured, quantitative context instead of raw note content. The result: deeper insights into how your knowledge is organized, how it evolves, and what to do next.
 
+![demo](https://github.com/user-attachments/assets/5cee8e3b-36ac-4522-8a03-864227389e88)
+
 ## Why Graph Theory + AI?
 
 Most AI tools analyze notes by reading their text. That works for summaries, but it can't tell you which notes hold your vault together, where structural gaps exist, or how your thinking has shifted over time.
