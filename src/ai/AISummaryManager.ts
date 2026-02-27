@@ -1,6 +1,6 @@
 import { App, Notice, Modal, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
-import { AIModelService } from '../services/AIModelService';
+import { AIModelService, SEMANTIC_MODELS } from '../services/AIModelService';
 import { cleanupNoteContent } from '../utils/NoteContentUtils';
 
 export class AISummaryManager {
@@ -9,6 +9,7 @@ export class AISummaryManager {
     private aiService: AIModelService;
     private statusBarItem: HTMLElement | null = null;
     private readonly MAX_WORDS_PER_NOTE = 1000;
+    private semanticModelCounter = 0;
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
@@ -114,7 +115,7 @@ For the note, provide:
             // Build the complete prompt
             const fullPrompt = `${systemPrompt}\n\n${contextPrompt}\n\n${instructionPrompt}\n\n--- Note: "${fileName}" (${cleanedContent.split(/\s+/).length} words) ---\n${cleanedContent}`;
 
-            // Use semantic analysis model (Gemma 3 27B) for reliable results
+            const modelOverride = SEMANTIC_MODELS[this.semanticModelCounter++ % 2];
             const response = await this.aiService.generateSemanticAnalysis<{
                 keyWords: string;
                 keyPoints: string;
@@ -123,7 +124,8 @@ For the note, provide:
                 responseSchema,
                 1200, // Appropriate token limit for single note
                 0.2, // Low temperature for consistent results
-                0.72 // Default topP
+                0.72, // Default topP
+                modelOverride
             );
 
             // Extract the result (single object, not array)

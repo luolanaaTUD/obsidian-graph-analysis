@@ -6,7 +6,7 @@ import {
     VaultAnalysisData,
     MasterAnalysisManager
 } from './MasterAnalysisManager';
-import { AIModelService } from '../services/AIModelService';
+import { AIModelService, SEMANTIC_MODELS } from '../services/AIModelService';
 import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
@@ -22,15 +22,23 @@ export class VaultSemanticAnalysisManager {
     private subdivisionsList: Array<{id: string, name: string, domain: string, domainId: string}> = [];
     private domainTemplateLoaded: boolean = false;
     private readonly MAX_CHARS_PER_NOTE = 8000;
-    private readonly MAX_NOTES_PER_BATCH = 10;
-    private readonly DELAY_BETWEEN_BATCHES = 4000; // 4s between batches (~15 req/min, within Gemma 3 27B RPM=30)
-    private readonly RATE_LIMIT_RETRY_DELAY = 15000; // 15s retry delay to respect Gemma 3 27B TPM=15K limit
+    private readonly MAX_NOTES_PER_BATCH = 30;
+    private readonly DELAY_BETWEEN_BATCHES = 6000; // 6s between batches (Gemini 2.5 Flash Lite RPM 10)
+    private readonly RATE_LIMIT_RETRY_DELAY = 12000; // 12s retry delay on rate limit
 
     /**
      * Get the path to vault-analysis.json in the responses folder
      */
     private getVaultAnalysisFilePath(): string {
         return `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/vault-analysis.json`;
+    }
+
+    private getFailedBatchesFilePath(): string {
+        return `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/vault-analysis-failed-batches.json`;
+    }
+
+    private getSemanticModelForBatch(batchIndex: number): string {
+        return SEMANTIC_MODELS[batchIndex % 2];
     }
 
     /**
@@ -570,9 +578,6 @@ export class VaultSemanticAnalysisManager {
                     if (isShort) {
                         console.log(`File "${file.basename}": raw=${rawCharCount} chars, cleaned=${charCount} chars -> isShort=${isShort}`);
                     }
-                    if (rawCharCount >= 50 && charCount < 50) {
-                        console.warn(`Note "${file.basename}" has ${rawCharCount} raw chars but only ${charCount} after cleanup - content may be structured unusually`);
-                    }
 
                     // Get file stats
                     const stat = await this.app.vault.adapter.stat(file.path);
@@ -600,14 +605,14 @@ export class VaultSemanticAnalysisManager {
                 }
             }
 
-            // Create note-based batches (10 notes per batch for Gemma 3 27B: RPM=30, TPM=15K, RPD=14.4K)
+            // Create note-based batches (30 notes per batch for Gemini 2.5 Flash Lite: RPM 10)
             const delayBetweenBatches = this.DELAY_BETWEEN_BATCHES;
             
             const batches: Array<typeof fileDataList> = [];
             let currentBatch: typeof fileDataList = [];
 
             for (const fileData of fileDataList) {
-                // If current batch is full (50 notes), start a new batch
+                // If current batch is full (30 notes), start a new batch
                 if (currentBatch.length >= this.MAX_NOTES_PER_BATCH) {
                     batches.push(currentBatch);
                     currentBatch = [fileData];
@@ -658,8 +663,8 @@ export class VaultSemanticAnalysisManager {
                 progressNotice.setMessage(progressText);
                 
                 try {
-                    // Process entire batch in a single API request
-                    const batchResult = await this.analyzeBatch(batch);
+                    // Process entire batch in a single API request (alternate model per batch)
+                    const batchResult = await this.analyzeBatch(batch, batchIndex);
                     const batchResults = batchResult.results;
                     totalTokenUsage.promptTokens += batchResult.tokenUsage.promptTokens;
                     totalTokenUsage.candidatesTokens += batchResult.tokenUsage.candidatesTokens;
@@ -684,51 +689,36 @@ export class VaultSemanticAnalysisManager {
                     
                 } catch (batchError) {
                     console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
-                    
-                    // Check if it's a rate limit error (429) and retry with longer delay
-                    if (batchError instanceof Error && batchError.message.includes('429')) {
-                        console.log(`Rate limit hit, retrying batch ${batchIndex + 1} after longer delay...`);
-                        const retryProgressText = isIncrementalUpdate
-                            ? `Retrying batch ${batchIndex + 1}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed, ${unchangedCount} unchanged)`
-                            : `Retrying batch ${batchIndex + 1}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed)`;
-                        progressNotice.setMessage(retryProgressText);
-                        
-                        // Wait longer for rate limit retry (respecting Gemma 3 27B TPM=15K)
-                        await new Promise(resolve => setTimeout(resolve, this.RATE_LIMIT_RETRY_DELAY));
-                        
-                        // Retry the batch once
-                        try {
-                            console.log(`Retrying batch ${batchIndex + 1}...`);
-                            const retryResult = await this.analyzeBatch(batch);
-                            const retryResults = retryResult.results;
-                            totalTokenUsage.promptTokens += retryResult.tokenUsage.promptTokens;
-                            totalTokenUsage.candidatesTokens += retryResult.tokenUsage.candidatesTokens;
-                            totalTokenUsage.totalTokens += retryResult.tokenUsage.totalTokens;
-                            
-                            console.log(`Batch ${batchIndex + 1} retry completed successfully`);
-                            
-                            for (let i = 0; i < batch.length; i++) {
-                                const fileData = batch[i];
-                                const result = retryResults[i];
-                                
-                                if (result && result.success && result.data) {
-                                    results.push(result.data);
-                                    processed++;
-                                } else {
-                                    console.error(`Failed to analyze file ${fileData.file.path} on retry:`, result?.error || 'Unknown error');
-                                    failed++;
-                                    processed++;
-                                }
+                    const primaryModel = this.getSemanticModelForBatch(batchIndex);
+                    const retryModel = SEMANTIC_MODELS[(batchIndex + 1) % 2];
+                    const retryProgressText = isIncrementalUpdate
+                        ? `Retrying batch ${batchIndex + 1}/${totalBatches} with ${retryModel}... (${processed}/${filesToProcess.length} completed, ${failed} failed, ${unchangedCount} unchanged)`
+                        : `Retrying batch ${batchIndex + 1}/${totalBatches} with ${retryModel}... (${processed}/${filesToProcess.length} completed, ${failed} failed)`;
+                    progressNotice.setMessage(retryProgressText);
+                    await new Promise(resolve => setTimeout(resolve, this.RATE_LIMIT_RETRY_DELAY));
+                    try {
+                        console.log(`Retrying batch ${batchIndex + 1} with ${retryModel}...`);
+                        const retryResult = await this.analyzeBatch(batch, batchIndex, retryModel);
+                        const retryResults = retryResult.results;
+                        totalTokenUsage.promptTokens += retryResult.tokenUsage.promptTokens;
+                        totalTokenUsage.candidatesTokens += retryResult.tokenUsage.candidatesTokens;
+                        totalTokenUsage.totalTokens += retryResult.tokenUsage.totalTokens;
+                        console.log(`Batch ${batchIndex + 1} retry completed successfully`);
+                        for (let i = 0; i < batch.length; i++) {
+                            const fileData = batch[i];
+                            const result = retryResults[i];
+                            if (result && result.success && result.data) {
+                                results.push(result.data);
+                                processed++;
+                            } else {
+                                console.error(`Failed to analyze file ${fileData.file.path} on retry:`, result?.error || 'Unknown error');
+                                failed++;
+                                processed++;
                             }
-                        } catch (retryError) {
-                            console.error(`Retry failed for batch ${batchIndex + 1}:`, retryError);
-                            // Mark all files in this batch as failed
-                            failed += batch.length;
-                            processed += batch.length;
                         }
-                    } else {
-                        // Non-rate-limit error, mark all files in this batch as failed
-                        console.error(`Non-rate-limit error in batch ${batchIndex + 1}:`, batchError);
+                    } catch (retryError) {
+                        console.error(`Retry failed for batch ${batchIndex + 1}:`, retryError);
+                        await this.appendFailedBatch(batch, batchIndex, primaryModel, retryModel, (retryError as Error).message);
                         failed += batch.length;
                         processed += batch.length;
                     }
@@ -827,7 +817,7 @@ export class VaultSemanticAnalysisManager {
         created: string;
         modified: string;
         isShort: boolean;
-    }>): Promise<{
+    }>, batchIndex: number, modelOverride?: string): Promise<{
         results: Array<{ success: boolean; data?: VaultAnalysisResult; error?: string }>;
         tokenUsage: { promptTokens: number; candidatesTokens: number; totalTokens: number };
     }> {
@@ -863,8 +853,8 @@ export class VaultSemanticAnalysisManager {
             // Process API files if any exist
             if (apiFiles.length > 0) {
                 try {
-                    // Use structured output instead of deprecated generateBatchAnalysis
-                    const batchAnalysisResult = await this.generateStructuredBatchAnalysis(apiFiles);
+                    const model = modelOverride ?? this.getSemanticModelForBatch(batchIndex);
+                    const batchAnalysisResult = await this.generateStructuredBatchAnalysis(apiFiles, model);
                     batchTokenUsage = batchAnalysisResult.tokenUsage;
                     
                     // Process API results
@@ -939,6 +929,34 @@ export class VaultSemanticAnalysisManager {
         // Generate a consistent ID based on file path
         // Obsidian doesn't provide a built-in unique ID, so we create one
         return file.path.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    }
+
+    private async appendFailedBatch(
+        batch: Array<{ file: TFile; charCount: number }>,
+        batchIndex: number,
+        primaryModel: string,
+        retryModel: string,
+        error: string
+    ): Promise<void> {
+        await this.ensureResponsesDirectory();
+        const filePath = this.getFailedBatchesFilePath();
+        let data: { failedBatches: Array<{ timestamp: string; batchIndex: number; primaryModel: string; retryModel: string; error: string; notes: Array<{ path: string; basename: string; charCount: number }> }> };
+        try {
+            const content = await this.app.vault.adapter.read(filePath);
+            data = JSON.parse(content);
+        } catch {
+            data = { failedBatches: [] };
+        }
+        data.failedBatches.push({
+            timestamp: new Date().toISOString(),
+            batchIndex,
+            primaryModel,
+            retryModel,
+            error,
+            notes: batch.map(b => ({ path: b.file.path, basename: b.file.basename, charCount: b.charCount }))
+        });
+        await this.app.vault.adapter.write(filePath, JSON.stringify(data, null, 2));
+        console.log(`Appended failed batch ${batchIndex + 1} to ${filePath}`);
     }
 
     private async ensureVaultAnalysisFileExists(): Promise<void> {
@@ -1250,7 +1268,7 @@ export class VaultSemanticAnalysisManager {
         created: string;
         modified: string;
         isShort: boolean;
-    }>): Promise<{
+    }>, modelOverride: string): Promise<{
         results: Array<{
             summary: string;
             keywords: string;
@@ -1326,9 +1344,10 @@ For each note, provide:
             }>>(
                 fullPrompt,
                 responseSchema,
-                meaningfulFiles.length * 150 + 300, // Calculate appropriate token limit
+                meaningfulFiles.length * 300 + 500, // Token limit for batch (300 per note + overhead)
                 0.2, // Low temperature for consistent results
-                0.72 // Default topP
+                0.72, // Default topP
+                modelOverride
             );
 
             console.log(`Batch analysis completed with DDC classification using structured output`);

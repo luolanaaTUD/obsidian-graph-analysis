@@ -18,14 +18,18 @@ export interface AIResponse<T = string> {
     tokenUsage: TokenUsage;
 }
 
-
+/** Semantic models for vault analysis and AI summary (dual-model for 40 RPD on free tier) */
+export const SEMANTIC_MODELS = ['gemini-2.5-flash-lite', 'gemini-flash-lite-latest'] as const;
 
 export class AIModelService {
     private settings: GraphAnalysisSettings;
-    private readonly RATE_LIMIT_DELAY = 2500; // 2.5 seconds between requests for 30 RPM
     private readonly MAX_RETRIES = 3;
-    private readonly MODEL_NAME = 'gemini-flash-lite-latest';
-    private readonly SEMANTIC_MODEL_NAME = 'gemma-3-27b-it';
+    // Gemini 3 Flash: RPM 5 -> 12s between requests
+    private readonly ADVANCED_RATE_LIMIT_DELAY = 12000;
+    // Gemini 2.5 Flash Lite (gemini-flash-lite-latest): RPM 10 -> 6s between requests
+    private readonly SEMANTIC_RATE_LIMIT_DELAY = 6000;
+    private readonly MODEL_NAME = 'gemini-2.5-flash';
+    private readonly SEMANTIC_MODEL_NAME = SEMANTIC_MODELS[0]; // Default when no modelOverride
     
     public getModelName(): string {
         return this.MODEL_NAME;
@@ -136,10 +140,8 @@ export class AIModelService {
             
             const errorMessage = (error as Error).message;
             if (errorMessage.includes('429') || errorMessage.includes('Rate limit')) {
-                // Handle rate limiting with exponential backoff
-                const waitTime = Math.max(this.RATE_LIMIT_DELAY, 5000);
-                console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${waitTime/1000} seconds...`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
+                console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${this.ADVANCED_RATE_LIMIT_DELAY/1000} seconds...`);
+                await new Promise(resolve => setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
                 return this.generateStructuredAnalysis(prompt, responseSchema, maxOutputTokens, temperature, topP);
             }
             
@@ -157,37 +159,37 @@ export class AIModelService {
     }
 
     /**
-     * Semantic analysis using Gemma 3 27B for token-heavy vault-wide tasks.
-     * Uses prompt-based JSON extraction because Gemma 3 does not support
-     * native JSON mode (responseMimeType / responseSchema).
+     * Semantic analysis using Gemini 2.5 Flash Lite for vault batch and AI summary.
+     * Uses native structured output (responseMimeType + responseSchema).
+     * @param modelOverride When set, use this model instead of SEMANTIC_MODEL_NAME (for dual-model rate limit)
      */
     public async generateSemanticAnalysis<T>(
         prompt: string,
         responseSchema: any,
         maxOutputTokens: number = 8192,
         temperature: number = 0.3,
-        topP: number = 0.72
+        topP: number = 0.72,
+        modelOverride?: string
     ): Promise<AIResponse<T>> {
         if (!this.genAI) {
             throw new Error('Gemini API key not configured. Please configure your API key in settings.');
         }
 
-        const schemaDescription = this.schemaToPromptDescription(responseSchema);
-        const augmentedPrompt = prompt +
-            '\n\n--- RESPONSE FORMAT ---\n' +
-            'Return ONLY valid JSON. Do not include markdown formatting (like ```json), greetings, or explanations. Just output the raw JSON.\n' +
-            'IMPORTANT: Your output language MUST match the language of each input note. If a note is written in Chinese, respond in Chinese; if in English, respond in English; and so on for any other language.\n\n' +
-            'Expected JSON Schema:\n' + schemaDescription + '\n';
+        const model = modelOverride ?? this.SEMANTIC_MODEL_NAME;
+        const languageInstruction = '\n\nIMPORTANT: Your output language MUST match the language of each input note. If a note is written in Chinese, respond in Chinese; if in English, respond in English; and so on for any other language.';
+        const fullPrompt = prompt + languageInstruction;
 
-        console.log(`Sending semantic analysis request to ${this.SEMANTIC_MODEL_NAME} (max tokens: ${maxOutputTokens})...`);
-        console.log(`SEMANTIC PROMPT (${augmentedPrompt.length} chars):`);
-        console.log(augmentedPrompt);
+        console.log(`Sending semantic analysis request to ${model} (max tokens: ${maxOutputTokens})...`);
+        console.log(`SEMANTIC PROMPT (${fullPrompt.length} chars):`);
+        console.log(fullPrompt);
 
         try {
             const response = await this.genAI.models.generateContent({
-                model: this.SEMANTIC_MODEL_NAME,
-                contents: augmentedPrompt,
+                model,
+                contents: fullPrompt,
                 config: {
+                    responseMimeType: 'application/json',
+                    responseSchema,
                     temperature,
                     topP,
                     maxOutputTokens,
@@ -200,9 +202,9 @@ export class AIModelService {
                 totalTokens: response.usageMetadata?.totalTokenCount || 0
             };
 
-            const rawText = response.text?.trim() || '';
+            const result = response.text?.trim() || '';
 
-            if (!rawText) {
+            if (!result) {
                 console.error('Empty semantic response details:', {
                     responseDefined: !!response,
                     textProperty: response.text,
@@ -212,18 +214,16 @@ export class AIModelService {
                 throw new Error('Empty response from Gemini API - check API key, request format, or content policy restrictions');
             }
 
-            const cleanedJson = this.cleanJsonResponse(rawText);
-
             let parsedResult: T;
             try {
-                parsedResult = JSON.parse(cleanedJson) as T;
+                parsedResult = JSON.parse(result) as T;
             } catch (parseError) {
                 console.error('Failed to parse semantic response as JSON:', parseError);
-                console.error('Raw response text:', rawText.substring(0, 500));
+                console.error('Raw response text:', result.substring(0, 500));
                 throw new Error(`Failed to parse semantic response: ${(parseError as Error).message}`);
             }
 
-            console.log(`SEMANTIC RESPONSE SUCCESS (${cleanedJson.length} chars, tokens: ${tokenUsage.totalTokens})`);
+            console.log(`SEMANTIC RESPONSE SUCCESS (${result.length} chars, tokens: ${tokenUsage.totalTokens})`);
             console.log('Parsed result:', parsedResult);
 
             return {
@@ -232,13 +232,13 @@ export class AIModelService {
             };
 
         } catch (error) {
-            console.error(`${this.SEMANTIC_MODEL_NAME} semantic API error:`, error);
+            console.error(`${model} semantic API error:`, error);
 
             const errorMessage = (error as Error).message;
             if (errorMessage.includes('429') || errorMessage.includes('Rate limit')) {
-                console.log(`Semantic analysis rate limited (${this.SEMANTIC_MODEL_NAME}). Retrying in 10 seconds...`);
-                await new Promise(resolve => setTimeout(resolve, 10000));
-                return this.generateSemanticAnalysis(prompt, responseSchema, maxOutputTokens, temperature, topP);
+                console.log(`Semantic analysis rate limited (${model}). Retrying in ${this.SEMANTIC_RATE_LIMIT_DELAY/1000} seconds...`);
+                await new Promise(resolve => setTimeout(resolve, this.SEMANTIC_RATE_LIMIT_DELAY));
+                return this.generateSemanticAnalysis(prompt, responseSchema, maxOutputTokens, temperature, topP, modelOverride);
             }
 
             console.error('Semantic analysis error context:', {
@@ -249,59 +249,6 @@ export class AIModelService {
 
             throw error;
         }
-    }
-
-    /**
-     * Converts a Gemini-style schema object into a human-readable JSON template
-     * for embedding in prompts (used by models that lack native JSON mode).
-     */
-    private schemaToPromptDescription(schema: any, indent: number = 0): string {
-        const pad = '  '.repeat(indent);
-        if (!schema || !schema.type) return `${pad}"unknown"`;
-
-        switch (schema.type) {
-            case 'STRING':
-                return schema.description ? `"string — ${schema.description}"` : '"string"';
-            case 'NUMBER':
-            case 'INTEGER':
-                return schema.description ? `"number — ${schema.description}"` : '"number"';
-            case 'BOOLEAN':
-                return '"boolean"';
-            case 'ARRAY': {
-                if (!schema.items) return '[]';
-                const itemDesc = this.schemaToPromptDescription(schema.items, indent + 1);
-                const constraints: string[] = [];
-                if (schema.minItems !== undefined) constraints.push(`minItems: ${schema.minItems}`);
-                if (schema.maxItems !== undefined) constraints.push(`maxItems: ${schema.maxItems}`);
-                const note = constraints.length > 0 ? `  // ${constraints.join(', ')}` : '';
-                return `[${note}\n${pad}  ${itemDesc}\n${pad}]`;
-            }
-            case 'OBJECT': {
-                if (!schema.properties) return '{}';
-                const props = Object.entries(schema.properties)
-                    .map(([key, propSchema]) => {
-                        const val = this.schemaToPromptDescription(propSchema, indent + 1);
-                        return `${pad}  "${key}": ${val}`;
-                    })
-                    .join(',\n');
-                const requiredNote = schema.required
-                    ? `  // required: ${JSON.stringify(schema.required)}`
-                    : '';
-                return `{${requiredNote}\n${props}\n${pad}}`;
-            }
-            default:
-                return `"${schema.type}"`;
-        }
-    }
-
-    /**
-     * Strips markdown code fences that LLMs sometimes wrap around JSON output.
-     */
-    private cleanJsonResponse(text: string): string {
-        let cleaned = text.trim();
-        cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
-        cleaned = cleaned.replace(/```\s*$/i, '');
-        return cleaned.trim();
     }
 
     // ==========================================
@@ -355,17 +302,16 @@ export class AIModelService {
 
 
     /**
-     * Rate limiting helper - wait between requests
+     * Rate limiting helper - wait between requests (uses Gemini 3 Flash rate: 12s)
      */
     public async waitForRateLimit(): Promise<void> {
-        await new Promise(resolve => setTimeout(resolve, this.RATE_LIMIT_DELAY));
+        await new Promise(resolve => setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
     }
 
     /**
-     * Calculate recommended delay based on request count
+     * Calculate recommended delay based on request count (Gemini 3 Flash: RPM 5)
      */
     public calculateDelay(requestCount: number): number {
-        // For 30 RPM limit, ensure we don't exceed the rate
-        return Math.max(this.RATE_LIMIT_DELAY, (60 * 1000) / 25); // 25 requests per minute to be safe
+        return this.ADVANCED_RATE_LIMIT_DELAY;
     }
 } 
