@@ -10,6 +10,7 @@ import { AIModelService } from '../services/AIModelService';
 import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
+import { cleanupNoteContent } from '../utils/NoteContentUtils';
 
 export class VaultSemanticAnalysisManager {
     private app: App;
@@ -560,7 +561,10 @@ export class VaultSemanticAnalysisManager {
                 try {
                     const content = await this.app.vault.read(file);
                     const rawCharCount = content.trim().length;
-                    const cleanedContent = this.cleanupContent(content);
+                    let cleanedContent = cleanupNoteContent(content);
+                    if (cleanedContent.length > this.MAX_CHARS_PER_NOTE) {
+                        cleanedContent = cleanedContent.slice(0, this.MAX_CHARS_PER_NOTE) + '...';
+                    }
                     const charCount = cleanedContent.length;
                     const isShort = rawCharCount < 50;
                     if (isShort) {
@@ -935,19 +939,6 @@ export class VaultSemanticAnalysisManager {
         // Generate a consistent ID based on file path
         // Obsidian doesn't provide a built-in unique ID, so we create one
         return file.path.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-    }
-
-    private cleanupContent(content: string): string {
-        let cleaned = content
-            .replace(/^---[\s\S]*?---\n?/, '')   // Remove frontmatter
-            .replace(/```[\s\S]*?```/g, '')       // Remove code blocks
-            .replace(/\s+/g, ' ')                 // Normalize whitespace
-            .trim();
-
-        if (cleaned.length > this.MAX_CHARS_PER_NOTE) {
-            cleaned = cleaned.slice(0, this.MAX_CHARS_PER_NOTE) + '...';
-        }
-        return cleaned;
     }
 
     private async ensureVaultAnalysisFileExists(): Promise<void> {

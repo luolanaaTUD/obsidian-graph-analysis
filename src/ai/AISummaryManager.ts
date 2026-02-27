@@ -1,6 +1,7 @@
 import { App, Notice, Modal, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { AIModelService } from '../services/AIModelService';
+import { cleanupNoteContent } from '../utils/NoteContentUtils';
 
 export class AISummaryManager {
     private app: App;
@@ -53,8 +54,8 @@ export class AISummaryManager {
         try {
             // Get file content first to check if it's worth summarizing
             const content = await this.app.vault.read(activeFile);
-            const cleanedContent = this.cleanupContent(content);
-            const wordCount = cleanedContent.split(/\s+/).length;
+            const cleanedContent = this.truncateByWords(cleanupNoteContent(content));
+            const wordCount = cleanedContent.split(/\s+/).filter(w => w.length > 0).length;
             
             // Show loading notice with word count info
             const loadingNotice = new Notice(`Generating AI summary for ${wordCount} words...`, 0);
@@ -76,44 +77,11 @@ export class AISummaryManager {
 
 
 
-    private cleanupContent(content: string): string {
-        // Remove markdown syntax and clean up content
-        let cleaned = content
-            // Remove frontmatter
-            .replace(/^---[\s\S]*?---\n?/m, '')
-            // Remove empty lines
-            .replace(/^\s*$/gm, '')
-            // Remove multiple consecutive newlines
-            .replace(/\n{3,}/g, '\n\n')
-            // Remove markdown headers
-            .replace(/^#{1,6}\s+/gm, '')
-            // Remove markdown links but keep text
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            // Remove markdown bold/italic
-            .replace(/\*\*([^*]+)\*\*/g, '$1')
-            .replace(/\*([^*]+)\*/g, '$1')
-            // Remove markdown code blocks
-            .replace(/```[\s\S]*?```/g, '')
-            // Remove inline code
-            .replace(/`([^`]+)`/g, '$1')
-            // Remove bullet points
-            .replace(/^[\s]*[-*+]\s+/gm, '')
-            // Remove numbered lists
-            .replace(/^[\s]*\d+\.\s+/gm, '')
-            // Clean up extra whitespace
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        // Limit to approximately MAX_WORDS_PER_NOTE words
-        const words = cleaned.split(/\s+/);
-        if (words.length > this.MAX_WORDS_PER_NOTE) {
-            cleaned = words.slice(0, this.MAX_WORDS_PER_NOTE).join(' ') + '...';
-        }
-
-        return cleaned;
+    private truncateByWords(content: string): string {
+        const words = content.split(/\s+/).filter(w => w.length > 0);
+        if (words.length <= this.MAX_WORDS_PER_NOTE) return content;
+        return words.slice(0, this.MAX_WORDS_PER_NOTE).join(' ') + '...';
     }
-
-
 
     private async callAIForSummary(content: string, fileName: string): Promise<string> {
         // Check if Gemini API key is configured
@@ -123,7 +91,7 @@ export class AISummaryManager {
 
         try {
             // Clean up and limit content
-            const cleanedContent = this.cleanupContent(content);
+            const cleanedContent = this.truncateByWords(cleanupNoteContent(content));
             
             // Create structured analysis schema for single note summary
             const responseSchema = this.aiService.createNoteSummarySchema();
