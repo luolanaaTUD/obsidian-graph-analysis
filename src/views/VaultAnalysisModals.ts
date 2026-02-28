@@ -1456,7 +1456,11 @@ export class VaultAnalysisModal extends Modal {
         for (const candidate of candidates) {
             const card = grid.createEl('div', { cls: `review-card priority-${candidate.priority}` });
             card.setAttribute('data-path', candidate.path);
-            card.setAttribute('title', `Click to open "${candidate.title}" in a new tab`);
+            // Tooltip: full rationale on hover; native title shows complete reason (card truncates to 3 lines)
+            const tooltipText = candidate.reason
+                ? `${candidate.reason}\n\nClick to open "${candidate.title}" in a new tab`
+                : `Click to open "${candidate.title}" in a new tab`;
+            card.setAttribute('title', tooltipText);
 
             // Card header: title + priority badge
             const header = card.createEl('div', { cls: 'review-card-header' });

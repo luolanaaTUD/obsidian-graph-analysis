@@ -12,6 +12,25 @@ import { PluginService } from '../services/PluginService';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
 import { cleanupNoteContent } from '../utils/NoteContentUtils';
 
+interface FailedBatchEntry {
+    timestamp: string;
+    batchIndex: number;
+    primaryModel: string;
+    retryModel: string;
+    error: string;
+    notes: Array<{ path: string; basename: string; charCount: number }>;
+}
+
+interface FailedBatchesData {
+    remaining: {
+        savedAt: string;
+        retryAfter: string;
+        reason: string;
+        notes: Array<{ path: string; basename: string; charCount: number }>;
+    } | null;
+    failed: FailedBatchEntry[];
+}
+
 export class VaultSemanticAnalysisManager {
     private app: App;
     private settings: GraphAnalysisSettings;
@@ -659,9 +678,11 @@ export class VaultSemanticAnalysisManager {
             let totalTokenUsage = { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 };
             let stoppedDueToQuota = false;
             let firstBatchTimestamp: string | null = null;
+            let lastBatchIndex = -1;
 
             // Process batches sequentially with proper rate limiting
             for (let batchIndex = 0; batchIndex < totalBatches && !stoppedDueToQuota; batchIndex++) {
+                lastBatchIndex = batchIndex;
                 const batch = batches[batchIndex];
                 const batchFileCount = batch.length;
                 const batchCharCount = batch.reduce((sum, f) => sum + f.charCount, 0);
@@ -732,6 +753,7 @@ export class VaultSemanticAnalysisManager {
                     totalTokenUsage.candidatesTokens += batchResult.tokenUsage.candidatesTokens;
                     totalTokenUsage.totalTokens += batchResult.tokenUsage.totalTokens;
                     console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} notes, ${batchCharCount} chars`);
+                    const perNoteFailures: Array<{ path: string; basename: string; charCount: number }> = [];
                     for (let i = 0; i < batch.length; i++) {
                         const fileData = batch[i];
                         const result = batchResult!.results[i];
@@ -740,9 +762,17 @@ export class VaultSemanticAnalysisManager {
                             processed++;
                         } else {
                             console.error(`Failed to analyze file ${fileData.file.path}:`, result?.error || 'Unknown error');
+                            perNoteFailures.push({
+                                path: fileData.file.path,
+                                basename: fileData.file.basename,
+                                charCount: fileData.charCount
+                            });
                             failed++;
                             processed++;
                         }
+                    }
+                    if (perNoteFailures.length > 0) {
+                        await this.appendFailedNotes(perNoteFailures, batchIndex, 'Empty or missing analysis in batch response');
                     }
 
                     // Persist after each successful batch
@@ -775,6 +805,11 @@ export class VaultSemanticAnalysisManager {
                     // Single batch - no rate limiting needed
                     console.log('Single batch processing completed - no rate limiting required');
                 }
+            }
+
+            if (stoppedDueToQuota && lastBatchIndex + 1 < totalBatches) {
+                const remainingBatches = batches.slice(lastBatchIndex + 1);
+                await this.saveRemainingNotes(remainingBatches);
             }
 
             // Hide progress notice
@@ -829,7 +864,12 @@ export class VaultSemanticAnalysisManager {
             let completionMessage: string;
 
             if (stoppedDueToQuota) {
-                completionMessage = `Saved partial results (${successCount} files). Free-tier daily limit reached. Retry tomorrow.`;
+                const retryTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                const retryTimeStr = retryTime.toLocaleString();
+                const remainingCount = filesToProcess.length - successCount;
+                completionMessage = `Saved partial results (${successCount}/${filesToProcess.length} files). `
+                    + `Free Google API can process ~500 notes per day. `
+                    + `You can continue analyzing the remaining ${remainingCount} notes after ${retryTimeStr} by running the analysis again.`;
             } else if (isIncrementalUpdate) {
                 if (failed === 0) {
                     completionMessage = `✅ Analysis updated successfully! Processed ${successCount} changed/new files (${changedCount} changed, ${newCount} new), kept ${unchangedCount} unchanged, removed ${deletedFilePaths.length} deleted.`;
@@ -974,14 +1014,30 @@ export class VaultSemanticAnalysisManager {
         return file.path.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
     }
 
+    private readonly FAILED_BATCHES_EMPTY: FailedBatchesData = { remaining: null, failed: [] };
+
     private async getFailedBatchFilePaths(): Promise<string[]> {
         try {
             const content = await this.app.vault.adapter.read(this.getFailedBatchesFilePath());
-            const data = JSON.parse(content) as { failedBatches: Array<{ notes: Array<{ path: string }> }> };
+            const data = JSON.parse(content) as FailedBatchesData | { failedBatches?: Array<{ notes: Array<{ path: string }> }> };
             const paths = new Set<string>();
-            for (const fb of data.failedBatches ?? []) {
-                for (const note of fb.notes ?? []) {
+            if ('remaining' in data && data.remaining?.notes) {
+                for (const note of data.remaining.notes) {
                     if (note.path) paths.add(note.path);
+                }
+            }
+            if ('failed' in data && Array.isArray(data.failed)) {
+                for (const fb of data.failed) {
+                    for (const note of fb.notes ?? []) {
+                        if (note.path) paths.add(note.path);
+                    }
+                }
+            }
+            if ('failedBatches' in data && Array.isArray(data.failedBatches)) {
+                for (const fb of data.failedBatches) {
+                    for (const note of fb.notes ?? []) {
+                        if (note.path) paths.add(note.path);
+                    }
                 }
             }
             return [...paths];
@@ -992,8 +1048,33 @@ export class VaultSemanticAnalysisManager {
 
     private async clearFailedBatches(): Promise<void> {
         await this.ensureResponsesDirectory();
-        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify({ failedBatches: [] }, null, 2));
+        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(this.FAILED_BATCHES_EMPTY, null, 2));
         console.log('Cleared vault-analysis-failed-batches.json');
+    }
+
+    private async readFailedBatchesData(): Promise<FailedBatchesData> {
+        const filePath = this.getFailedBatchesFilePath();
+        try {
+            const content = await this.app.vault.adapter.read(filePath);
+            const raw = JSON.parse(content);
+            if (raw.remaining != null || Array.isArray(raw.failed)) {
+                return { remaining: raw.remaining ?? null, failed: raw.failed ?? [] };
+            }
+            const migrated: FailedBatchesData = { remaining: null, failed: [] };
+            for (const fb of raw.failedBatches ?? []) {
+                migrated.failed.push({
+                    timestamp: fb.timestamp ?? new Date().toISOString(),
+                    batchIndex: fb.batchIndex ?? -1,
+                    primaryModel: fb.primaryModel ?? '',
+                    retryModel: fb.retryModel ?? '',
+                    error: fb.error ?? 'Unknown',
+                    notes: fb.notes ?? []
+                });
+            }
+            return migrated;
+        } catch {
+            return this.FAILED_BATCHES_EMPTY;
+        }
     }
 
     private async appendFailedBatch(
@@ -1004,15 +1085,8 @@ export class VaultSemanticAnalysisManager {
         error: string
     ): Promise<void> {
         await this.ensureResponsesDirectory();
-        const filePath = this.getFailedBatchesFilePath();
-        let data: { failedBatches: Array<{ timestamp: string; batchIndex: number; primaryModel: string; retryModel: string; error: string; notes: Array<{ path: string; basename: string; charCount: number }> }> };
-        try {
-            const content = await this.app.vault.adapter.read(filePath);
-            data = JSON.parse(content);
-        } catch {
-            data = { failedBatches: [] };
-        }
-        data.failedBatches.push({
+        const data = await this.readFailedBatchesData();
+        data.failed.push({
             timestamp: new Date().toISOString(),
             batchIndex,
             primaryModel,
@@ -1020,8 +1094,49 @@ export class VaultSemanticAnalysisManager {
             error,
             notes: batch.map(b => ({ path: b.file.path, basename: b.file.basename, charCount: b.charCount }))
         });
-        await this.app.vault.adapter.write(filePath, JSON.stringify(data, null, 2));
-        console.log(`Appended failed batch ${batchIndex + 1} to ${filePath}`);
+        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
+        console.log(`Appended failed batch ${batchIndex + 1} to ${this.getFailedBatchesFilePath()}`);
+    }
+
+    private async appendFailedNotes(
+        notes: Array<{ path: string; basename: string; charCount: number }>,
+        batchIndex: number,
+        error: string
+    ): Promise<void> {
+        if (notes.length === 0) return;
+        await this.ensureResponsesDirectory();
+        const data = await this.readFailedBatchesData();
+        data.failed.push({
+            timestamp: new Date().toISOString(),
+            batchIndex,
+            primaryModel: '',
+            retryModel: '',
+            error,
+            notes
+        });
+        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
+        console.log(`Appended ${notes.length} failed notes to ${this.getFailedBatchesFilePath()}`);
+    }
+
+    private async saveRemainingNotes(
+        batches: Array<Array<{ file: TFile; charCount: number }>>
+    ): Promise<void> {
+        const notes = batches.flatMap(batch =>
+            batch.map(b => ({ path: b.file.path, basename: b.file.basename, charCount: b.charCount }))
+        );
+        if (notes.length === 0) return;
+        await this.ensureResponsesDirectory();
+        const data = await this.readFailedBatchesData();
+        const now = new Date();
+        const retryAfter = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        data.remaining = {
+            savedAt: now.toISOString(),
+            retryAfter: retryAfter.toISOString(),
+            reason: 'quota_exhausted',
+            notes
+        };
+        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
+        console.log(`Saved ${notes.length} remaining notes to ${this.getFailedBatchesFilePath()}`);
     }
 
     private async ensureVaultAnalysisFileExists(): Promise<void> {
@@ -1379,6 +1494,9 @@ For each note, provide:
 1. **Summary**: A two to three sentence summary of the main concept or purpose (be detailed and insightful)
 2. **Keywords**: 3-6 key terms or phrases (comma-separated)
 3. **Knowledge Domain**: Knowledge domain subdivision codes that best match the content (comma-separated)
+
+## Language Rule
+Always respond in the same language as the note content. If a note is written in Chinese, the summary and keywords must be in Chinese. If in English, respond in English. Match each note's language independently.
 
 ## Notes to Analyze:`;
 
