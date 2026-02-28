@@ -63,30 +63,16 @@ export class KnowledgeStructureManager {
     private defaultCreateEmptyState(container: HTMLElement, message: string): void {
         const emptyState = document.createElement('div');
         emptyState.className = 'network-empty-state';
-        emptyState.style.textAlign = 'center';
-        emptyState.style.padding = '40px 20px';
-        emptyState.style.background = 'var(--background-secondary-alt)';
-        emptyState.style.borderRadius = '12px';
-        emptyState.style.border = '1px dashed var(--background-modifier-border)';
         container.appendChild(emptyState);
-        
+
         const iconEl = document.createElement('div');
         iconEl.className = 'network-empty-state-icon';
-        iconEl.style.marginBottom = '16px';
-        iconEl.style.display = 'flex';
-        iconEl.style.justifyContent = 'center';
-        iconEl.style.alignItems = 'center';
         emptyState.appendChild(iconEl);
-        
-        // Add Lucide chart icon
         setIcon(iconEl, 'bar-chart-2');
-        
+
         const textEl = document.createElement('p');
         textEl.className = 'network-empty-state-text';
         textEl.textContent = message;
-        textEl.style.color = 'var(--text-muted)';
-        textEl.style.fontSize = '14px';
-        textEl.style.lineHeight = '1.5';
         emptyState.appendChild(textEl);
     }
 
@@ -390,31 +376,12 @@ export class KnowledgeStructureManager {
             
             // Create title container with icon
             const titleContainer = chartContainer.createEl('div', { cls: 'kde-chart-title-container' });
-            titleContainer.style.display = 'flex';
-            titleContainer.style.alignItems = 'center';
-            titleContainer.style.gap = '12px';
-            titleContainer.style.marginBottom = '16px';
-            
-            // Add Lucide icon
             const iconEl = titleContainer.createEl('div', { cls: 'kde-chart-icon' });
-            iconEl.style.display = 'flex';
-            iconEl.style.alignItems = 'center';
-            iconEl.style.justifyContent = 'center';
-            iconEl.style.width = '24px';
-            iconEl.style.height = '24px';
-            iconEl.style.color = 'var(--text-accent)';
-            iconEl.style.flexShrink = '0';
             setIcon(iconEl, 'bar-chart-2');
-            
-            // Add title
-            const chartTitle = titleContainer.createEl('h4', {
+            titleContainer.createEl('h4', {
                 text: 'Centrality Score Distributions',
                 cls: 'kde-chart-title'
             });
-            chartTitle.style.marginBottom = '0';
-            chartTitle.style.fontSize = '16px';
-            chartTitle.style.fontWeight = '600';
-            chartTitle.style.color = 'var(--text-normal)';
             
             // Create inner container for SVG
             const svgContainer = chartContainer.createEl('div', { cls: 'kde-chart-svg-container' });
@@ -441,7 +408,6 @@ export class KnowledgeStructureManager {
     private renderInsightsPanel(container: HTMLElement, stats: StructuredCentralityStats): void {
         // Create insights container
         const insightsContainer = container.createEl('div', { cls: 'kde-chart-insights' });
-        insightsContainer.style.marginTop = '20px';
 
         // Define centrality types with their icons
         const centralityTypes = [
@@ -457,63 +423,26 @@ export class KnowledgeStructureManager {
 
             // Create insight card
             const card = insightsContainer.createEl('div', { cls: 'kde-chart-insight-card' });
-            card.style.background = 'var(--background-secondary-alt)';
-            card.style.borderRadius = '8px';
-            card.style.padding = '12px';
-
-            // Header with icon and name
             const header = card.createEl('div', { cls: 'kde-chart-insight-header' });
-            header.style.display = 'flex';
-            header.style.alignItems = 'center';
-            header.style.gap = '8px';
-            header.style.marginBottom = '8px';
-
             const iconEl = header.createEl('div', { cls: 'kde-chart-insight-icon' });
-            iconEl.style.display = 'flex';
-            iconEl.style.alignItems = 'center';
-            iconEl.style.justifyContent = 'center';
-            iconEl.style.width = '20px';
-            iconEl.style.height = '20px';
-            iconEl.style.color = 'var(--text-accent)';
-            iconEl.style.flexShrink = '0';
             setIcon(iconEl, icon);
-
             const titleEl = header.createEl('span', { cls: 'kde-chart-insight-title' });
             titleEl.textContent = name;
-            titleEl.style.fontSize = '14px';
-            titleEl.style.fontWeight = '600';
-            titleEl.style.color = 'var(--text-normal)';
 
-            // Stats line
             const statsLine = card.createEl('div', { cls: 'kde-chart-insight-stats' });
-            statsLine.style.fontSize = '13px';
-            statsLine.style.color = 'var(--text-muted)';
-            statsLine.style.marginBottom = '8px';
-            statsLine.style.display = 'flex';
-            statsLine.style.flexWrap = 'wrap';
-            statsLine.style.gap = '12px';
-
-            // Format stats
             const statsParts = [
                 `N=${stat.count}`,
                 `Mean: ${stat.mean.toFixed(3)}`,
                 `Range: ${stat.range.min.toFixed(2)}-${stat.range.max.toFixed(2)}`,
                 stat.distribution
             ];
-            statsParts.forEach((part, index) => {
+            statsParts.forEach((part) => {
                 const span = statsLine.createEl('span');
                 span.textContent = part;
-                if (index < statsParts.length - 1) {
-                    span.style.marginRight = '8px';
-                }
             });
 
-            // Interpretation (mandatory)
             const interpretationEl = card.createEl('div', { cls: 'kde-chart-insight-interpretation' });
             interpretationEl.textContent = stat.interpretation;
-            interpretationEl.style.fontSize = '13px';
-            interpretationEl.style.color = 'var(--text-normal)';
-            interpretationEl.style.lineHeight = '1.5';
         });
     }
 
@@ -617,12 +546,16 @@ export class KnowledgeStructureManager {
                     this.createDomainCard(cardsContainer, tab.id, node);
                 });
             } else {
-                // Show empty state
                 const emptyState = document.createElement('div');
-                emptyState.style.textAlign = 'center';
-                emptyState.style.padding = '40px 20px';
-                emptyState.style.color = 'var(--text-muted)';
-                emptyState.textContent = `No ${tab.label.toLowerCase()} found.`;
+                emptyState.className = 'network-empty-state';
+                const iconEl = document.createElement('div');
+                iconEl.className = 'network-empty-state-icon';
+                setIcon(iconEl, tab.icon);
+                emptyState.appendChild(iconEl);
+                const textEl = document.createElement('p');
+                textEl.className = 'network-empty-state-text';
+                textEl.textContent = `No ${tab.label.toLowerCase()} found.`;
+                emptyState.appendChild(textEl);
                 panel.appendChild(emptyState);
             }
         });

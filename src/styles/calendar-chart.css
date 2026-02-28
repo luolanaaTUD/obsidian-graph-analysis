@@ -217,12 +217,12 @@ text[font-size="14px"] {
 
 /* Remove border on hover for cleaner look */
 .day-cell:hover {
-    stroke: rgba(27, 31, 35, 0.15);
+    stroke: color-mix(in srgb, var(--background-modifier-border) 15%, transparent);
     stroke-width: 1px;
 }
 
 .theme-dark .day-cell:hover {
-    stroke: rgba(240, 246, 252, 0.3);
+    stroke: color-mix(in srgb, var(--background-modifier-border) 30%, transparent);
     stroke-width: 1px;
 }
 

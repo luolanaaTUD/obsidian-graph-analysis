@@ -67,7 +67,7 @@
     min-width: 280px;
     background: var(--background-primary, #ffffff);
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-m);
     padding: 0;
     overflow: hidden;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -80,7 +80,7 @@
 
 .network-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-l);
     z-index: 2;
 }
 
@@ -103,7 +103,7 @@
     height: 40px;
     background: var(--background-primary, #ffffff);
     border-radius: 50%;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-s);
 }
 
 .network-card-title-container {
@@ -250,14 +250,23 @@
     text-align: center !important;
 }
 
+.network-placeholder-separator {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
 .network-empty-state-icon {
     font-size: 36px;
     margin-bottom: 16px;
     color: var(--text-muted, #656d76);
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .network-empty-state-text {
-    font-size: 16px;
+    font-size: var(--font-ui-small, 14px);
     color: var(--text-muted, #656d76);
     max-width: 400px;
     width: 100%;
@@ -412,9 +421,7 @@
   background-color: var(--background-primary);
   border: 1px solid var(--graph-tooltip-border);
   border-radius: var(--graph-tooltip-border-radius);
-  box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.1),
-    0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-m);
   padding: var(--graph-tooltip-padding);
   position: absolute;
   z-index: 9999;
@@ -984,7 +991,7 @@
   margin-top: 0;
 }
 
-/* Section container: rounded box with splitters between items */
+/* Section container: rounded box with splitters */
 .graph-settings-section-container {
   background-color: var(--background-secondary);
   border-radius: var(--radius-m);
@@ -993,25 +1000,71 @@
   margin-bottom: 24px;
 }
 
-.graph-settings-section-container .setting-item {
-  border-top: 1px solid var(--background-modifier-border);
-  padding: 12px 16px;
+/* Override custom theme styles - ensure items render as rows, not separate cards */
+.graph-settings-section-container .setting-item,
+.graph-settings-section-container .exclusion-stats {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
 }
 
-.graph-settings-section-container .setting-item:first-child {
+.graph-settings-section-container .setting-item {
+  padding: 12px 16px;
+  position: relative;
   border-top: none;
 }
 
-/* Exclusion stats: inside container with splitter above */
+.graph-settings-section-container .setting-item:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--background-modifier-border);
+  border-radius: 0;
+}
+
+.graph-settings-section-container .setting-item:first-child::before {
+  display: none;
+}
+
+/* Exclusion stats: pure straight splitter line */
 .graph-settings-section-container .exclusion-stats {
-  border-top: 1px solid var(--background-modifier-border);
   padding: 12px 16px;
+  position: relative;
+}
+
+.graph-settings-section-container .exclusion-stats::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--background-modifier-border);
+  border-radius: 0;
 }
 
 .stats-container {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.stats-text {
+  display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+}
+
+.stats-text .stat-item {
+  padding: 2px 0;
 }
 
 .stat-item {
@@ -1307,6 +1360,21 @@ button.is-disabled {
 
 /* Vault Analysis Modal Styles */
 
+/* Modal dimensions and layout - applied via JS addClass */
+.vault-analysis-modal {
+    width: 90vw !important;
+    height: auto !important;
+    max-width: 900px !important;
+    max-height: 90vh !important;
+}
+
+.vault-analysis-modal-content {
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+}
+
 /* Landscape Modal Layout */
 .vault-analysis-header {
     display: flex;
@@ -1410,6 +1478,12 @@ button.is-disabled {
     overflow-x: hidden;
     padding: 0 20px;
     min-height: 0; /* Allow flex item to shrink */
+}
+
+.vault-analysis-scroll-container {
+    overflow: auto;
+    height: 100%;
+    padding-right: 10px;
 }
 
 /* Consistent section layout system - invisible styling for clean UI */
@@ -1517,6 +1591,28 @@ button.is-disabled {
     margin-bottom: 16px;
 }
 
+/* KDE Chart Title Row */
+.kde-chart-title-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.kde-chart-title-container .kde-chart-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: var(--text-accent);
+    flex-shrink: 0;
+}
+
+.kde-chart-title-container .kde-chart-title {
+    margin-bottom: 0;
+}
+
 /* KDE Chart Container */
 .kde-chart-container {
     margin: 20px 0;
@@ -1524,7 +1620,7 @@ button.is-disabled {
     background: var(--background-primary);
     border-radius: 8px;
     border: 1px solid var(--background-modifier-border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--shadow-s);
 }
 
 .kde-chart-title {
@@ -1686,7 +1782,7 @@ button.is-disabled {
     background: var(--background-primary);
     border-radius: 8px;
     border: 1px solid var(--background-modifier-border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--shadow-s);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -2500,19 +2596,19 @@ button.is-disabled {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-m);
     min-width: 200px;
 }
 
 .analysis-trigger-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-m);
     background: linear-gradient(135deg, var(--interactive-accent) 0%, var(--color-accent) 100%);
 }
 
 .analysis-trigger-button:active {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-s);
 }
 
 .analysis-button-description {
@@ -2832,12 +2928,12 @@ button.is-disabled {
 
 .review-card:hover {
     border-color: var(--text-accent);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-s);
     transform: translateY(-2px);
 }
 
 .theme-dark .review-card:hover {
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-m);
 }
 
 .review-card-header {
@@ -2958,11 +3054,11 @@ button.is-disabled {
     pointer-events: none;
     z-index: 100;
     max-width: 280px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-m);
 }
 
 .theme-dark .subgraph-tooltip {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-l);
 }
 
 /* Legend */
@@ -3298,7 +3394,7 @@ button.is-disabled {
 
 /* Dark theme specific adjustments */
 .theme-dark .domain-chart {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-m);
 }
 
 .theme-dark .sunburst-tooltip {
@@ -3308,10 +3404,10 @@ button.is-disabled {
 
 /* Light theme specific adjustments */
 .theme-light .domain-chart {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-s);
 }
 
 .theme-light .sunburst-tooltip {
     backdrop-filter: blur(8px);
-    background: rgba(255, 255, 255, 0.95);
+    background: color-mix(in srgb, var(--background-primary) 95%, transparent);
 }

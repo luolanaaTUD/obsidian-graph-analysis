@@ -69,19 +69,9 @@ export class VaultAnalysisModal extends Modal {
     onOpen() {
         const { contentEl, modalEl } = this;
         contentEl.empty();
-        
-        // Set landscape layout dimensions - remove fixed height to prevent modal scrolling
-        modalEl.style.width = '90vw';
-        modalEl.style.height = 'auto';
-        modalEl.style.maxWidth = '900px';
-        modalEl.style.maxHeight = '90vh';
-        
-        // Ensure modal content doesn't scroll
-        contentEl.style.overflow = 'hidden';
-        contentEl.style.display = 'flex';
-        contentEl.style.flexDirection = 'column';
-        contentEl.style.height = '100%';
-        
+        modalEl.addClass('vault-analysis-modal');
+        contentEl.addClass('vault-analysis-modal-content');
+
         // Create header with navigation
         this.createHeader(contentEl);
         
@@ -365,10 +355,6 @@ export class VaultAnalysisModal extends Modal {
                 text: result.title,
                 cls: 'result-title'
             });
-            
-            // Make title clickable to open the note
-            titleEl.style.cursor = 'pointer';
-            titleEl.style.color = 'var(--text-accent)';
             titleEl.addEventListener('click', async () => {
                 const file = this.app.vault.getAbstractFileByPath(result.path);
                 if (file) {
@@ -637,13 +623,8 @@ export class VaultAnalysisModal extends Modal {
     private async loadKnowledgeStructureView(): Promise<void> {
         // Create the main container with a scrollable layout
         const structureContainer = this.contentContainer.createEl('div', { 
-            cls: 'knowledge-structure-container' 
+            cls: 'knowledge-structure-container vault-analysis-scroll-container' 
         });
-        
-        // Add CSS for proper scrolling
-        structureContainer.style.overflow = 'auto';
-        structureContainer.style.height = '100%';
-        structureContainer.style.paddingRight = '10px';
 
         if (!this.hasExistingData || !this.analysisData) {
             this.showStructureEmptyState(structureContainer);
@@ -786,35 +767,16 @@ export class VaultAnalysisModal extends Modal {
     public createEmptyState(container: HTMLElement, message: string): void {
         const emptyState = document.createElement('div');
         emptyState.className = 'network-empty-state';
-        emptyState.style.textAlign = 'center';
-        emptyState.style.padding = '40px 20px';
-        emptyState.style.background = 'var(--background-secondary-alt)';
-        emptyState.style.borderRadius = '12px';
-        emptyState.style.border = '1px dashed var(--background-modifier-border)';
         container.appendChild(emptyState);
-        
+
         const iconEl = document.createElement('div');
         iconEl.className = 'network-empty-state-icon';
-        iconEl.style.marginBottom = '16px';
-        iconEl.style.display = 'flex';
-        iconEl.style.justifyContent = 'center';
-        iconEl.style.alignItems = 'center';
         emptyState.appendChild(iconEl);
-        
-        // Add Lucide chart icon
         setIcon(iconEl, 'bar-chart-2');
-        
+
         const textEl = document.createElement('p');
         textEl.className = 'network-empty-state-text';
         textEl.textContent = message;
-        textEl.style.color = 'var(--text-muted)';
-        textEl.style.fontSize = '14px';
-        textEl.style.lineHeight = '1.5';
-        textEl.style.textAlign = 'center';
-        textEl.style.display = 'block';
-        textEl.style.width = '100%';
-        textEl.style.maxWidth = '400px';
-        textEl.style.margin = '0 auto';
         emptyState.appendChild(textEl);
     }
 
@@ -830,9 +792,6 @@ export class VaultAnalysisModal extends Modal {
         if (hasContent) {
             // KDE chart is already there, just add a separator and placeholder message
             const separator = container.createEl('div', { cls: 'network-placeholder-separator' });
-            separator.style.marginTop = '20px';
-            separator.style.paddingTop = '20px';
-            separator.style.borderTop = '1px solid var(--background-modifier-border)';
             
             this.createEmptyState(
                 separator, 
@@ -1306,9 +1265,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         // Add CSS for proper scrolling
-        recommendationsSection.style.overflow = 'auto';
-        recommendationsSection.style.height = '100%';
-        recommendationsSection.style.paddingRight = '10px';
+        recommendationsSection.addClass('vault-analysis-scroll-container');
         
         if (!this.hasExistingData || !this.analysisData) {
             const placeholderContainer = recommendationsSection.createEl('div', { 
@@ -1659,9 +1616,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         // Add CSS for proper scrolling
-        evolutionContainer.style.overflow = 'auto';
-        evolutionContainer.style.height = '100%';
-        evolutionContainer.style.paddingRight = '10px';
+        evolutionContainer.addClass('vault-analysis-scroll-container');
 
         if (!this.hasExistingData || !this.analysisData) {
             this.showEvolutionEmptyState(evolutionContainer);
@@ -1802,7 +1757,9 @@ export class VaultAnalysisModal extends Modal {
     }
 
     onClose() {
-        const { contentEl } = this;
+        const { contentEl, modalEl } = this;
+        modalEl.removeClass('vault-analysis-modal');
+        contentEl.removeClass('vault-analysis-modal-content');
         contentEl.empty();
     }
 }

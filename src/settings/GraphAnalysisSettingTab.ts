@@ -14,11 +14,12 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        // Exclude Notes from Analysis section
+        // Exclude Notes from Analysis: title + one rounded container (Exclude Folders | Exclude Tags | Statistics)
         containerEl.createEl('h3', { text: 'Exclude Notes from Analysis', cls: 'graph-settings-section-title' });
         const exclusionContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 
         new Setting(exclusionContainer)
+            .setClass('graph-settings-item')
             .setName('Exclude Folders')
             .setDesc('Use folder paths like "Archive", "Templates", "Private/Personal"')
             .addText(text => text
@@ -31,6 +32,7 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(exclusionContainer)
+            .setClass('graph-settings-item')
             .setName('Exclude Tags')
             .setDesc('Use tag names without # like "private", "draft", "archive"')
             .addText(text => text
@@ -45,12 +47,13 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
         // Exclusion statistics (inline under Exclude Notes from Analysis)
         this.createExclusionStatsSection(exclusionContainer);
 
-        // LLM Model Configuration section
+        // LLM Model Configuration: title + one rounded container
         containerEl.createEl('h3', { text: 'LLM Model Configuration', cls: 'graph-settings-section-title' });
         const apiContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 
         let apiKeyTextComponent: { inputEl: HTMLInputElement };
         new Setting(apiContainer)
+            .setClass('graph-settings-item')
             .setName('Gemini API Key')
             .setDesc(createFragment((frag: DocumentFragment) => {
                 frag.appendText('Your Google Gemini API key. ');
@@ -100,34 +103,25 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
 
         try {
             const stats = this.plugin.exclusionUtils.getExclusionStats();
-            
             const statsContainer = this.exclusionStatsEl.createDiv({ cls: 'stats-container' });
-            
+
+            const statsText = statsContainer.createDiv({ cls: 'stats-text' });
             const excludedParts: string[] = [];
             if (stats.excludedByFolder > 0) excludedParts.push(`${stats.excludedByFolder} by folder`);
             if (stats.excludedByTag > 0) excludedParts.push(`${stats.excludedByTag} by tag`);
             const excludedBreakdown = excludedParts.length > 0 ? ` (${excludedParts.join(', ')})` : '';
-            
-            statsContainer.createDiv({ 
+            statsText.createDiv({
                 text: `Excluded notes: ${stats.totalExcluded}${excludedBreakdown}`,
                 cls: 'stat-item excluded-total'
             });
-            
-            statsContainer.createDiv({ 
+            statsText.createDiv({
                 text: `Notes included in analysis: ${stats.includedFiles}/${stats.totalFiles}`,
                 cls: 'stat-item included-total'
             });
 
-            // Add a button to show excluded files list
             if (stats.totalExcluded > 0) {
-                const showExcludedBtn = statsContainer.createEl('button', {
-                    text: 'Show excluded files',
-                    cls: 'mod-cta'
-                });
-                
-                showExcludedBtn.addEventListener('click', () => {
-                    this.showExcludedFilesList();
-                });
+                const btn = statsContainer.createEl('button', { text: 'Show excluded files', cls: 'mod-cta' });
+                btn.addEventListener('click', () => this.showExcludedFilesList());
             }
         } catch (error) {
             this.exclusionStatsEl.createDiv({ 
