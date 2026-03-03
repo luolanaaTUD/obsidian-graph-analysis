@@ -12,17 +12,17 @@ This document outlines how to release new versions of the Obsidian Graph Analysi
 
 ### 1. Bump Version and Create Tag
 
-Run one of these (they bump version, update manifest/versions.json, commit, and create a tag):
+Use the release script (handles tag format for Obsidian — no `v` prefix):
 
 ```bash
-npm version patch   # For bug fixes (0.5.0 → 0.5.1)
+npm run release        # patch (0.5.0 → 0.5.1)
 # or
-npm version minor   # For new features (0.5.0 → 0.6.0)
+npm run release:minor  # minor (0.5.0 → 0.6.0)
 # or
-npm version major   # For breaking changes (0.5.0 → 1.0.0)
+npm run release:major  # major (0.5.0 → 1.0.0)
 ```
 
-**Reminder:** `package.json` has `"tagVersionPrefix": ""` so tags match the manifest version without a `v` prefix (e.g. `0.5.1` not `v0.5.1`). Obsidian requires this format.
+This bumps version, updates manifest/versions.json, commits, and creates a tag matching the manifest (e.g. `0.5.1` not `v0.5.1`). Obsidian requires this format.
 
 ### 2. Push Commit and Tag
 

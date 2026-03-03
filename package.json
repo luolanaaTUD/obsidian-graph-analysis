@@ -14,6 +14,10 @@
     "typecheck": "tsc --noEmit --skipLibCheck",
     "lint": "eslint . --ext .ts --config config/.eslintrc",
     "version": "node scripts/version-bump.mjs && git add manifest.json versions.json",
+    "release": "node scripts/release.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major",
     "copy-to-vault": "node scripts/copy-to-vault.mjs"
   },
   "keywords": [
