@@ -133,7 +133,7 @@ export function buildCategoricalPalette({
     const scheme = (d3ScaleChromatic as any)[`scheme${name}`];
 
     if (!scheme && !colors) {
-        console.warn(`scheme${name} cant not be found in d3 scale chromatic, needs to provide colors`);
+        // console.warn(`scheme${name} cant not be found in d3 scale chromatic, needs to provide colors`);
         allColors = ['#DDDDDD'];
     } else if (!scheme) {
         // build from colors
@@ -143,7 +143,7 @@ export function buildCategoricalPalette({
     }
 
     if (!allColors.length) {
-        console.warn('Needs to provide valid d3 color scheme name or an array of colors');
+        // console.warn('Needs to provide valid d3 color scheme name or an array of colors');
     }
 
     return {
@@ -172,7 +172,7 @@ export function buildSequentialPalette({
     category: ValueOf<typeof CATEGORIES>;
 }): SequentialPalette {
     if (!Object.prototype.hasOwnProperty.call(COLOR_BLIND_SAFE_MAP, name)) {
-        console.warn(`${name} does not exists in COLOR_BLIND_SAFE_MAP`);
+        // console.warn(`${name} does not exists in COLOR_BLIND_SAFE_MAP`);
     }
 
     const interpolator = (d3ScaleChromatic as any)[`interpolate${name}`];
@@ -227,7 +227,7 @@ export function buildCustomPalette({
     };
 
     if (!colors.length) {
-        console.error('colors has to be an array of colors');
+        // console.error('colors has to be an array of colors');
         return;
     }
 
@@ -241,7 +241,7 @@ export function buildCustomPalette({
 
     if (diverging) {
         if (!colors2.length) {
-            console.error('colors2 has to be an array of colors when diverging = true');
+            // console.error('colors2 has to be an array of colors when diverging = true');
             return;
         }
         scaleRight = chroma

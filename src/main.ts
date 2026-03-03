@@ -232,14 +232,14 @@ export default class GraphAnalysisPlugin extends Plugin {
                 await this.saveData(dataToSave);
                 
                 this.wasmInitialized = true;
-                console.log('Graph Analysis: WASM initialized');
+                // console.log('Graph Analysis: WASM initialized');
                 
                 if (this.wasmLoadingNotice) {
                     this.wasmLoadingNotice.hide();
                     this.wasmLoadingNotice = null;
                 }
             } catch (error) {
-                console.error('Failed to initialize WASM module:', error);
+                // console.error('Failed to initialize WASM module:', error);
                 
                 if (this.wasmLoadingNotice) {
                     this.wasmLoadingNotice.hide();
@@ -285,7 +285,7 @@ export default class GraphAnalysisPlugin extends Plugin {
 
 
     onunload() {
-        console.log('Unloading Graph Analysis plugin');
+        // console.log('Unloading Graph Analysis plugin');
         
         if (this.wasmLoadingNotice) {
             this.wasmLoadingNotice.hide();
@@ -345,7 +345,7 @@ export default class GraphAnalysisPlugin extends Plugin {
             // Display the results
             this.displayResults(results, `${algorithm.charAt(0).toUpperCase() + algorithm.slice(1)} Centrality`);
         } catch (error) {
-            console.error(`Failed to analyze ${algorithm} centrality:`, error);
+            // console.error(`Failed to analyze ${algorithm} centrality:`, error);
             new Notice(`Failed to analyze ${algorithm} centrality: ${(error as Error).message}`);
         }
     }
@@ -372,7 +372,7 @@ export default class GraphAnalysisPlugin extends Plugin {
             
             return graphData;
         } catch (error) {
-            console.error('Failed to build graph from vault:', error);
+            // console.error('Failed to build graph from vault:', error);
             throw error;
         }
     }
@@ -465,13 +465,13 @@ export default class GraphAnalysisPlugin extends Plugin {
         const parsedResult = JSON.parse(jsonResult);
         
         if (parsedResult.error) {
-            console.error(`${centralityType} Centrality Error:`, parsedResult.error);
+            // console.error(`${centralityType} Centrality Error:`, parsedResult.error);
             throw new Error(parsedResult.error);
         }
         
         // Verify that the parsed result is an array of nodes
         if (!Array.isArray(parsedResult)) {
-            console.error('Unexpected result format:', parsedResult);
+            // console.error('Unexpected result format:', parsedResult);
             throw new Error(`${centralityType} centrality result is not an array`);
         }
         
@@ -523,7 +523,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         const parsedResult = JSON.parse(jsonResult);
         
         if (parsedResult.error) {
-            console.error(`${errorContext} Error:`, parsedResult.error);
+            // console.error(`${errorContext} Error:`, parsedResult.error);
             throw new Error(parsedResult.error);
         }
         
@@ -563,7 +563,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                 degreeCentrality: this.calculateDegreeCentralityCached()
             };
         } catch (error) {
-            console.error('Error initializing graph and calculating centrality:', error);
+            // console.error('Error initializing graph and calculating centrality:', error);
             throw new Error(`Failed to initialize graph and calculate centrality: ${(error as Error).message}`);
         }
     }
@@ -580,7 +580,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Show results in the right sidebar (all results, pagination handled in view)
         this.activateCentralityView(results, algorithmName);
         
-        console.log(`Graph Analysis Results (${algorithmName}):`, results);
+        // console.log(`Graph Analysis Results (${algorithmName}):`, results);
     }
 
     showExclusionStats() {
@@ -607,10 +607,10 @@ export default class GraphAnalysisPlugin extends Plugin {
                 }
             }
             
-            console.log(message);
+            // console.log(message);
             new Notice(`Check console for detailed exclusion statistics. ${stats.totalExcluded} files excluded.`);
         } catch (error) {
-            console.error('Error getting exclusion statistics:', error);
+            // console.error('Error getting exclusion statistics:', error);
             new Notice('Error getting exclusion statistics');
         }
     }
@@ -630,7 +630,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                 });
                 leaf = rightSplit;
             } else {
-                console.error('Failed to create right sidebar leaf');
+                // console.error('Failed to create right sidebar leaf');
                 return;
             }
         }
@@ -679,9 +679,9 @@ export default class GraphAnalysisPlugin extends Plugin {
             );
             
             // Success
-            console.log('Graph initialized with provided data');
+            // console.log('Graph initialized with provided data');
         } catch (error) {
-            console.error('Failed to initialize graph with provided data:', error);
+            // console.error('Failed to initialize graph with provided data:', error);
             throw error;
         }
     }

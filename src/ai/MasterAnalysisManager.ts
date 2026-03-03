@@ -106,7 +106,7 @@ export class MasterAnalysisManager {
                 // Directory might already exist
             }
         } catch (error) {
-            console.error('Failed to create responses directory:', error);
+            // console.error('Failed to create responses directory:', error);
         }
         this.responsesDirectoryEnsured = true;
     }
@@ -125,7 +125,7 @@ export class MasterAnalysisManager {
             // Check if cached analysis matches current vault state (use preloaded data to avoid re-read)
             const currentAnalysisData = preloadedVaultData !== undefined ? preloadedVaultData : await this.loadVaultAnalysisData();
             if (currentAnalysisData && data?.sourceAnalysisId !== this.generateAnalysisId(currentAnalysisData)) {
-                console.log(`Cached ${tabName} analysis is outdated but will still be displayed`);
+                // console.log(`Cached ${tabName} analysis is outdated but will still be displayed`);
                 data.isOutdated = true;  // Mark as outdated but still return
             } else {
                 data.isOutdated = false;  // Explicitly mark as current if IDs match
@@ -135,10 +135,10 @@ export class MasterAnalysisManager {
         } catch (error) {
             // Check if this is a file not found error (ENOENT)
             if (error && typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'ENOENT') {
-                console.log(`No cached ${tabName} analysis found yet. This is normal for first-time use.`);
+                // console.log(`No cached ${tabName} analysis found yet. This is normal for first-time use.`);
             } else {
                 // Log other unexpected errors
-                console.warn(`Error loading cached ${tabName} analysis:`, error);
+                // console.warn(`Error loading cached ${tabName} analysis:`, error);
             }
             return null;
         }
@@ -185,31 +185,31 @@ export class MasterAnalysisManager {
                                 note.path === 'path/to/note.md' ||
                                 note.title?.includes('Example') ||
                                 note.title?.includes('Sample')) {
-                                console.warn(`⚠️  Dummy note detected in ${category}[${domainIndex}].topNotes[${noteIndex}]: "${note.title}"`);
+                                // console.warn(`⚠️  Dummy note detected in ${category}[${domainIndex}].topNotes[${noteIndex}]: "${note.title}"`);
                                 issuesFound++;
                                 return;
                             }
                             
                             // Validate note exists in vault
                             if (!vaultNotes.has(note.path)) {
-                                console.warn(`⚠️  Note path not found in vault: "${note.path}" (title: "${note.title}")`);
+                                // console.warn(`⚠️  Note path not found in vault: "${note.path}" (title: "${note.title}")`);
                                 
                                 // Try to find by title
                                 if (vaultTitles.has(note.title)) {
                                     const matchingNote = analysisData.results.find(n => n.title === note.title);
                                     if (matchingNote) {
-                                        console.log(`✅ Found note by title, correcting path: "${note.path}" → "${matchingNote.path}"`);
+                                        // console.log(`✅ Found note by title, correcting path: "${note.path}" → "${matchingNote.path}"`);
                                         note.path = matchingNote.path;
                                     }
                                 } else {
-                                    console.warn(`❌ Note title also not found in vault: "${note.title}"`);
+                                    // console.warn(`❌ Note title also not found in vault: "${note.title}"`);
                                     issuesFound++;
                                 }
                             } else {
                                 // Validate title matches path
                                 const vaultNote = vaultNotes.get(note.path);
                                 if (vaultNote && vaultNote.title !== note.title) {
-                                    console.warn(`⚠️  Title mismatch for path "${note.path}": AI says "${note.title}", vault has "${vaultNote.title}"`);
+                                    // console.warn(`⚠️  Title mismatch for path "${note.path}": AI says "${note.title}", vault has "${vaultNote.title}"`);
                                     // Correct the title
                                     note.title = vaultNote.title;
                                 }
@@ -221,10 +221,10 @@ export class MasterAnalysisManager {
         });
         
         if (issuesFound > 0) {
-            console.warn(`🔍 Found ${issuesFound} note data issues. Check console for details.`);
-            console.log('💡 Tip: If you see dummy data, try regenerating the AI analysis.');
+            // console.warn(`🔍 Found ${issuesFound} note data issues. Check console for details.`);
+            // console.log('💡 Tip: If you see dummy data, try regenerating the AI analysis.');
         } else {
-            console.log('✅ All note data validated successfully against vault contents.');
+            // console.log('✅ All note data validated successfully against vault contents.');
         }
     }
 
@@ -239,7 +239,7 @@ export class MasterAnalysisManager {
      */
     public async generateKnowledgeStructureAnalysis(): Promise<StructureAnalysisData> {
         try {
-            console.log('Generating Knowledge Structure Analysis with structured output...');
+            // console.log('Generating Knowledge Structure Analysis with structured output...');
             
 
             const analysisData = await this.loadVaultAnalysisData();
@@ -309,7 +309,7 @@ ${formattedContext}`;
             
             return tabData;
         } catch (error) {
-            console.error('Failed to generate Knowledge Structure Analysis:', error);
+            // console.error('Failed to generate Knowledge Structure Analysis:', error);
             if (error instanceof SemanticAnalysisError && error.errorType === 'quota_exhausted') {
                 new Notice(getUserFriendlyMessage(error));
             }
@@ -340,8 +340,8 @@ ${formattedContext}`;
                 gaps: knowledgeGaps
             };
         } catch (error) {
-            console.error('Error parsing structured knowledge network:', error);
-            console.error('Structured response:', structuredResponse);
+            // console.error('Error parsing structured knowledge network:', error);
+            // console.error('Structured response:', structuredResponse);
             const errorMessage = error instanceof Error ? error.message : String(error);
             throw new Error(`Failed to parse structured knowledge network: ${errorMessage}`);
         }
@@ -359,9 +359,9 @@ ${formattedContext}`;
             // Store the tab-specific analysis in the responses directory
             const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/${tabName}-analysis.json`;
             await this.app.vault.adapter.write(filePath, JSON.stringify(data, null, 2));
-            console.log(`${tabName} analysis cached successfully in responses directory`);
+            // console.log(`${tabName} analysis cached successfully in responses directory`);
         } catch (error) {
-            console.error(`Failed to cache ${tabName} analysis:`, error);
+            // console.error(`Failed to cache ${tabName} analysis:`, error);
         }
     }
 
@@ -372,7 +372,7 @@ ${formattedContext}`;
      */
     public async generateKnowledgeEvolutionAnalysis(): Promise<EvolutionAnalysisData> {
         try {
-            console.log('Generating Knowledge Evolution Analysis with structured output...');
+            // console.log('Generating Knowledge Evolution Analysis with structured output...');
 
             const analysisData = await this.loadVaultAnalysisData();
             if (!analysisData) {
@@ -439,7 +439,7 @@ ${formattedContext}`;
 
             return tabData;
         } catch (error) {
-            console.error('Failed to generate Knowledge Evolution Analysis:', error);
+            // console.error('Failed to generate Knowledge Evolution Analysis:', error);
             if (error instanceof SemanticAnalysisError && error.errorType === 'quota_exhausted') {
                 new Notice(getUserFriendlyMessage(error));
             }
@@ -480,8 +480,8 @@ ${formattedContext}`;
                 insights
             };
         } catch (error) {
-            console.error('Error parsing structured knowledge evolution:', error);
-            console.error('Structured response:', structuredResponse);
+            // console.error('Error parsing structured knowledge evolution:', error);
+            // console.error('Structured response:', structuredResponse);
             const errorMessage = error instanceof Error ? error.message : String(error);
             throw new Error(`Failed to parse structured knowledge evolution: ${errorMessage}`);
         }
@@ -492,7 +492,7 @@ ${formattedContext}`;
      */
     public async generateRecommendedActionsAnalysis(): Promise<ActionsAnalysisData> {
         try {
-            console.log('Generating Recommended Actions Analysis with structured output...');
+            // console.log('Generating Recommended Actions Analysis with structured output...');
 
             const analysisData = await this.loadVaultAnalysisData();
             if (!analysisData) {
@@ -581,7 +581,7 @@ ${formattedContext}`;
 
             return tabData;
         } catch (error) {
-            console.error('Failed to generate Recommended Actions Analysis:', error);
+            // console.error('Failed to generate Recommended Actions Analysis:', error);
             if (error instanceof SemanticAnalysisError && error.errorType === 'quota_exhausted') {
                 new Notice(getUserFriendlyMessage(error));
             }
@@ -635,8 +635,8 @@ ${formattedContext}`;
                 organization: organization // Keep as-is for now
             };
         } catch (error) {
-            console.error('Error parsing structured recommended actions:', error);
-            console.error('Structured response:', structuredResponse);
+            // console.error('Error parsing structured recommended actions:', error);
+            // console.error('Structured response:', structuredResponse);
             const errorMessage = error instanceof Error ? error.message : String(error);
             throw new Error(`Failed to parse structured recommended actions: ${errorMessage}`);
         }
@@ -681,7 +681,7 @@ ${formattedContext}`;
             );
             modal.open();
         } catch (error) {
-            console.error('Failed to reopen modal:', error);
+            // console.error('Failed to reopen modal:', error);
             new Notice(error instanceof Error ? error.message : 'Failed to reopen analysis modal');
         }
     }

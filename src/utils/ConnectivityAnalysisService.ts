@@ -222,7 +222,7 @@ export class ConnectivityAnalysisService {
                     }
                 }
             } catch (error) {
-                console.warn(`Error processing links from file ${file.path}:`, error);
+                // console.warn(`Error processing links from file ${file.path}:`, error);
             }
         }
 
@@ -249,7 +249,7 @@ export class ConnectivityAnalysisService {
                     linkRatio
                 });
             } catch (error) {
-                console.warn(`Error processing file ${result.path}:`, error);
+                // console.warn(`Error processing file ${result.path}:`, error);
             }
         }
 

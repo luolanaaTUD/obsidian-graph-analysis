@@ -624,7 +624,7 @@ export class VaultAnalysisModal extends Modal {
                 }
             } catch (error) {
                 // Error already shown by generateVaultAnalysis, no need to reopen modal
-                console.error('Vault analysis failed:', error);
+                // console.error('Vault analysis failed:', error);
             }
         });
     }
@@ -672,12 +672,12 @@ export class VaultAnalysisModal extends Modal {
         try {
             this.structureAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('structure', this.analysisData) as StructureAnalysisData;
             if (this.structureAnalysisData) {
-                console.log('Loaded cached structure analysis');
+                // console.log('Loaded cached structure analysis');
             } else {
-                console.log('No cached structure analysis available yet');
+                // console.log('No cached structure analysis available yet');
             }
         } catch (error) {
-            console.log('Error loading cached structure analysis:', error);
+            // console.log('Error loading cached structure analysis:', error);
             this.structureAnalysisData = null;
         }
         
@@ -940,7 +940,7 @@ export class VaultAnalysisModal extends Modal {
                         await this.vaultSemanticAnalysisManager.viewVaultAnalysisResults();
                     }
                 } catch (error) {
-                    console.error('Vault analysis failed:', error);
+                    // console.error('Vault analysis failed:', error);
                 }
                 return;
             }
@@ -968,7 +968,7 @@ export class VaultAnalysisModal extends Modal {
                         tabName
                     );
                 } catch (error) {
-                    console.error(`${tabName} analysis failed:`, error);
+                    // console.error(`${tabName} analysis failed:`, error);
                     new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
                 } finally {
                     this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
@@ -1055,7 +1055,7 @@ export class VaultAnalysisModal extends Modal {
                         tabName
                     );
                 } catch (error) {
-                    console.error(`${tabName} analysis failed:`, error);
+                    // console.error(`${tabName} analysis failed:`, error);
                     new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
                 } finally {
                     this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
@@ -1165,7 +1165,7 @@ export class VaultAnalysisModal extends Modal {
             }
 
         } catch (error) {
-            console.error('Error generating analysis:', error);
+            // console.error('Error generating analysis:', error);
             loadingContainer.remove();
 
             const err = error instanceof Error ? error : new Error(String(error));
@@ -1435,14 +1435,14 @@ export class VaultAnalysisModal extends Modal {
             // Load tab-specific actions data
             this.actionsAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('actions', this.analysisData) as ActionsAnalysisData;
             if (this.actionsAnalysisData) {
-                console.log('Loaded cached actions analysis');
+                // console.log('Loaded cached actions analysis');
                 return true;
             }
             
-            console.log('No cached actions analysis available yet');
+            // console.log('No cached actions analysis available yet');
             return false;
         } catch (error) {
-            console.log('Error loading cached actions analysis:', error);
+            // console.log('Error loading cached actions analysis:', error);
             return false;
         }
     }
@@ -1676,7 +1676,7 @@ export class VaultAnalysisModal extends Modal {
                     'actions'
                 );
             } catch (error) {
-                console.error('Actions analysis failed:', error);
+                // console.error('Actions analysis failed:', error);
                 new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
             } finally {
                 this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
@@ -1702,14 +1702,14 @@ export class VaultAnalysisModal extends Modal {
         try {
             this.evolutionAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('evolution', this.analysisData) as EvolutionAnalysisData;
             if (this.evolutionAnalysisData) {
-                console.log('Loaded cached evolution analysis');
+                // console.log('Loaded cached evolution analysis');
                 this.knowledgeEvolutionData = this.evolutionAnalysisData.knowledgeEvolution;
             } else {
-                console.log('No cached evolution analysis available yet');
+                // console.log('No cached evolution analysis available yet');
                 this.knowledgeEvolutionData = null;
             }
         } catch (error) {
-            console.log('Error loading cached evolution analysis:', error);
+            // console.log('Error loading cached evolution analysis:', error);
             this.evolutionAnalysisData = null;
             this.knowledgeEvolutionData = null;
         }

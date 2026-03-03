@@ -88,7 +88,7 @@ export class KnowledgeStructureManager {
             }
             return null;
         } catch (error) {
-            console.warn('No cached knowledge structure data found:', error);
+            // console.warn('No cached knowledge structure data found:', error);
             return null;
         }
     }
@@ -161,7 +161,7 @@ export class KnowledgeStructureManager {
             
             await domainChart.renderWithData(domainData);
         } catch (error) {
-            console.error('Error creating domain distribution chart:', error);
+            // console.error('Error creating domain distribution chart:', error);
             const errorMsg = container.createEl('div', { cls: 'error-message' });
             const errorMessage = error instanceof Error ? error.message : String(error);
             errorMsg.createEl('p', {
@@ -296,7 +296,7 @@ export class KnowledgeStructureManager {
                 domainConnections: []
             };
         } catch (error) {
-            console.error('Failed to build domain hierarchy from vault analysis:', error);
+            // console.error('Failed to build domain hierarchy from vault analysis:', error);
             return null;
         }
     }
@@ -394,7 +394,7 @@ export class KnowledgeStructureManager {
             const structuredStats = kdeService.getStructuredStats(analysisData);
             this.renderInsightsPanel(chartContainer, structuredStats);
         } catch (error) {
-            console.error('Failed to render centrality distribution chart:', error);
+            // console.error('Failed to render centrality distribution chart:', error);
             // Silently fail - don't break the UI if chart fails
         }
     }
@@ -836,12 +836,12 @@ export class KnowledgeStructureManager {
                                 await this.app.workspace.openLinkText(note.title, '');
                             }
                         } catch (error) {
-                            console.error('Failed to open note:', error);
+                            // console.error('Failed to open note:', error);
                             // Additional fallback: try to open by path directly
                             try {
                                 await this.app.workspace.openLinkText(note.path, '');
                             } catch (fallbackError) {
-                                console.error('Fallback also failed:', fallbackError);
+                                // console.error('Fallback also failed:', fallbackError);
                             }
                         }
                     });
@@ -1228,7 +1228,7 @@ export class KnowledgeStructureManager {
                             await this.app.workspace.openLinkText(note.title, '');
                         }
                     } catch (error) {
-                        console.error('Failed to open note:', error);
+                        // console.error('Failed to open note:', error);
                     }
                 });
             });

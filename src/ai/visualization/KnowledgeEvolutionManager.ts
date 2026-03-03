@@ -118,7 +118,7 @@ export class KnowledgeEvolutionManager {
             }
             return null;
         } catch (error) {
-            console.warn('No cached knowledge evolution data found:', error);
+            // console.warn('No cached knowledge evolution data found:', error);
             return null;
         }
     }

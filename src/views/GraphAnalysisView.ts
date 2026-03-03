@@ -151,7 +151,7 @@ export class GraphAnalysisView extends ItemView {
             try {
                 this.graphView.onunload();
             } catch (e) {
-                console.warn('Error unloading graph view:', e);
+                // console.warn('Error unloading graph view:', e);
             }
         }
         
@@ -228,7 +228,7 @@ export class GraphAnalysisView extends ItemView {
                 }
             }
         } catch (e) {
-            console.warn("Error reloading graph data:", e);
+            // console.warn("Error reloading graph data:", e);
         }
     }
 
@@ -249,13 +249,13 @@ export class GraphAnalysisView extends ItemView {
                                 this.graphView.restartSimulationGently();
                             }
                         } catch (e) {
-                            console.warn("Error restarting force simulation:", e);
+                            // console.warn("Error restarting force simulation:", e);
                         }
                     }, 50);
                 }
             }
         } catch (e) {
-            console.warn("Error updating graph position:", e);
+            // console.warn("Error updating graph position:", e);
         }
     }
     

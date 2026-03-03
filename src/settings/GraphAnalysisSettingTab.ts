@@ -128,7 +128,7 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                 text: 'Error calculating exclusion statistics',
                 cls: 'stat-error'
             });
-            console.error('Error calculating exclusion statistics:', error);
+            // console.error('Error calculating exclusion statistics:', error);
         }
     }
 

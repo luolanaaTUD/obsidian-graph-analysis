@@ -102,7 +102,7 @@ export class KnowledgeDomainHelper {
             await this.loadDomainTemplate();
             return true;
         } catch (error) {
-            console.error('Failed to load knowledge domains template:', error);
+            // console.error('Failed to load knowledge domains template:', error);
             return false;
         }
     }

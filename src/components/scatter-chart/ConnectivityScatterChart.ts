@@ -320,7 +320,7 @@ export class ConnectivityScatterChart {
                     }
                 }
             } catch (error) {
-                console.warn(`Error processing links from file ${file.path}:`, error);
+                // console.warn(`Error processing links from file ${file.path}:`, error);
             }
         }
 
@@ -347,7 +347,7 @@ export class ConnectivityScatterChart {
                     });
                 }
             } catch (error) {
-                console.warn(`Error processing file ${file.path}:`, error);
+                // console.warn(`Error processing file ${file.path}:`, error);
             }
         }
 
@@ -358,7 +358,7 @@ export class ConnectivityScatterChart {
         const dataPoints: ScatterDataPoint[] = [];
 
         if (!this.options.analysisData || !this.options.analysisData.results) {
-            console.warn('No analysis data available for centrality mode');
+            // console.warn('No analysis data available for centrality mode');
             this.data = [];
             return;
         }
@@ -478,7 +478,7 @@ export class ConnectivityScatterChart {
                 }, 100);
             }
         } catch (error) {
-            console.error(`Error opening note ${path}:`, error);
+            // console.error(`Error opening note ${path}:`, error);
         }
     }
 

@@ -54,7 +54,7 @@ export class KnowledgeCalendarChart {
         const allFiles = this.app.vault.getMarkdownFiles();
         const dailyActivity = new Map<string, CalendarData>();
         
-        console.log(`Processing ${allFiles.length} files for calendar chart...`);
+        // console.log(`Processing ${allFiles.length} files for calendar chart...`);
         
         // Filter excluded files first to reduce processing
         const files = allFiles.filter(file => !this.isFileExcluded(file));
@@ -94,7 +94,7 @@ export class KnowledgeCalendarChart {
                     dayData.value = dayData.wordCount;
                     
                 } catch (error) {
-                    console.warn(`Could not read file ${file.path}:`, error);
+                    // console.warn(`Could not read file ${file.path}:`, error);
                 }
             }));
         }));
@@ -105,7 +105,7 @@ export class KnowledgeCalendarChart {
         
         this.data = dailyActivities;
         KnowledgeCalendarChart.cachedCalendarData = this.data;
-        console.log(`Generated calendar data for ${dailyActivities.length} active days`);
+        // console.log(`Generated calendar data for ${dailyActivities.length} active days`);
 
         return this.data;
     }

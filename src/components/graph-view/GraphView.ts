@@ -198,7 +198,7 @@ export class GraphView {
             await this.pluginService.ensureWasmLoaded();
             await this.loadVaultData();
         } catch (error) {
-            console.error('Error loading vault data:', error);
+            // console.error('Error loading vault data:', error);
             new Notice(`Error loading graph data: ${(error as Error).message}`);
         } finally {
             this.hideLoadingIndicator();
@@ -361,7 +361,7 @@ export class GraphView {
             .on('zoom', (event) => {
                 // Validate transform values before applying
                 if (!isFinite(event.transform.x) || !isFinite(event.transform.y) || !isFinite(event.transform.k)) {
-                    console.warn('Invalid transform values detected, skipping zoom update');
+                    // console.warn('Invalid transform values detected, skipping zoom update');
                     return;
                 }
                 
@@ -431,7 +431,7 @@ export class GraphView {
                 this.simulation.alpha(0.3).restart();
             }
         } catch (e) {
-            console.error("Error restarting simulation:", e);
+            // console.error("Error restarting simulation:", e);
         }
     }
 
@@ -556,7 +556,7 @@ export class GraphView {
                     this.recenterGraph(false); // false to skip animation during resize
                 }
             } catch (error) {
-                console.warn('Error in resize observer:', error);
+                // console.warn('Error in resize observer:', error);
                 // If we encounter an error, it's safer to disconnect the observer
                 if (this.resizeObserver) {
                     this.resizeObserver.disconnect();
@@ -827,7 +827,7 @@ export class GraphView {
     private getTooltipSetting(settingName: string): number {
         const workspace = document.querySelector('.workspace');
         if (!workspace) {
-            console.warn('Workspace element not found for tooltip settings');
+            // console.warn('Workspace element not found for tooltip settings');
             return 0;
         }
         
@@ -912,11 +912,11 @@ export class GraphView {
                     this.cachedNodeId = nodeIdInt;
                     this.cachedNeighbors = connectedNodeIds;
                 } else {
-                    console.error('Unexpected result format from WASM neighbor function', neighborResult);
+                    // console.error('Unexpected result format from WASM neighbor function', neighborResult);
                     throw new Error('Unexpected result format from WASM');
                 }
             } catch (error) {
-                console.error('Error in highlightConnections with WASM:', error);
+                // console.error('Error in highlightConnections with WASM:', error);
                 this.cachedNodeId = null;
                 this.cachedNeighbors = null;
                 return;
@@ -1189,7 +1189,7 @@ export class GraphView {
             // Update the graph with the processed data
             await this.updateData({ nodes, links });
         } catch (error) {
-            console.error('Error in loadVaultData:', error);
+            // console.error('Error in loadVaultData:', error);
             throw error;
         }
     }
@@ -1443,7 +1443,7 @@ export class GraphView {
             this.showLoadingIndicator();
             await this.loadVaultData();
         } catch (error) {
-            console.error('Error reloading vault data:', error);
+            // console.error('Error reloading vault data:', error);
             new Notice(`Error reloading graph data: ${(error as Error).message}`);
         } finally {
             this.hideLoadingIndicator();
@@ -2238,7 +2238,7 @@ export class GraphView {
             plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
 
         } catch (error) {
-            console.error(`Failed to calculate ${type} centrality:`, error);
+            // console.error(`Failed to calculate ${type} centrality:`, error);
             new Notice(`Failed to calculate ${type} centrality: ${(error as Error).message}`);
         }
     }

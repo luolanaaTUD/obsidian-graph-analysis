@@ -72,7 +72,7 @@ export class AISummaryManager {
             this.displayAISummary(summary, activeFile.basename);
             
         } catch (error) {
-            console.error('Failed to generate AI summary:', error);
+            // console.error('Failed to generate AI summary:', error);
             new Notice(`Failed to generate AI summary: ${getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error)))}`);
         }
     }
@@ -175,7 +175,7 @@ For the note, provide:
                 writeFormat
             });
         } catch (error) {
-            console.error('Structured analysis failed:', error);
+            // console.error('Structured analysis failed:', error);
 
             let errorMessage = 'Unknown error occurred';
             if (error instanceof SemanticAnalysisError) {
@@ -265,7 +265,7 @@ class AISummaryModal extends Modal {
             new Notice('Summary added to note');
             this.close();
         } catch (error) {
-            console.error('Failed to write summary to note:', error);
+            // console.error('Failed to write summary to note:', error);
             new Notice('Failed to write summary to note');
         }
     }

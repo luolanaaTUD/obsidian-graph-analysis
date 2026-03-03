@@ -102,7 +102,7 @@ export class KnowledgeActionsManager {
             }
             return null;
         } catch (error) {
-            console.warn('No cached knowledge actions data found:', error);
+            // console.warn('No cached knowledge actions data found:', error);
             return null;
         }
     }
@@ -494,12 +494,12 @@ export class KnowledgeActionsManager {
 
     private createConnection(connectionItem: HTMLElement): void {
         // Implementation for creating links between notes
-        console.log('Creating connection:', connectionItem.dataset);
+        // console.log('Creating connection:', connectionItem.dataset);
     }
 
     private previewConnection(connectionItem: HTMLElement): void {
         // Implementation for previewing the connection
-        console.log('Previewing connection:', connectionItem.dataset);
+        // console.log('Previewing connection:', connectionItem.dataset);
     }
 
     private dismissConnection(connectionItem: HTMLElement): void {
@@ -509,12 +509,12 @@ export class KnowledgeActionsManager {
 
     private startLearningPath(pathItem: HTMLElement): void {
         // Implementation for starting a learning path
-        console.log('Starting learning path:', pathItem);
+        // console.log('Starting learning path:', pathItem);
     }
 
     private bookmarkPath(pathItem: HTMLElement): void {
         // Implementation for bookmarking a path
-        console.log('Bookmarking path:', pathItem);
+        // console.log('Bookmarking path:', pathItem);
     }
 
     public updateSettings(settings: GraphAnalysisSettings): void {
@@ -709,7 +709,7 @@ export class KnowledgeActionsManager {
             try {
                 const file = NoteResolver.resolveToFile(app, sourceId);
                 if (!file) {
-                    console.warn(`Source file not found: ${sourceId}`);
+                    // console.warn(`Source file not found: ${sourceId}`);
                     failed += conns.length;
                     continue;
                 }
@@ -747,7 +747,7 @@ export class KnowledgeActionsManager {
                 await app.vault.modify(file, newContent);
                 written += conns.length;
             } catch (error) {
-                console.error(`Failed to write connections to ${sourceId}:`, error);
+                // console.error(`Failed to write connections to ${sourceId}:`, error);
                 failed += conns.length;
             }
         }

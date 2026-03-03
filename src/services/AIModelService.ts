@@ -101,9 +101,9 @@ export class AIModelService {
             throw new Error('Gemini API key not configured. Please configure your API key in settings.');
         }
 
-        console.log(`Sending structured analysis request to ${this.MODEL_NAME} (max tokens: ${maxOutputTokens})...`);
-        console.log(`STRUCTURED PROMPT (${prompt.length} chars):`);
-        console.log(prompt);
+        // console.log(`Sending structured analysis request to ${this.MODEL_NAME} (max tokens: ${maxOutputTokens})...`);
+        // console.log(`STRUCTURED PROMPT (${prompt.length} chars):`);
+        // console.log(prompt);
 
         try {
             const response = await this.genAI.models.generateContent({
@@ -133,12 +133,12 @@ export class AIModelService {
             const result = this.extractStructuredText(response) || '';
             
             if (!result) {
-                console.error('Empty response details:', {
-                    responseDefined: !!response,
-                    textProperty: response.text,
-                    candidates: response.candidates?.length || 0,
-                    tokenUsage: tokenUsage
-                });
+                // console.error('Empty response details:', {
+                //     responseDefined: !!response,
+                //     textProperty: response.text,
+                //     candidates: response.candidates?.length || 0,
+                //     tokenUsage: tokenUsage
+                // });
                 throw new Error('Empty response from Gemini API - check API key, request format, or content policy restrictions');
             }
             
@@ -147,12 +147,12 @@ export class AIModelService {
             try {
                 parsedResult = JSON.parse(result) as T;
             } catch (parseError) {
-                console.error('Failed to parse structured response as JSON:', parseError);
+                // console.error('Failed to parse structured response as JSON:', parseError);
                 throw new Error(`Failed to parse structured response: ${(parseError as Error).message}`);
             }
 
-            console.log(`STRUCTURED RESPONSE SUCCESS (${result.length} chars, tokens: ${tokenUsage.totalTokens})`);
-            console.log('Parsed result:', parsedResult);
+            // console.log(`STRUCTURED RESPONSE SUCCESS (${result.length} chars, tokens: ${tokenUsage.totalTokens})`);
+            // console.log('Parsed result:', parsedResult);
 
             return {
                 result: parsedResult,
@@ -160,7 +160,7 @@ export class AIModelService {
             };
 
         } catch (error) {
-            console.error(`${this.MODEL_NAME} structured API error:`, error);
+            // console.error(`${this.MODEL_NAME} structured API error:`, error);
 
             const errorMessage = (error as Error).message;
             const errorType = classifyGeminiError(errorMessage);
@@ -169,19 +169,19 @@ export class AIModelService {
                 throw new SemanticAnalysisError(errorMessage, 'quota_exhausted', this.MODEL_NAME);
             }
             if (errorType === 'rate_limit') {
-                console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${this.ADVANCED_RATE_LIMIT_DELAY / 1000} seconds...`);
+                // console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${this.ADVANCED_RATE_LIMIT_DELAY / 1000} seconds...`);
                 await new Promise(resolve => setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
                 return this.generateStructuredAnalysis(prompt, responseSchema, maxOutputTokens, temperature, topP);
             }
 
             // Log additional context for debugging
-            console.error('Structured analysis error context:', {
-                promptLength: prompt.length,
-                maxOutputTokens,
-                temperature,
-                topP,
-                hasSchema: !!responseSchema
-            });
+            // console.error('Structured analysis error context:', {
+            //     promptLength: prompt.length,
+            //     maxOutputTokens,
+            //     temperature,
+            //     topP,
+            //     hasSchema: !!responseSchema
+            // });
 
             throw error;
         }
@@ -208,9 +208,9 @@ export class AIModelService {
         const languageInstruction = '\n\nIMPORTANT: Your output language MUST match the language of each input note. If a note is written in Chinese, respond in Chinese; if in English, respond in English; and so on for any other language.';
         const fullPrompt = prompt + languageInstruction;
 
-        console.log(`Sending semantic analysis request to ${model} (max tokens: ${maxOutputTokens})...`);
-        console.log(`SEMANTIC PROMPT (${fullPrompt.length} chars):`);
-        console.log(fullPrompt);
+        // console.log(`Sending semantic analysis request to ${model} (max tokens: ${maxOutputTokens})...`);
+        // console.log(`SEMANTIC PROMPT (${fullPrompt.length} chars):`);
+        // console.log(fullPrompt);
 
         try {
             const response = await this.genAI.models.generateContent({
@@ -237,12 +237,12 @@ export class AIModelService {
             const result = response.text?.trim() || '';
 
             if (!result) {
-                console.error('Empty semantic response details:', {
-                    responseDefined: !!response,
-                    textProperty: response.text,
-                    candidates: response.candidates?.length || 0,
-                    tokenUsage: tokenUsage
-                });
+                // console.error('Empty semantic response details:', {
+                //     responseDefined: !!response,
+                //     textProperty: response.text,
+                //     candidates: response.candidates?.length || 0,
+                //     tokenUsage: tokenUsage
+                // });
                 throw new Error('Empty response from Gemini API - check API key, request format, or content policy restrictions');
             }
 
@@ -251,13 +251,13 @@ export class AIModelService {
                 parsedResult = JSON.parse(result) as T;
             } catch (parseError) {
                 const msg = `Failed to parse semantic response: ${(parseError as Error).message}`;
-                console.error('Failed to parse semantic response as JSON:', parseError);
-                console.error('Raw response text:', result.substring(0, 500));
+                // console.error('Failed to parse semantic response as JSON:', parseError);
+                // console.error('Raw response text:', result.substring(0, 500));
                 throw new SemanticAnalysisError(msg, 'json_parse', model);
             }
 
-            console.log(`SEMANTIC RESPONSE SUCCESS (${result.length} chars, tokens: ${tokenUsage.totalTokens})`);
-            console.log('Parsed result:', parsedResult);
+            // console.log(`SEMANTIC RESPONSE SUCCESS (${result.length} chars, tokens: ${tokenUsage.totalTokens})`);
+            // console.log('Parsed result:', parsedResult);
 
             return {
                 result: parsedResult,
@@ -270,9 +270,9 @@ export class AIModelService {
             const errorMessage = (error as Error).message;
             const errorType = classifyGeminiError(errorMessage);
             if (errorType === 'quota_exhausted') {
-                console.warn(`Semantic analysis quota exhausted (${model}):`, errorMessage.substring(0, 200));
+                // console.warn(`Semantic analysis quota exhausted (${model}):`, errorMessage.substring(0, 200));
             } else {
-                console.error(`${model} semantic API error:`, error);
+                // console.error(`${model} semantic API error:`, error);
             }
             throw new SemanticAnalysisError(errorMessage, errorType, model);
         }

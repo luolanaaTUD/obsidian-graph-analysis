@@ -88,7 +88,7 @@ export class VaultSemanticAnalysisManager {
                 // Directory might already exist
             }
         } catch (error) {
-            console.error('Failed to create responses directory:', error);
+            // console.error('Failed to create responses directory:', error);
         }
         this.responsesDirectoryEnsured = true;
     }
@@ -115,7 +115,7 @@ export class VaultSemanticAnalysisManager {
             const domainHelper = KnowledgeDomainHelper.getInstance(this.app);
             const loaded = await domainHelper.ensureDomainTemplateLoaded();
             if (!loaded) {
-                console.error('Failed to load knowledge domain template from KnowledgeDomainHelper');
+                // console.error('Failed to load knowledge domain template from KnowledgeDomainHelper');
                 return false;
             }
 
@@ -123,10 +123,10 @@ export class VaultSemanticAnalysisManager {
             this.subdivisionsList = domainHelper.getAllSubdivisions();
             this.domainTemplateLoaded = this.subdivisionsList.length > 0;
             
-            console.log(`📚 Knowledge domain template loaded for VaultSemanticAnalysisManager: ${this.subdivisionsList.length} subdivisions available`);
+            // console.log(`📚 Knowledge domain template loaded for VaultSemanticAnalysisManager: ${this.subdivisionsList.length} subdivisions available`);
             return this.domainTemplateLoaded;
         } catch (error) {
-            console.error('Failed to load knowledge domain template for VaultSemanticAnalysisManager:', error);
+            // console.error('Failed to load knowledge domain template for VaultSemanticAnalysisManager:', error);
             return false;
         }
     }
@@ -236,7 +236,7 @@ export class VaultSemanticAnalysisManager {
             });
             
         } catch (error) {
-            console.error('Error calculating graph metrics:', error);
+            // console.error('Error calculating graph metrics:', error);
             // Return empty map on error - semantic analysis can proceed without graph metrics
         }
         
@@ -437,14 +437,14 @@ export class VaultSemanticAnalysisManager {
         const filteredResults = mergedResults.filter(result => {
             const isDeleted = deletedPathsSet.has(result.path);
             if (isDeleted) {
-                console.log(`Removing deleted file from analysis: ${result.path}`);
+                // console.log(`Removing deleted file from analysis: ${result.path}`);
             }
             return !isDeleted;
         });
         
         const removedCount = beforeFilterCount - filteredResults.length;
         if (removedCount > 0) {
-            console.log(`Removed ${removedCount} deleted file(s) from analysis results`);
+            // console.log(`Removed ${removedCount} deleted file(s) from analysis results`);
         }
         
         // Sort by title for consistency
@@ -503,11 +503,11 @@ export class VaultSemanticAnalysisManager {
             // Save the enhanced data
             await this.app.vault.adapter.write(filePath, JSON.stringify(updatedData, null, 2));
             
-            console.log('Enhanced existing vault analysis with graph metrics and rankings');
+            // console.log('Enhanced existing vault analysis with graph metrics and rankings');
             return true;
             
         } catch (error) {
-            console.error('Error enhancing vault analysis with graph metrics:', error);
+            // console.error('Error enhancing vault analysis with graph metrics:', error);
             throw new Error(`Failed to enhance with graph metrics: ${(error as Error).message}`);
         }
     }
@@ -621,7 +621,7 @@ export class VaultSemanticAnalysisManager {
                     const charCount = cleanedContent.length;
                     const isShort = rawCharCount < 50;
                     if (isShort) {
-                        console.log(`File "${file.basename}": raw=${rawCharCount} chars, cleaned=${charCount} chars -> isShort=${isShort}`);
+                        // console.log(`File "${file.basename}": raw=${rawCharCount} chars, cleaned=${charCount} chars -> isShort=${isShort}`);
                     }
 
                     // Get file stats
@@ -638,7 +638,7 @@ export class VaultSemanticAnalysisManager {
                         isShort
                     });
                 } catch (error) {
-                    console.error(`Error reading file ${file.path}:`, error);
+                    // console.error(`Error reading file ${file.path}:`, error);
                     fileDataList.push({
                         file,
                         content: '',
@@ -677,18 +677,18 @@ export class VaultSemanticAnalysisManager {
             
             // Log batch distribution for transparency
             const updateType = isIncrementalUpdate ? 'incremental' : 'full';
-            console.log(`Processing ${filesToProcess.length} files (${updateType} update) in ${totalBatches} note-based batches (max ${this.MAX_NOTES_PER_BATCH} notes per batch) using ${this.aiService.getSemanticModelName()}`);
+            // console.log(`Processing ${filesToProcess.length} files (${updateType} update) in ${totalBatches} note-based batches (max ${this.MAX_NOTES_PER_BATCH} notes per batch) using ${this.aiService.getSemanticModelName()}`);
             if (isIncrementalUpdate) {
-                console.log(`Incremental update: ${changedCount} changed, ${newCount} new, ${unchangedCount} unchanged files`);
+                // console.log(`Incremental update: ${changedCount} changed, ${newCount} new, ${unchangedCount} unchanged files`);
             }
-            console.log(`Average batch size: ${averageBatchSize} notes per batch`);
+            // console.log(`Average batch size: ${averageBatchSize} notes per batch`);
             
             // Log batch size distribution for small vaults
             if (totalBatches === 1 && fileDataList.length < this.MAX_NOTES_PER_BATCH) {
-                console.log(`Small batch detected: processing all ${fileDataList.length} notes in a single batch`);
+                // console.log(`Small batch detected: processing all ${fileDataList.length} notes in a single batch`);
             } else if (totalBatches > 1) {
                 const batchSizes = batches.map(batch => batch.length);
-                console.log(`Batch size distribution: ${batchSizes.join(', ')} notes per batch`);
+                // console.log(`Batch size distribution: ${batchSizes.join(', ')} notes per batch`);
             }
             
             // Aggregate token usage across all batches
@@ -721,7 +721,7 @@ export class VaultSemanticAnalysisManager {
                     const err = batchError instanceof SemanticAnalysisError ? batchError : new SemanticAnalysisError((batchError as Error).message, 'other', primaryModel);
 
                     if (err.errorType === 'quota_exhausted') {
-                        console.warn(`Daily API quota (20 RPD) exhausted at batch ${batchIndex + 1}. Stopping. Remaining notes saved for retry tomorrow.`);
+                        // console.warn(`Daily API quota (20 RPD) exhausted at batch ${batchIndex + 1}. Stopping. Remaining notes saved for retry tomorrow.`);
                         await this.appendFailedBatch(batch, batchIndex, primaryModel, alternateModel, err.message);
                         failed += batch.length;
                         processed += batch.length;
@@ -730,14 +730,14 @@ export class VaultSemanticAnalysisManager {
                         break;
                     }
 
-                    console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
+                    // console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
                     progressNotice.setMessage(`Retrying batch ${batchIndex + 1}/${totalBatches} with ${alternateModel}...`);
                     await new Promise(resolve => setTimeout(resolve, 10000));
                     try {
                         batchResult = await this.analyzeBatch(batch, batchIndex, alternateModel);
                     } catch (retryError) {
                         const retryErr = retryError instanceof SemanticAnalysisError ? retryError : new SemanticAnalysisError((retryError as Error).message, 'other', alternateModel);
-                        console.error(`Retry failed for batch ${batchIndex + 1}:`, retryError);
+                        // console.error(`Retry failed for batch ${batchIndex + 1}:`, retryError);
 
                         if (retryErr.errorType === 'quota_exhausted') {
                             await this.appendFailedBatch(batch, batchIndex, primaryModel, alternateModel, retryErr.message);
@@ -770,7 +770,7 @@ export class VaultSemanticAnalysisManager {
                     totalTokenUsage.promptTokens += batchResult.tokenUsage.promptTokens;
                     totalTokenUsage.candidatesTokens += batchResult.tokenUsage.candidatesTokens;
                     totalTokenUsage.totalTokens += batchResult.tokenUsage.totalTokens;
-                    console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} notes, ${batchCharCount} chars`);
+                    // console.log(`Batch ${batchIndex + 1} completed successfully: ${batchFileCount} notes, ${batchCharCount} chars`);
                     const perNoteFailures: Array<{ path: string; basename: string; charCount: number }> = [];
                     for (let i = 0; i < batch.length; i++) {
                         const fileData = batch[i];
@@ -779,7 +779,7 @@ export class VaultSemanticAnalysisManager {
                             results.push(result.data);
                             processed++;
                         } else {
-                            console.error(`Failed to analyze file ${fileData.file.path}:`, result?.error || 'Unknown error');
+                            // console.error(`Failed to analyze file ${fileData.file.path}:`, result?.error || 'Unknown error');
                             perNoteFailures.push({
                                 path: fileData.file.path,
                                 basename: fileData.file.basename,
@@ -821,7 +821,7 @@ export class VaultSemanticAnalysisManager {
                     await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
                 } else if (totalBatches === 1) {
                     // Single batch - no rate limiting needed
-                    console.log('Single batch processing completed - no rate limiting required');
+                    // console.log('Single batch processing completed - no rate limiting required');
                 }
             }
 
@@ -838,12 +838,12 @@ export class VaultSemanticAnalysisManager {
             if (isIncrementalUpdate) {
                 // Merge new results with unchanged results, removing deleted files
                 finalResults = this.mergeAnalysisResults(unchangedResults, results, deletedFilePaths);
-                console.log(`Merged results: ${unchangedResults.length} unchanged + ${results.length} new/updated - ${deletedFilePaths.length} deleted = ${finalResults.length} total`);
+                // console.log(`Merged results: ${unchangedResults.length} unchanged + ${results.length} new/updated - ${deletedFilePaths.length} deleted = ${finalResults.length} total`);
             } else {
                 // Full update: use all results
                 // Note: Deleted files are automatically excluded because we only process files that exist in the vault
                 finalResults = results;
-                console.log(`Full update: ${results.length} files processed (deleted files automatically excluded)`);
+                // console.log(`Full update: ${results.length} files processed (deleted files automatically excluded)`);
             }
 
             // Calculate graph metrics and enhance results
@@ -908,7 +908,7 @@ export class VaultSemanticAnalysisManager {
             return true;
             
         } catch (error) {
-            console.error('Failed to generate vault analysis:', error);
+            // console.error('Failed to generate vault analysis:', error);
             const err = error instanceof Error ? error : new Error(String(error));
             new Notice(`❌ Failed to generate vault analysis: ${getUserFriendlyMessage(err)}`);
             return false;
@@ -997,7 +997,7 @@ export class VaultSemanticAnalysisManager {
                     if (apiError instanceof SemanticAnalysisError) {
                         throw apiError;
                     }
-                    console.error('Error in API batch analysis:', apiError);
+                    // console.error('Error in API batch analysis:', apiError);
                     throw apiError;
                 }
             }
@@ -1026,7 +1026,7 @@ export class VaultSemanticAnalysisManager {
             if (error instanceof SemanticAnalysisError) {
                 throw error;
             }
-            console.error('Error in batch analysis:', error);
+            // console.error('Error in batch analysis:', error);
             return {
                 results: fileDataList.map(() => ({ success: false, error: (error as Error).message })),
                 tokenUsage: this.ZERO_TOKEN_USAGE
@@ -1075,7 +1075,7 @@ export class VaultSemanticAnalysisManager {
     private async clearFailedBatches(): Promise<void> {
         await this.ensureResponsesDirectory();
         await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(this.FAILED_BATCHES_EMPTY, null, 2));
-        console.log('Cleared vault-analysis-failed-batches.json');
+        // console.log('Cleared vault-analysis-failed-batches.json');
     }
 
     private async readFailedBatchesData(): Promise<FailedBatchesData> {
@@ -1121,7 +1121,7 @@ export class VaultSemanticAnalysisManager {
             notes: batch.map(b => ({ path: b.file.path, basename: b.file.basename, charCount: b.charCount }))
         });
         await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
-        console.log(`Appended failed batch ${batchIndex + 1} to ${this.getFailedBatchesFilePath()}`);
+        // console.log(`Appended failed batch ${batchIndex + 1} to ${this.getFailedBatchesFilePath()}`);
     }
 
     private async appendFailedNotes(
@@ -1141,7 +1141,7 @@ export class VaultSemanticAnalysisManager {
             notes
         });
         await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
-        console.log(`Appended ${notes.length} failed notes to ${this.getFailedBatchesFilePath()}`);
+        // console.log(`Appended ${notes.length} failed notes to ${this.getFailedBatchesFilePath()}`);
     }
 
     private async saveRemainingNotes(
@@ -1162,7 +1162,7 @@ export class VaultSemanticAnalysisManager {
             notes
         };
         await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
-        console.log(`Saved ${notes.length} remaining notes to ${this.getFailedBatchesFilePath()}`);
+        // console.log(`Saved ${notes.length} remaining notes to ${this.getFailedBatchesFilePath()}`);
     }
 
     private async ensureVaultAnalysisFileExists(): Promise<void> {
@@ -1182,7 +1182,7 @@ export class VaultSemanticAnalysisManager {
             // Ensure responses directory exists
             await this.ensureResponsesDirectory();
             await this.app.vault.adapter.write(filePath, JSON.stringify(initialData, null, 2));
-            console.log('Created initial vault analysis file in responses folder');
+            // console.log('Created initial vault analysis file in responses folder');
         }
     }
 
@@ -1251,7 +1251,7 @@ export class VaultSemanticAnalysisManager {
                             await this.viewVaultAnalysisResults();
                         } catch (error) {
                             enhanceNotice.hide();
-                            console.error('Error enhancing with graph metrics:', error);
+                            // console.error('Error enhancing with graph metrics:', error);
                             new Notice(`Failed to enhance analysis: ${(error as Error).message}`);
                         }
                     };
@@ -1260,7 +1260,7 @@ export class VaultSemanticAnalysisManager {
                 }
             }
         } catch (error) {
-            console.error('Failed to load vault analysis results:', error);
+            // console.error('Failed to load vault analysis results:', error);
             new Notice(error instanceof Error ? error.message : 'Failed to load vault analysis results');
         }
     }
@@ -1385,7 +1385,7 @@ export class VaultSemanticAnalysisManager {
         });
         await this.ensureResponsesDirectory();
         await this.app.vault.adapter.write(this.getVaultAnalysisFilePath(), JSON.stringify(outputData, null, 2));
-        console.log(`Batch results saved (${mergedResults.length} total)`);
+        // console.log(`Batch results saved (${mergedResults.length} total)`);
     }
 
     private async saveAnalysisResults(
@@ -1443,9 +1443,9 @@ export class VaultSemanticAnalysisManager {
             const { outputData } = await this.buildEnhancedResultsAndOutputData(results, isIncrementalUpdate, metadata);
             await this.ensureResponsesDirectory();
             await this.app.vault.adapter.write(this.getVaultAnalysisFilePath(), JSON.stringify(outputData, null, 2));
-            console.log(`Vault analysis results saved to responses folder: ${this.getVaultAnalysisFilePath()}`);
+            // console.log(`Vault analysis results saved to responses folder: ${this.getVaultAnalysisFilePath()}`);
         } catch (error) {
-            console.error('Failed to save analysis results:', error);
+            // console.error('Failed to save analysis results:', error);
             throw new Error(`Failed to save results: ${(error as Error).message}`);
         }
     }
@@ -1535,8 +1535,8 @@ Always respond in the same language as the note content. If a note is written in
             const maxOutputTokens = meaningfulFiles.length * 1024 + 4000;
 
             // Add debugging info
-            console.log(`Structured analysis: ${meaningfulFiles.length} notes, prompt length: ${fullPrompt.length} chars`);
-            console.log('Response schema:', JSON.stringify(responseSchema, null, 2));
+            // console.log(`Structured analysis: ${meaningfulFiles.length} notes, prompt length: ${fullPrompt.length} chars`);
+            // console.log('Response schema:', JSON.stringify(responseSchema, null, 2));
             
             const response = await this.aiService.generateSemanticAnalysis<Array<{
                 summary: string;
@@ -1551,7 +1551,7 @@ Always respond in the same language as the note content. If a note is written in
                 modelOverride
             );
 
-            console.log(`Batch analysis completed with DDC classification using structured output`);
+            // console.log(`Batch analysis completed with DDC classification using structured output`);
 
             return {
                 results: response.result.map(item => ({
@@ -1564,7 +1564,7 @@ Always respond in the same language as the note content. If a note is written in
 
         } catch (structuredError) {
             if (!(structuredError instanceof SemanticAnalysisError)) {
-                console.error('Structured output batch analysis failed:', structuredError);
+                // console.error('Structured output batch analysis failed:', structuredError);
             }
             throw structuredError;
         }

@@ -446,7 +446,7 @@ export class ConnectionSubGraph {
                     await saveCacheFn(actionsAnalysisData);
                 }
             } catch (error) {
-                console.error('Failed to write connections:', error);
+                // console.error('Failed to write connections:', error);
                 new Notice('Failed to write connections. Check console for details.');
                 button.disabled = false;
                 button.textContent = 'Add to Main Graph';
