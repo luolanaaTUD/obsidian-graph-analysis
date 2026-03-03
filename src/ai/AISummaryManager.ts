@@ -2,6 +2,7 @@ import { App, Notice, Modal, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { AIModelService, SEMANTIC_MODELS, SemanticAnalysisError } from '../services/AIModelService';
 import { cleanupNoteContent } from '../utils/NoteContentUtils';
+import { getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
 
 export class AISummaryManager {
     private app: App;
@@ -72,7 +73,7 @@ export class AISummaryManager {
             
         } catch (error) {
             console.error('Failed to generate AI summary:', error);
-            new Notice(`Failed to generate AI summary: ${(error as Error).message}`);
+            new Notice(`Failed to generate AI summary: ${getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error)))}`);
         }
     }
 

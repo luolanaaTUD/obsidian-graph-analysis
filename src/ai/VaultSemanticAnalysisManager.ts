@@ -7,6 +7,7 @@ import {
     MasterAnalysisManager
 } from './MasterAnalysisManager';
 import { AIModelService, SEMANTIC_MODELS, SemanticAnalysisError } from '../services/AIModelService';
+import { getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
 import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
@@ -43,6 +44,20 @@ export class VaultSemanticAnalysisManager {
     private readonly MAX_CHARS_PER_NOTE = 8000;
     private readonly MAX_NOTES_PER_BATCH = 30;
     private readonly DELAY_BETWEEN_BATCHES = 6000; // 6s between batches (Gemini 2.5 Flash Lite RPM 10)
+
+    private _analysisInProgress: 'semantic' | 'structure' | 'evolution' | 'actions' | null = null;
+
+    isAnalysisInProgress(): boolean {
+        return this._analysisInProgress !== null;
+    }
+
+    setAnalysisInProgress(type: 'semantic' | 'structure' | 'evolution' | 'actions'): void {
+        this._analysisInProgress = type;
+    }
+
+    clearAnalysisInProgress(): void {
+        this._analysisInProgress = null;
+    }
 
     /**
      * Get the path to vault-analysis.json in the responses folder
@@ -500,6 +515,7 @@ export class VaultSemanticAnalysisManager {
     }
 
     public async generateVaultAnalysis(): Promise<boolean> {
+        this.setAnalysisInProgress('semantic');
         try {
             // Check if Gemini API key is configured
             if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
@@ -569,12 +585,15 @@ export class VaultSemanticAnalysisManager {
                 return false;
             }
 
-            // Show initial notice with incremental update info
+            // Show initial notice with incremental update info and estimated time
+            // ~4 batches per minute based on rate limits and processing
+            const batchCount = Math.ceil(filesToProcess.length / this.MAX_NOTES_PER_BATCH);
+            const estimatedMins = Math.max(1, Math.ceil(batchCount / 4));
             let initialMessage: string;
             if (isIncrementalUpdate) {
-                initialMessage = `Updating analysis: ${changedCount} changed, ${newCount} new, ${unchangedCount} unchanged files (processing ${filesToProcess.length} files)...`;
+                initialMessage = `Updating analysis: ${changedCount} changed, ${newCount} new, ${unchangedCount} unchanged files (processing ${filesToProcess.length} files). Est. ~${estimatedMins} min`;
             } else {
-                initialMessage = `Starting vault analysis for ${filesToProcess.length} files...`;
+                initialMessage = `Starting vault analysis for ${filesToProcess.length} files. Est. ~${estimatedMins} min`;
             }
             const progressNotice = new Notice(initialMessage, 0);
             
@@ -702,9 +721,9 @@ export class VaultSemanticAnalysisManager {
                     batchResult = await this.analyzeBatch(batch, batchIndex);
                 } catch (batchError) {
                     const err = batchError instanceof SemanticAnalysisError ? batchError : new SemanticAnalysisError((batchError as Error).message, 'other', primaryModel);
-                    console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
 
                     if (err.errorType === 'quota_exhausted') {
+                        console.warn(`Daily API quota (20 RPD) exhausted at batch ${batchIndex + 1}. Stopping. Remaining notes saved for retry tomorrow.`);
                         await this.appendFailedBatch(batch, batchIndex, primaryModel, alternateModel, err.message);
                         failed += batch.length;
                         processed += batch.length;
@@ -713,6 +732,7 @@ export class VaultSemanticAnalysisManager {
                         break;
                     }
 
+                    console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
                     progressNotice.setMessage(`Retrying batch ${batchIndex + 1}/${totalBatches} with ${alternateModel}...`);
                     await new Promise(resolve => setTimeout(resolve, 10000));
                     try {
@@ -868,7 +888,7 @@ export class VaultSemanticAnalysisManager {
                 const retryTimeStr = retryTime.toLocaleString();
                 const remainingCount = filesToProcess.length - successCount;
                 completionMessage = `Saved partial results (${successCount}/${filesToProcess.length} files). `
-                    + `Free Google API can process ~500 notes per day. `
+                    + `Free tier limit: ~500 notes per day. `
                     + `You can continue analyzing the remaining ${remainingCount} notes after ${retryTimeStr} by running the analysis again.`;
             } else if (isIncrementalUpdate) {
                 if (failed === 0) {
@@ -891,8 +911,11 @@ export class VaultSemanticAnalysisManager {
             
         } catch (error) {
             console.error('Failed to generate vault analysis:', error);
-            new Notice(`❌ Failed to generate vault analysis: ${(error as Error).message}`);
+            const err = error instanceof Error ? error : new Error(String(error));
+            new Notice(`❌ Failed to generate vault analysis: ${getUserFriendlyMessage(err)}`);
             return false;
+        } finally {
+            this.clearAnalysisInProgress();
         }
     }
 
@@ -973,6 +996,9 @@ export class VaultSemanticAnalysisManager {
                         }
                     }
                 } catch (apiError) {
+                    if (apiError instanceof SemanticAnalysisError) {
+                        throw apiError;
+                    }
                     console.error('Error in API batch analysis:', apiError);
                     throw apiError;
                 }
@@ -999,8 +1025,10 @@ export class VaultSemanticAnalysisManager {
             
             return { results: sortedResults, tokenUsage: batchTokenUsage };
         } catch (error) {
+            if (error instanceof SemanticAnalysisError) {
+                throw error;
+            }
             console.error('Error in batch analysis:', error);
-            // Return error for all files in batch
             return {
                 results: fileDataList.map(() => ({ success: false, error: (error as Error).message })),
                 tokenUsage: this.ZERO_TOKEN_USAGE
@@ -1544,7 +1572,9 @@ Always respond in the same language as the note content. If a note is written in
             };
 
         } catch (structuredError) {
-            console.error('Structured output batch analysis failed:', structuredError);
+            if (!(structuredError instanceof SemanticAnalysisError)) {
+                console.error('Structured output batch analysis failed:', structuredError);
+            }
             throw structuredError;
         }
     }

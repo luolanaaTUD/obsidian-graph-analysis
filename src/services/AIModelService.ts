@@ -6,6 +6,11 @@ import { createNoteSummarySchema } from '../ai/schemas/note-summary.schema';
 import { createDomainClassificationSchema, KnowledgeSubdivision } from '../ai/schemas/domain-classification.schema';
 import { createKnowledgeEvolutionSchema } from '../ai/schemas/knowledge-evolution.schema';
 import { createRecommendedActionsSchema } from '../ai/schemas/recommended-actions.schema';
+import {
+    SemanticAnalysisError,
+    SemanticErrorType,
+    classifyGeminiError
+} from '../utils/GeminiErrorUtils';
 
 export interface TokenUsage {
     promptTokens: number;
@@ -18,27 +23,17 @@ export interface AIResponse<T = string> {
     tokenUsage: TokenUsage;
 }
 
-export type SemanticErrorType = 'rate_limit' | 'quota_exhausted' | 'json_parse' | 'other';
-
-export class SemanticAnalysisError extends Error {
-    constructor(
-        message: string,
-        public readonly errorType: SemanticErrorType,
-        public readonly model: string
-    ) {
-        super(message);
-        this.name = 'SemanticAnalysisError';
-    }
-}
+export type { SemanticErrorType };
+export { SemanticAnalysisError };
 
 /** Semantic models for vault analysis and AI summary (dual-model for 40 RPD on free tier) */
-export const SEMANTIC_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash'] as const;
+export const SEMANTIC_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'] as const;
 
 export class AIModelService {
     private settings: GraphAnalysisSettings;
     // Gemini 3 Flash: RPM 5 -> 12s between requests
     private readonly ADVANCED_RATE_LIMIT_DELAY = 12000;
-    private readonly MODEL_NAME = 'gemini-2.5-flash';
+    private readonly MODEL_NAME = 'gemini-3-flash-preview';
     private readonly SEMANTIC_MODEL_NAME = SEMANTIC_MODELS[1]; // Default when no modelOverride
     
     public getModelName(): string {
@@ -47,15 +42,6 @@ export class AIModelService {
 
     public getSemanticModelName(): string {
         return this.SEMANTIC_MODEL_NAME;
-    }
-
-    private static classifySemanticError(message: string): SemanticErrorType {
-        const lower = message.toLowerCase();
-        const is429 = message.includes('429') || lower.includes('rate limit');
-        const isQuota = lower.includes('per day') || lower.includes('rpd') || lower.includes('daily') || lower.includes('quota');
-        if (is429 && isQuota) return 'quota_exhausted';
-        if (is429) return 'rate_limit';
-        return 'other';
     }
 
     private genAI: GoogleGenAI | null = null;
@@ -81,8 +67,24 @@ export class AIModelService {
         this.settings = settings;
         this.initializeGenAI();
     }
-    
 
+    /**
+     * Extract text from response for structured output.
+     * Gemini 3 with thinking returns thoughtSignature parts; response.text logs a warning.
+     * Manually extract only non-thought text parts to get clean JSON.
+     */
+    private extractStructuredText(response: { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> }): string {
+        const parts = response.candidates?.[0]?.content?.parts;
+        if (parts && parts.length > 0) {
+            const textParts = parts
+                .filter((p): p is { text: string } => !!p.text && p.thought !== true)
+                .map(p => p.text);
+            if (textParts.length > 0) {
+                return textParts.join('').trim();
+            }
+        }
+        return (response as { text?: string }).text?.trim() ?? '';
+    }
 
     /**
      * Structured output analysis using the configured model with response schema
@@ -91,7 +93,7 @@ export class AIModelService {
     public async generateStructuredAnalysis<T>(
         prompt: string,
         responseSchema: any,
-        maxOutputTokens: number = 8192,
+        maxOutputTokens: number = 8192*2,
         temperature: number = 0.3, // more accurate results with lower temperature
         topP: number = 0.72
     ): Promise<AIResponse<T>> {
@@ -114,7 +116,7 @@ export class AIModelService {
                     topP,
                     maxOutputTokens,
                     thinkingConfig: {
-                        thinkingBudget: 0, // Disables thinking
+                        thinkingBudget: -1, // Dynamic thinking for complex reasoning (structure, evolution, actions)
                     }
                 }
             });
@@ -126,7 +128,9 @@ export class AIModelService {
                 totalTokens: response.usageMetadata?.totalTokenCount || 0
             };
 
-            const result = response.text?.trim() || '';
+            // Extract text: Gemini 3 with thinking returns thoughtSignature parts; response.text
+            // logs a warning. Manually extract only non-thought text parts for clean JSON.
+            const result = this.extractStructuredText(response) || '';
             
             if (!result) {
                 console.error('Empty response details:', {
@@ -157,14 +161,19 @@ export class AIModelService {
 
         } catch (error) {
             console.error(`${this.MODEL_NAME} structured API error:`, error);
-            
+
             const errorMessage = (error as Error).message;
-            if (errorMessage.includes('429') || errorMessage.includes('Rate limit')) {
-                console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${this.ADVANCED_RATE_LIMIT_DELAY/1000} seconds...`);
+            const errorType = classifyGeminiError(errorMessage);
+
+            if (errorType === 'quota_exhausted') {
+                throw new SemanticAnalysisError(errorMessage, 'quota_exhausted', this.MODEL_NAME);
+            }
+            if (errorType === 'rate_limit') {
+                console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${this.ADVANCED_RATE_LIMIT_DELAY / 1000} seconds...`);
                 await new Promise(resolve => setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
                 return this.generateStructuredAnalysis(prompt, responseSchema, maxOutputTokens, temperature, topP);
             }
-            
+
             // Log additional context for debugging
             console.error('Structured analysis error context:', {
                 promptLength: prompt.length,
@@ -173,7 +182,7 @@ export class AIModelService {
                 topP,
                 hasSchema: !!responseSchema
             });
-            
+
             throw error;
         }
     }
@@ -213,6 +222,9 @@ export class AIModelService {
                     temperature,
                     topP,
                     maxOutputTokens,
+                    thinkingConfig: {
+                        thinkingBudget: 0, // Disable thinking for simple extraction (keywords, summary, domains)
+                    }
                 }
             });
 
@@ -255,9 +267,13 @@ export class AIModelService {
         } catch (error) {
             if (error instanceof SemanticAnalysisError) throw error;
 
-            console.error(`${model} semantic API error:`, error);
             const errorMessage = (error as Error).message;
-            const errorType = AIModelService.classifySemanticError(errorMessage);
+            const errorType = classifyGeminiError(errorMessage);
+            if (errorType === 'quota_exhausted') {
+                console.warn(`Semantic analysis quota exhausted (${model}):`, errorMessage.substring(0, 200));
+            } else {
+                console.error(`${model} semantic API error:`, error);
+            }
             throw new SemanticAnalysisError(errorMessage, errorType, model);
         }
     }

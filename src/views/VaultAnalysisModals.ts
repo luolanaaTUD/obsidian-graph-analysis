@@ -14,12 +14,16 @@ import { KnowledgeEvolutionData } from '../ai/visualization/KnowledgeEvolutionMa
 import { KnowledgeStructureManager } from '../ai/visualization/KnowledgeStructureManager';
 import { KnowledgeActionsManager, ReviewCandidate } from '../ai/visualization/KnowledgeActionsManager';
 import { GraphAnalysisSettings } from '../types/types';
+import { getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
 
 // Import type for the manager
 export interface VaultSemanticAnalysisManager {
     generateVaultAnalysis(): Promise<boolean>;
     viewVaultAnalysisResults(): Promise<void>;
     hasPendingSemanticChanges(): Promise<boolean>;
+    isAnalysisInProgress(): boolean;
+    setAnalysisInProgress(type: string): void;
+    clearAnalysisInProgress(): void;
 }
 
 export class VaultAnalysisModal extends Modal {
@@ -872,6 +876,17 @@ export class VaultAnalysisModal extends Modal {
             cls: 'analysis-status-indicator'
         });
 
+        if (this.vaultSemanticAnalysisManager.isAnalysisInProgress()) {
+            statusIndicator.addClass('status-outdated');
+            statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis in progress';
+            const disabledButton = buttonContainer.createEl('button', {
+                cls: 'mod-cta is-disabled',
+                text: 'Analysis is processing...'
+            });
+            disabledButton.disabled = true;
+            return;
+        }
+
         if (!isOutdated) {
             statusIndicator.addClass('status-current');
             statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis is current';
@@ -916,8 +931,9 @@ export class VaultAnalysisModal extends Modal {
             if (tabName === 'structure' || tabName === 'evolution' || tabName === 'actions') {
                 // Show notification before closing modal
                 const tabDisplayName = this.getTabDisplayName(tabName);
-                new Notice(`🧪 Updating ${tabDisplayName} Analysis...`);
+                new Notice(`🧪 Updating ${tabDisplayName} Analysis... (est. 1–2 min)`);
                 
+                this.vaultSemanticAnalysisManager.setAnalysisInProgress(tabName);
                 this.close();
                 try {
                     // Generate the appropriate analysis based on tab
@@ -935,8 +951,10 @@ export class VaultAnalysisModal extends Modal {
                         tabName
                     );
                 } catch (error) {
-                    // Error already shown by the analysis method, no need to reopen modal
                     console.error(`${tabName} analysis failed:`, error);
+                    new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
+                } finally {
+                    this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
                 }
             } else {
                 // Fallback to inline loading for other cases
@@ -974,6 +992,18 @@ export class VaultAnalysisModal extends Modal {
         const statusIndicator = buttonContainer.createEl('div', {
             cls: 'analysis-status-indicator'
         });
+
+        if (this.vaultSemanticAnalysisManager.isAnalysisInProgress()) {
+            statusIndicator.addClass('status-outdated');
+            statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis in progress';
+            const disabledButton = buttonContainer.createEl('button', {
+                cls: 'mod-cta is-disabled',
+                text: 'Analysis is processing...'
+            });
+            disabledButton.disabled = true;
+            return;
+        }
+
         statusIndicator.addClass('status-empty');
         statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis not generated yet';
 
@@ -988,8 +1018,9 @@ export class VaultAnalysisModal extends Modal {
             if (tabName === 'structure' || tabName === 'evolution' || tabName === 'actions') {
                 // Show notification before closing modal
                 const tabDisplayName = this.getTabDisplayName(tabName);
-                new Notice(`🧪 Generating ${tabDisplayName} Analysis...`);
+                new Notice(`🧪 Generating ${tabDisplayName} Analysis... (est. 1–2 min)`);
                 
+                this.vaultSemanticAnalysisManager.setAnalysisInProgress(tabName);
                 this.close();
                 try {
                     // Generate the appropriate analysis based on tab
@@ -1007,8 +1038,10 @@ export class VaultAnalysisModal extends Modal {
                         tabName
                     );
                 } catch (error) {
-                    // Error already shown by the analysis method, no need to reopen modal
                     console.error(`${tabName} analysis failed:`, error);
+                    new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
+                } finally {
+                    this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
                 }
             } else {
                 // Fallback to inline loading for other cases
@@ -1034,10 +1067,11 @@ export class VaultAnalysisModal extends Modal {
         loadingContainer.createEl('h3', { text: loadingTitle });
         
         const loadingText = loadingContainer.createEl('p');
+        const estTime = tabName ? '1–2 minutes' : '3–6 minutes';
         loadingText.innerHTML = `
             <strong style="color: var(--color-orange);">🧪 ${tabName ? `Generating ${this.getTabDisplayName(tabName)} Analysis` : 'Generating All Analyses'}</strong><br>
             ${tabName ? `This includes ${this.getTabDescription(tabName)}.` : 'This includes knowledge structure, evolution, and recommendations.'}<br>
-            <strong>Estimated time:</strong> 10-30 seconds.<br>
+            <strong>Estimated time:</strong> ${estTime}.<br>
             <small style="color: var(--text-muted);">Results will be cached for future use.</small>
         `;
 
@@ -1116,16 +1150,19 @@ export class VaultAnalysisModal extends Modal {
         } catch (error) {
             console.error('Error generating analysis:', error);
             loadingContainer.remove();
-            
-            const errorContainer = buttonSection.createEl('div', { 
-                cls: 'evolution-error' 
+
+            const err = error instanceof Error ? error : new Error(String(error));
+            const message = getUserFriendlyMessage(err);
+
+            const errorContainer = buttonSection.createEl('div', {
+                cls: 'evolution-error'
             });
             errorContainer.createEl('h4', { text: 'Error Generating AI Analysis' });
-            errorContainer.createEl('p', { 
-                text: `Failed to generate analysis: ${(error as Error).message}` 
+            errorContainer.createEl('p', {
+                text: `Failed to generate analysis: ${message}`
             });
-            
-            new Notice(`❌ Failed to generate AI analysis: ${(error as Error).message}`);
+
+            new Notice(`❌ Failed to generate AI analysis: ${message}`);
         }
     }
 
@@ -1583,6 +1620,18 @@ export class VaultAnalysisModal extends Modal {
         const statusIndicator = buttonContainer.createEl('div', {
             cls: 'analysis-status-indicator'
         });
+
+        if (this.vaultSemanticAnalysisManager.isAnalysisInProgress()) {
+            statusIndicator.addClass('status-outdated');
+            statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis in progress';
+            const disabledButton = buttonContainer.createEl('button', {
+                cls: 'mod-cta is-disabled',
+                text: 'Analysis is processing...'
+            });
+            disabledButton.disabled = true;
+            return;
+        }
+
         statusIndicator.addClass('status-empty');
         statusIndicator.innerHTML = '<span class="status-dot"></span> Analysis not generated yet';
 
@@ -1595,8 +1644,9 @@ export class VaultAnalysisModal extends Modal {
         generateButton.addEventListener('click', async () => {
             // Use close-reopen pattern for actions tab (same as structure and evolution)
             const tabDisplayName = this.getTabDisplayName('actions');
-            new Notice(`🧪 Generating ${tabDisplayName} Analysis...`);
+            new Notice(`🧪 Generating ${tabDisplayName} Analysis... (est. 1–2 min)`);
             
+            this.vaultSemanticAnalysisManager.setAnalysisInProgress('actions');
             this.close();
             try {
                 await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
@@ -1607,8 +1657,10 @@ export class VaultAnalysisModal extends Modal {
                     'actions'
                 );
             } catch (error) {
-                // Error already shown by the analysis method, no need to reopen modal
                 console.error('Actions analysis failed:', error);
+                new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
+            } finally {
+                this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
             }
         });
     }

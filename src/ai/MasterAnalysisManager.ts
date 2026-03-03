@@ -1,6 +1,7 @@
 import { App, Notice, TFile } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { AIModelService } from '../services/AIModelService';
+import { SemanticAnalysisError, getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
 import { KnowledgeStructureData } from './visualization/KnowledgeStructureManager';
 import { 
     KnowledgeEvolutionData,
@@ -306,6 +307,9 @@ ${formattedContext}`;
             return tabData;
         } catch (error) {
             console.error('Failed to generate Knowledge Structure Analysis:', error);
+            if (error instanceof SemanticAnalysisError && error.errorType === 'quota_exhausted') {
+                new Notice(getUserFriendlyMessage(error));
+            }
             throw error;
         }
     }
@@ -433,6 +437,9 @@ ${formattedContext}`;
             return tabData;
         } catch (error) {
             console.error('Failed to generate Knowledge Evolution Analysis:', error);
+            if (error instanceof SemanticAnalysisError && error.errorType === 'quota_exhausted') {
+                new Notice(getUserFriendlyMessage(error));
+            }
             throw error;
         }
     }
@@ -572,6 +579,9 @@ ${formattedContext}`;
             return tabData;
         } catch (error) {
             console.error('Failed to generate Recommended Actions Analysis:', error);
+            if (error instanceof SemanticAnalysisError && error.errorType === 'quota_exhausted') {
+                new Notice(getUserFriendlyMessage(error));
+            }
             throw error;
         }
     }
