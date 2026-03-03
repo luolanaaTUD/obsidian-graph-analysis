@@ -123,7 +123,8 @@ export class GraphView {
     private _hideTooltipTimeout: number | null = null;
 
     // Control panel elements
-    private controlPanel!: HTMLElement;
+    private controlPanel: HTMLElement | null = null;
+    private documentClickHandler: (() => void) | null = null;
 
     // Track selected gradients for each centrality type
     private selectedPalettes: Record<typeof this.centralityTypes[number], string> = {
@@ -151,6 +152,10 @@ export class GraphView {
 
     // Add this as a class property after the NODE constant
     private nodeRadiusScale: d3.ScaleThreshold<number, number> | null = null;
+    private nodeRadiusCache: Map<string, number> = new Map();
+    private cachedZoomLimits: [number, number] | null = null;
+    private cachedZoomLimitsWidth: number = 0;
+    private cachedZoomLimitsHeight: number = 0;
 
     // Display toggles for labels and arrows
     private showNodeLabels: boolean = true;
@@ -293,46 +298,50 @@ export class GraphView {
     /**
      * Calculate dynamic zoom limits based on screen size and node radius
      * Centralized method to ensure consistent limits across the application
+     * Results are cached and invalidated when nodes or dimensions change
      */
     private calculateZoomLimits(): [number, number] {
         if (!this.nodes || this.nodes.length === 0) {
-            // More conservative default values for empty graphs
+            this.cachedZoomLimits = null;
             return [0.1, 4];
         }
-        
+
+        if (this.cachedZoomLimits !== null &&
+            this.cachedZoomLimitsWidth === this.width &&
+            this.cachedZoomLimitsHeight === this.height) {
+            return this.cachedZoomLimits;
+        }
+
         // Calculate statistics for node sizes in the current graph
         let maxRadius = 0;
         let totalRadius = 0;
-        let nodeCount = this.nodes.length;
-        
-        // Use for loop for better performance
+        const nodeCount = this.nodes.length;
+        const baseRadius = this.NODE.RADIUS.SMALL_GRAPH.BASE;
+
         for (let i = 0; i < nodeCount; i++) {
-            const node = this.nodes[i];
-            const radius = this.getNodeRadius(node);
+            const radius = this.nodeRadiusCache.get(this.nodes[i].id) ?? baseRadius;
             maxRadius = Math.max(maxRadius, radius);
             totalRadius += radius;
         }
-        
+
         // Use average node radius for min zoom (to see entire graph)
         const avgRadius = totalRadius / nodeCount;
-        
+
         // Adjust scale factors based on node count
         const baseOutScaleFactor = 600;
         const baseInScaleFactor = 60;
-        
-        // For small graphs (< 100 nodes), use more conservative scale factors
         const outScaleFactor = nodeCount < 100 ? baseOutScaleFactor / 2 : baseOutScaleFactor;
         const inScaleFactor = nodeCount < 100 ? baseInScaleFactor / 2 : baseInScaleFactor;
-        
-        // Calculate zoom limits based on these statistics
+
         let minZoom = this.width / (avgRadius * outScaleFactor);
         let maxZoom = this.width / (maxRadius * inScaleFactor);
-        
-        // Ensure reasonable bounds for small graphs
-        minZoom = Math.max(0.1, Math.min(minZoom, 1.0)); // Prevent extreme min zoom
-        maxZoom = Math.max(2.0, Math.min(maxZoom, 8.0)); // Ensure reasonable max zoom
-        
-        return [minZoom, maxZoom];
+        minZoom = Math.max(0.1, Math.min(minZoom, 1.0));
+        maxZoom = Math.max(2.0, Math.min(maxZoom, 8.0));
+
+        this.cachedZoomLimits = [minZoom, maxZoom];
+        this.cachedZoomLimitsWidth = this.width;
+        this.cachedZoomLimitsHeight = this.height;
+        return this.cachedZoomLimits;
     }
 
     private setupZoomBehavior() {
@@ -426,59 +435,38 @@ export class GraphView {
         }
     }
 
-    /** Shorten link to node edge so arrow sits adjacent to circle, not hidden behind it */
-    private linkStartX(d: SimulationGraphLink): number {
+    /** Compute all four link endpoints at once (edge-to-edge for arrows) */
+    private linkEndpoints(d: SimulationGraphLink): [number, number, number, number] {
         const s = d.source as SimulationGraphNode;
         const t = d.target as SimulationGraphNode;
         const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
         const dx = tx - sx, dy = ty - sy;
         const len = Math.hypot(dx, dy) || 1;
-        const nx = dx / len;
-        return sx + nx * this.getNodeRadius(s);
+        const nx = dx / len, ny = dy / len;
+        const baseRadius = this.NODE.RADIUS.SMALL_GRAPH.BASE;
+        const sr = this.nodeRadiusCache.get(s.id) ?? baseRadius;
+        const tr = this.nodeRadiusCache.get(t.id) ?? baseRadius;
+        return [sx + nx * sr, sy + ny * sr, tx - nx * tr, ty - ny * tr];
     }
-    private linkStartY(d: SimulationGraphLink): number {
-        const s = d.source as SimulationGraphNode;
-        const t = d.target as SimulationGraphNode;
-        const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
-        const dx = tx - sx, dy = ty - sy;
-        const len = Math.hypot(dx, dy) || 1;
-        const ny = dy / len;
-        return sy + ny * this.getNodeRadius(s);
-    }
-    private linkEndX(d: SimulationGraphLink): number {
-        const s = d.source as SimulationGraphNode;
-        const t = d.target as SimulationGraphNode;
-        const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
-        const dx = tx - sx, dy = ty - sy;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = dx / len;
-        return tx - nx * this.getNodeRadius(t);
-    }
-    private linkEndY(d: SimulationGraphLink): number {
-        const s = d.source as SimulationGraphNode;
-        const t = d.target as SimulationGraphNode;
-        const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
-        const dx = tx - sx, dy = ty - sy;
-        const len = Math.hypot(dx, dy) || 1;
-        const ny = dy / len;
-        return ty - ny * this.getNodeRadius(t);
-    }
-    
+
     private updateGraph() {
         // Cache selection references for performance
         const linksSelection = this.linksSelection;
         const nodesSelection = this.nodesSelection;
-        
+
         // Safety check - if selections don't exist, exit early
         if (!linksSelection || !nodesSelection) return;
-        
+
         // Update link positions (edge-to-edge when arrows enabled, center-to-center otherwise)
         if (this.showArrows) {
-            linksSelection
-                .attr('x1', d => this.linkStartX(d))
-                .attr('y1', d => this.linkStartY(d))
-                .attr('x2', d => this.linkEndX(d))
-                .attr('y2', d => this.linkEndY(d));
+            linksSelection.each((d, i, nodes) => {
+                const [x1, y1, x2, y2] = this.linkEndpoints(d);
+                const el = nodes[i];
+                el.setAttribute('x1', String(x1));
+                el.setAttribute('y1', String(y1));
+                el.setAttribute('x2', String(x2));
+                el.setAttribute('y2', String(y2));
+            });
         } else {
             linksSelection
                 .attr('x1', d => (d.source as unknown as SimulationGraphNode).x || 0)
@@ -486,17 +474,17 @@ export class GraphView {
                 .attr('x2', d => (d.target as unknown as SimulationGraphNode).x || 0)
                 .attr('y2', d => (d.target as unknown as SimulationGraphNode).y || 0);
         }
-            
+
         // Update node positions
         nodesSelection
             .attr('cx', d => d.x || 0)
             .attr('cy', d => d.y || 0);
 
-        // Update label positions
-        if (this.labelsSelection && !this.labelsSelection.empty()) {
+        // Update label positions only when labels are visible
+        if (this.showNodeLabels && this.labelsSelection && !this.labelsSelection.empty()) {
             this.labelsSelection
                 .attr('x', d => d.x || 0)
-                .attr('y', d => (d.y || 0) + this.getNodeRadius(d) + 5);
+                .attr('y', d => (d.y || 0) + (this.nodeRadiusCache.get(d.id) ?? this.NODE.RADIUS.SMALL_GRAPH.BASE) + 5);
         }
     }
     
@@ -507,12 +495,15 @@ export class GraphView {
         }
         
         const rect = this.container.getBoundingClientRect();
-        
+
         // Only update dimensions if they are valid and the container is visible
         if (rect.width > 0 && rect.height > 0 && isFinite(rect.width) && isFinite(rect.height)) {
             this.width = rect.width;
             this.height = rect.height;
-            
+
+            // Invalidate zoom limits cache when dimensions change
+            this.cachedZoomLimits = null;
+
             // Update zoom limits when dimensions change
             if (this.zoom) {
                 this.zoom.scaleExtent(this.calculateZoomLimits());
@@ -935,29 +926,25 @@ export class GraphView {
         // Check if any centrality analysis is active
         const isCentralityActive = Object.values(this.centralityState).some(state => state);
         
-        // Dim all nodes and links not connected
+        // Dim all nodes and links not connected - use single transition per node to reduce overhead
         this.nodesSelection.each(function(d) {
             const isSelected = d.id === nodeId;
             const isConnected = isSelected || connectedNodeIds.has(parseInt(d.id));
             const selection = d3.select(this);
-            
-            selection.transition()
-                .duration(animationDuration)
-                .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)');
-            
-            // Only change the fill color if centrality analysis is not active
+
             if (!isCentralityActive) {
                 selection.transition()
                     .duration(animationDuration)
+                    .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)')
                     .style('fill', isSelected ? 'var(--graph-node-color-highlighted)' : 'var(--graph-node-color-default)');
-            }
-            
-            // For highlighted nodes in centrality mode, add a stroke for visual feedback
-            if (isCentralityActive && isSelected) {
-                selection.transition()
+            } else {
+                const trans = selection.transition()
                     .duration(animationDuration)
-                    .style('stroke', 'var(--graph-node-color-highlighted)')
-                    .style('stroke-width', '2px');
+                    .style('opacity', isConnected ? 'var(--graph-node-opacity-default)' : 'var(--graph-node-opacity-dimmed)');
+                if (isSelected) {
+                    trans.style('stroke', 'var(--graph-node-color-highlighted)')
+                        .style('stroke-width', '2px');
+                }
             }
         });
         
@@ -992,20 +979,22 @@ export class GraphView {
         // Check if any centrality analysis is active
         const isCentralityActive = Object.values(this.centralityState).some(state => state);
         
-        // Reset all nodes, links, and labels to default state
-        this.nodesSelection
-            .transition()
-            .duration(animationDuration)
-            .style('opacity', 'var(--graph-node-opacity-default)')
-            .style('stroke', 'var(--graph-node-color-default)')
-            .style('stroke-width', 'var(--graph-node-stroke-width)');
-        
-        // Only reset fill color if no centrality analysis is active
+        // Reset all nodes - use single transition when possible
         if (!isCentralityActive) {
             this.nodesSelection
                 .transition()
                 .duration(animationDuration)
+                .style('opacity', 'var(--graph-node-opacity-default)')
+                .style('stroke', 'var(--graph-node-color-default)')
+                .style('stroke-width', 'var(--graph-node-stroke-width)')
                 .style('fill', 'var(--graph-node-color-default)');
+        } else {
+            this.nodesSelection
+                .transition()
+                .duration(animationDuration)
+                .style('opacity', 'var(--graph-node-opacity-default)')
+                .style('stroke', 'var(--graph-node-color-default)')
+                .style('stroke-width', 'var(--graph-node-stroke-width)');
         }
             
         // Reset links to default style
@@ -1161,27 +1150,22 @@ export class GraphView {
             
             // Store metadata for later use
             this.graphMetadata = metadata;
-            
-            // Log additional details about the graph structure
-            console.log('Graph structure summary:');
-            console.log(`  Nodes: ${metadata.node_count}`);
-            console.log(`  Edges: ${metadata.edge_count}`);
-            console.log(`  Max degree: ${metadata.max_degree}`);
-            console.log(`  Avg degree: ${metadata.avg_degree.toFixed(2)}`);
-            console.log(`  Directed: ${metadata.is_directed}`);
-            console.log(`  Avg connections per node: ${(metadata.edge_count / metadata.node_count).toFixed(2)}`);
-            
+
+            // Build O(1) lookup map for degree centrality
+            const degreeMap = new Map<number, number>();
+            if (degreeCentrality) {
+                for (const r of degreeCentrality) {
+                    if (r?.centrality?.degree !== undefined) {
+                        degreeMap.set(r.node_id, r.centrality.degree);
+                    }
+                }
+            }
+
             // Convert edges to links format
             const nodes: SimulationGraphNode[] = graphData.nodes.map((nodePath: string, index: number) => {
                 const fileName = nodePath.split('/').pop() || nodePath;
                 const displayName = fileName.replace('.md', '');
-                
-                // Find degree centrality for this node
-                const nodeData = degreeCentrality?.find(r => r?.node_id === index);
-                // Safely access centrality.degree with multiple null checks
-                const degreeCentralityScore = nodeData && nodeData.centrality && nodeData.centrality.degree !== undefined
-                    ? nodeData.centrality.degree 
-                    : 0;
+                const degreeCentralityScore = degreeMap.get(index) ?? 0;
                 
                 return {
                     id: index.toString(),
@@ -1211,6 +1195,9 @@ export class GraphView {
     }
     
     public async updateData(graphData: { nodes: SimulationGraphNode[], links: SimulationGraphLink[] }) {
+        // Invalidate zoom limits cache when node data changes
+        this.cachedZoomLimits = null;
+
         // Store the data
         this.nodes = graphData.nodes || [];
         this.links = graphData.links || [];
@@ -1355,14 +1342,20 @@ export class GraphView {
      * This should be called when the graph data is updated
      */
     private initializeNodeRadiusScale(): void {
-        if (!this.nodes.length) return;
+        if (!this.nodes.length) {
+            this.nodeRadiusCache.clear();
+            return;
+        }
 
         // Collect all degree values
         const degrees = this.nodes
             .map(n => n.degreeCentrality)
             .filter((d): d is number => d !== undefined);
 
-        if (degrees.length === 0) return;
+        if (degrees.length === 0) {
+            this.nodeRadiusCache.clear();
+            return;
+        }
 
         // Calculate Jenks natural breaks using the number of size categories from NODE constant
         // Jenks returns n+1 break points for n categories
@@ -1399,27 +1392,25 @@ export class GraphView {
         this.nodeRadiusScale = d3.scaleThreshold<number, number>()
             .domain(breaks.slice(1)) // Remove the first break point (minimum value)
             .range(radiusSteps);
+
+        // Populate radius cache for hot-path lookups (updateGraph, collision force, recenterGraph)
+        this.nodeRadiusCache.clear();
+        const baseRadius = this.NODE.RADIUS.SMALL_GRAPH.BASE;
+        for (const node of this.nodes) {
+            const radius = this.nodeRadiusScale(node.degreeCentrality);
+            this.nodeRadiusCache.set(node.id, radius ?? baseRadius);
+        }
     }
 
     /**
      * Calculate node radius based on centrality and other factors
+     * Uses cached values when available for performance
      */
     private getNodeRadius(node?: SimulationGraphNode | null): number {
         if (!node) {
             return this.NODE.RADIUS.SMALL_GRAPH.BASE;
         }
-
-        // If we don't have a scale yet or node has no centrality data, return base size
-        if (!this.nodeRadiusScale || node.degreeCentrality === undefined) {
-            return this.NODE.RADIUS.SMALL_GRAPH.BASE;
-        }
-
-        // Get the categorized radius based on the node's degree
-        // scaleThreshold maps: low values → small radii, high values → large radii
-        const radius = this.nodeRadiusScale(node.degreeCentrality);
-
-        // Safety check: if scale returns undefined, fall back to base size
-        return radius ?? this.NODE.RADIUS.SMALL_GRAPH.BASE;
+        return this.nodeRadiusCache.get(node.id) ?? this.NODE.RADIUS.SMALL_GRAPH.BASE;
     }
     
     public refreshGraphView(): void {
@@ -1598,6 +1589,12 @@ export class GraphView {
     public onunload() {
         // Remove vault event handlers
 
+        // Remove document-level click listener to prevent memory leak
+        if (this.documentClickHandler) {
+            document.removeEventListener('click', this.documentClickHandler);
+            this.documentClickHandler = null;
+        }
+
         // Cancel any pending timers or animation frames
         if (this._frameRequest) {
             window.cancelAnimationFrame(this._frameRequest);
@@ -1633,6 +1630,7 @@ export class GraphView {
         // Clear data caches
         this.cachedNodeId = null;
         this.cachedNeighbors = null;
+        this.nodeRadiusCache.clear();
         this.nodes = [];
         this.links = [];
         
@@ -1688,6 +1686,12 @@ export class GraphView {
             this.svg = null;
         }
         
+        // Remove control panel and its listeners
+        if (this.controlPanel) {
+            this.controlPanel.remove();
+            this.controlPanel = null;
+        }
+
         // Clear remaining references
         // @ts-ignore - explicitly break circular references
         this.container = null;
@@ -1983,9 +1987,10 @@ export class GraphView {
         });
 
         // Close dropdown only when clicking outside
-        document.addEventListener('click', () => {
+        this.documentClickHandler = () => {
             dropdown.style.display = 'none';
-        });
+        };
+        document.addEventListener('click', this.documentClickHandler);
     }
 
     private toggleNodeLabels(enabled: boolean): void {
@@ -2025,6 +2030,7 @@ export class GraphView {
     }
 
     private createCentralityButton(type: typeof this.centralityTypes[number]): HTMLElement {
+        if (!this.controlPanel) throw new Error('Control panel not initialized');
         const button = this.controlPanel.createDiv({ cls: 'centrality-button' });
         
         // Set button label based on type
@@ -2090,7 +2096,7 @@ export class GraphView {
                 // Deactivate other buttons and states
                 this.centralityTypes.forEach(t => {
                     this.centralityState[t] = false;
-                    const otherButton = this.controlPanel.querySelector(`[data-centrality-type="${t}"]`);
+                    const otherButton = this.controlPanel?.querySelector(`[data-centrality-type="${t}"]`);
                     if (t !== type && otherButton instanceof HTMLElement) {
                         otherButton.removeClass('active');
                     }

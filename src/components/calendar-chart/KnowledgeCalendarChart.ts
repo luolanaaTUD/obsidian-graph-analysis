@@ -17,6 +17,8 @@ export interface CalendarChartOptions {
 }
 
 export class KnowledgeCalendarChart {
+    private static cachedCalendarData: CalendarData[] | null = null;
+
     private app: App;
     private container: HTMLElement;
     private options: CalendarChartOptions;
@@ -44,6 +46,11 @@ export class KnowledgeCalendarChart {
     }
 
     async generateCalendarData(): Promise<CalendarData[]> {
+        if (KnowledgeCalendarChart.cachedCalendarData) {
+            this.data = KnowledgeCalendarChart.cachedCalendarData;
+            return this.data;
+        }
+
         const allFiles = this.app.vault.getMarkdownFiles();
         const dailyActivity = new Map<string, CalendarData>();
         
@@ -97,8 +104,9 @@ export class KnowledgeCalendarChart {
         dailyActivities.sort((a, b) => a.date.getTime() - b.date.getTime());
         
         this.data = dailyActivities;
+        KnowledgeCalendarChart.cachedCalendarData = this.data;
         console.log(`Generated calendar data for ${dailyActivities.length} active days`);
-        
+
         return this.data;
     }
 
@@ -483,6 +491,7 @@ export class KnowledgeCalendarChart {
     }
 
     public async refresh(): Promise<void> {
+        KnowledgeCalendarChart.cachedCalendarData = null;
         this.data = [];
         await this.render();
     }

@@ -88,14 +88,16 @@ export interface ActionsAnalysisData extends TabAnalysisData {
 export class MasterAnalysisManager {
     private app: App;
     private aiService: AIModelService;
+    private responsesDirectoryEnsured = false;
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         this.aiService = new AIModelService(settings);
     }
 
-    // NEW: Ensure responses directory exists
+    // NEW: Ensure responses directory exists (cached per session)
     private async ensureResponsesDirectory(): Promise<void> {
+        if (this.responsesDirectoryEnsured) return;
         try {
             const responsesDir = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses`;
             try {
@@ -106,21 +108,22 @@ export class MasterAnalysisManager {
         } catch (error) {
             console.error('Failed to create responses directory:', error);
         }
+        this.responsesDirectoryEnsured = true;
     }
 
     // Update loadCachedTabAnalysis to ensure responses directory exists
-    public async loadCachedTabAnalysis(tabName: string): Promise<TabAnalysisData | null> {
+    public async loadCachedTabAnalysis(tabName: string, preloadedVaultData?: VaultAnalysisData | null): Promise<TabAnalysisData | null> {
         try {
             // Ensure responses directory exists
             await this.ensureResponsesDirectory();
-            
+
             // Look for the tab-specific analysis in the responses directory
             const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/${tabName}-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
             const data = JSON.parse(content);
-            
-            // Check if cached analysis matches current vault state
-            const currentAnalysisData = await this.loadVaultAnalysisData();
+
+            // Check if cached analysis matches current vault state (use preloaded data to avoid re-read)
+            const currentAnalysisData = preloadedVaultData !== undefined ? preloadedVaultData : await this.loadVaultAnalysisData();
             if (currentAnalysisData && data?.sourceAnalysisId !== this.generateAnalysisId(currentAnalysisData)) {
                 console.log(`Cached ${tabName} analysis is outdated but will still be displayed`);
                 data.isOutdated = true;  // Mark as outdated but still return

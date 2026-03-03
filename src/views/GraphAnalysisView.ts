@@ -31,6 +31,8 @@ export class GraphAnalysisView extends ItemView {
     private activeLeafChangeHandler: (leaf: WorkspaceLeaf | null) => void;
     private hasInitialized: boolean = false;
     private wasActive: boolean = false;
+    private lastKnownWidth: number = 0;
+    private lastKnownHeight: number = 0;
     
     constructor(leaf: WorkspaceLeaf, private plugin: GraphAnalysisPlugin) {
         super(leaf);
@@ -58,8 +60,11 @@ export class GraphAnalysisView extends ItemView {
                 }, 100);
             }
             
-            // Update active state tracking
-            this.wasActive = isNowActive;
+            // Update active state tracking - don't treat centrality results view as "leaving" graph workflow
+            const newViewType = leaf?.view?.getViewType?.();
+            if (newViewType !== CENTRALITY_RESULTS_VIEW_TYPE) {
+                this.wasActive = isNowActive;
+            }
         };
     }
 
@@ -92,7 +97,11 @@ export class GraphAnalysisView extends ItemView {
         
         // Initialize the graph view
         await this.graphView.onload(container);
-        
+
+        const rect = this.containerEl.getBoundingClientRect();
+        this.lastKnownWidth = rect.width;
+        this.lastKnownHeight = rect.height;
+
         // Mark as initialized and active after first load
         this.hasInitialized = true;
         this.wasActive = true; // View is active after onOpen completes
@@ -110,6 +119,13 @@ export class GraphAnalysisView extends ItemView {
     
     async onResize(): Promise<void> {
         if (this.graphView) {
+            const rect = this.containerEl.getBoundingClientRect();
+            if (Math.abs(rect.width - this.lastKnownWidth) < 1 &&
+                Math.abs(rect.height - this.lastKnownHeight) < 1) {
+                return;
+            }
+            this.lastKnownWidth = rect.width;
+            this.lastKnownHeight = rect.height;
             setTimeout(() => {
                 this.centerGraphSafely();
             }, 50);

@@ -20,7 +20,7 @@ import { getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
 export interface VaultSemanticAnalysisManager {
     generateVaultAnalysis(): Promise<boolean>;
     viewVaultAnalysisResults(): Promise<void>;
-    hasPendingSemanticChanges(): Promise<boolean>;
+    hasPendingSemanticChanges(preloadedData?: VaultAnalysisData | null): Promise<boolean>;
     isAnalysisInProgress(): boolean;
     setAnalysisInProgress(type: string): void;
     clearAnalysisInProgress(): void;
@@ -310,11 +310,16 @@ export class VaultAnalysisModal extends Modal {
         // Initial display
         this.currentPage = 1; // Reset to first page on initial load
         displayResults(this.analysisData.results);
-        
-        // Update Analysis button with status (disabled when no changes)
-        const isOutdated = await this.vaultSemanticAnalysisManager.hasPendingSemanticChanges();
-        await this.createUpdateAnalysisButtonSection(this.contentContainer, 'semantic', isOutdated);
-        
+
+        // Show Update button immediately with checking state, then update async (avoids blocking UI)
+        const buttonWrapper = this.contentContainer.createEl('div', { cls: 'semantic-update-button-wrapper' });
+        await this.createUpdateAnalysisButtonSection(buttonWrapper, 'semantic', false, true);
+
+        this.vaultSemanticAnalysisManager.hasPendingSemanticChanges(this.analysisData).then(isOutdated => {
+            buttonWrapper.empty();
+            this.createUpdateAnalysisButtonSection(buttonWrapper, 'semantic', isOutdated);
+        });
+
         // Search functionality
         searchInput.addEventListener('input', (e: Event) => {
             const searchTerm = (e.target as HTMLInputElement).value.toLowerCase();
@@ -665,7 +670,7 @@ export class VaultAnalysisModal extends Modal {
         
         // Check for cached tab-specific analysis
         try {
-            this.structureAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('structure') as StructureAnalysisData;
+            this.structureAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('structure', this.analysisData) as StructureAnalysisData;
             if (this.structureAnalysisData) {
                 console.log('Loaded cached structure analysis');
             } else {
@@ -681,19 +686,20 @@ export class VaultAnalysisModal extends Modal {
             this.knowledgeStructureManager = new KnowledgeStructureManager(this.app, this.settings, this.createEmptyState.bind(this));
         }
         
-        // ALWAYS display domain distribution chart using KnowledgeStructureManager
-        await this.knowledgeStructureManager.createDomainDistributionChart(domainDistributionSection);
-        
-        // ALWAYS display KDE distribution chart (independent of AI analysis, like domain chart)
-        // This fetches data directly from vault-analysis.json and displays without AI interference
-        await this.knowledgeStructureManager.renderKDEDistributionChart(networkAnalysisSection);
+        // ALWAYS display domain distribution and KDE charts in parallel
+        await Promise.all([
+            this.knowledgeStructureManager.createDomainDistributionChart(domainDistributionSection, this.analysisData ?? undefined),
+            this.knowledgeStructureManager.renderKDEDistributionChart(networkAnalysisSection, this.analysisData ?? undefined)
+        ]);
         
         // For the other sections, check if we have cached structure analysis data
         if (this.structureAnalysisData?.knowledgeStructure) {
-            // Display network analysis and gaps from cached data
+            // Display network analysis and gaps from cached data in parallel
             // Note: This will append network cards below the KDE chart
-            await this.displayNetworkAnalysis(networkAnalysisSection);
-            await this.displayKnowledgeGaps(gapsSection);
+            await Promise.all([
+                this.displayNetworkAnalysis(networkAnalysisSection),
+                this.displayKnowledgeGaps(gapsSection)
+            ]);
             
             // Show Update Analysis button below the results
             await this.createUpdateAnalysisButtonSection(
@@ -864,11 +870,11 @@ export class VaultAnalysisModal extends Modal {
         this.contentContainer = originalContentContainer;
     }
 
-    private async createUpdateAnalysisButtonSection(container: HTMLElement, tabName: string = '', isOutdated: boolean = false): Promise<void> {
+    private async createUpdateAnalysisButtonSection(container: HTMLElement, tabName: string = '', isOutdated: boolean = false, isChecking: boolean = false): Promise<void> {
         // Use modal-button-container style to match Semantic Analysis page
         // This includes the splitter line (border-top) and right alignment
-        const buttonContainer = container.createEl('div', { 
-            cls: 'modal-button-container' 
+        const buttonContainer = container.createEl('div', {
+            cls: 'modal-button-container'
         });
 
         // Add status indicator
@@ -882,6 +888,17 @@ export class VaultAnalysisModal extends Modal {
             const disabledButton = buttonContainer.createEl('button', {
                 cls: 'mod-cta is-disabled',
                 text: 'Analysis is processing...'
+            });
+            disabledButton.disabled = true;
+            return;
+        }
+
+        if (isChecking) {
+            statusIndicator.addClass('status-outdated');
+            statusIndicator.innerHTML = '<span class="status-dot"></span> Checking for updates...';
+            const disabledButton = buttonContainer.createEl('button', {
+                cls: 'mod-cta is-disabled',
+                text: 'Update Analysis'
             });
             disabledButton.disabled = true;
             return;
@@ -1189,14 +1206,16 @@ export class VaultAnalysisModal extends Modal {
     private async displayCachedAnalysis(container: HTMLElement): Promise<void> {
         if (!this.knowledgeEvolutionData) return;
 
-        // Access the data properties directly (new KnowledgeEvolutionData structure)
         const data = this.knowledgeEvolutionData;
-        
-        // Create analysis sections with structured data (3 sections only, no Learning Velocity)
-        // First section includes the calendar
+
+        // Calendar section must go first (renders into first position)
         await this.createStructuredAnalysisSection(container, 'Knowledge Development Timeline', data.timeline, true);
-        await this.createStructuredAnalysisSection(container, 'Topic Introduction Patterns', data.topicPatterns, false);
-        await this.createStructuredAnalysisSection(container, 'Focus Shift Analysis', data.focusShift, false);
+
+        // Topic and Focus sections are independent - render in parallel
+        await Promise.all([
+            this.createStructuredAnalysisSection(container, 'Topic Introduction Patterns', data.topicPatterns, false),
+            this.createStructuredAnalysisSection(container, 'Focus Shift Analysis', data.focusShift, false)
+        ]);
     }
 
     private async createStructuredAnalysisSection(container: HTMLElement, title: string, analysisData: any, includeCalendar: boolean = false): Promise<void> {
@@ -1414,7 +1433,7 @@ export class VaultAnalysisModal extends Modal {
     private async loadActionsAnalysisData(): Promise<boolean> {
         try {
             // Load tab-specific actions data
-            this.actionsAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('actions') as ActionsAnalysisData;
+            this.actionsAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('actions', this.analysisData) as ActionsAnalysisData;
             if (this.actionsAnalysisData) {
                 console.log('Loaded cached actions analysis');
                 return true;
@@ -1681,7 +1700,7 @@ export class VaultAnalysisModal extends Modal {
 
         // Check for cached tab-specific analysis
         try {
-            this.evolutionAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('evolution') as EvolutionAnalysisData;
+            this.evolutionAnalysisData = await this.masterAnalysisManager.loadCachedTabAnalysis('evolution', this.analysisData) as EvolutionAnalysisData;
             if (this.evolutionAnalysisData) {
                 console.log('Loaded cached evolution analysis');
                 this.knowledgeEvolutionData = this.evolutionAnalysisData.knowledgeEvolution;

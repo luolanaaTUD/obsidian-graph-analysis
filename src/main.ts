@@ -617,8 +617,10 @@ export default class GraphAnalysisPlugin extends Plugin {
 
     private async activateCentralityView(results: Node[], algorithmName: string) {
         let leaf = this.app.workspace.getLeavesOfType(CENTRALITY_RESULTS_VIEW_TYPE)[0];
-        
+        let isNewLeaf = false;
+
         if (!leaf) {
+            isNewLeaf = true;
             // Create a new leaf in the right sidebar
             const rightSplit = this.app.workspace.getRightLeaf(false);
             if (rightSplit) {
@@ -633,8 +635,10 @@ export default class GraphAnalysisPlugin extends Plugin {
             }
         }
 
-        // Reveal the leaf in case it was hidden
-        this.app.workspace.revealLeaf(leaf);
+        // Only reveal when leaf was just created - avoids triggering layout events when switching centrality
+        if (isNewLeaf) {
+            this.app.workspace.revealLeaf(leaf);
+        }
 
         // Update the view with new results
         if (this.centralityView) {

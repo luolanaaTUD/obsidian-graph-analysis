@@ -130,11 +130,12 @@ export class KnowledgeStructureManager {
     /**
      * Create domain distribution chart - centralized method
      * Uses vault analysis data directly without relying on cached structure files
+     * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
      */
-    public async createDomainDistributionChart(container: HTMLElement): Promise<void> {
+    public async createDomainDistributionChart(container: HTMLElement, preloadedData?: VaultAnalysisData): Promise<void> {
         try {
             // Try to build hierarchy from vault analysis data
-            const domainData = await this.buildDomainHierarchyFromVaultAnalysis();
+            const domainData = await this.buildDomainHierarchyFromVaultAnalysis(preloadedData);
             
             if (!domainData || !domainData.domainHierarchy || domainData.domainHierarchy.length === 0) {
                 this.createEmptyStateFn(container, 'Generate vault analysis to see your knowledge domain distribution.');
@@ -180,13 +181,11 @@ export class KnowledgeStructureManager {
     /**
      * Build domain hierarchy from vault analysis data
      * This is now centralized in KnowledgeStructureManager
+     * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
      */
-    private async buildDomainHierarchyFromVaultAnalysis(): Promise<DomainDistributionData | null> {
+    private async buildDomainHierarchyFromVaultAnalysis(preloadedData?: VaultAnalysisData): Promise<DomainDistributionData | null> {
         try {
-            // Load vault analysis data
-            const filePath = this.getVaultAnalysisFilePath();
-            const content = await this.app.vault.adapter.read(filePath);
-            const analysisData = JSON.parse(content);
+            const analysisData = preloadedData ?? JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath()));
 
             if (!analysisData?.results || analysisData.results.length === 0) {
                 return null;
@@ -350,13 +349,11 @@ export class KnowledgeStructureManager {
     /**
      * Render KDE distribution chart for centrality scores
      * This method fetches data directly from vault-analysis.json and displays independently of AI analysis
+     * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
      */
-    public async renderKDEDistributionChart(section: HTMLElement): Promise<void> {
+    public async renderKDEDistributionChart(section: HTMLElement, preloadedData?: VaultAnalysisData): Promise<void> {
         try {
-            // Load vault analysis data using the correct path
-            const vaultAnalysisPath = this.getVaultAnalysisFilePath();
-            const vaultData = await this.app.vault.adapter.read(vaultAnalysisPath);
-            const analysisData: VaultAnalysisData = JSON.parse(vaultData);
+            const analysisData: VaultAnalysisData = preloadedData ?? JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath()));
             
             // Calculate histogram distributions
             const kdeService = new KDECalculationService();

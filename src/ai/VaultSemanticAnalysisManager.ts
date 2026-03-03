@@ -46,6 +46,7 @@ export class VaultSemanticAnalysisManager {
     private readonly DELAY_BETWEEN_BATCHES = 6000; // 6s between batches (Gemini 2.5 Flash Lite RPM 10)
 
     private _analysisInProgress: 'semantic' | 'structure' | 'evolution' | 'actions' | null = null;
+    private responsesDirectoryEnsured = false;
 
     isAnalysisInProgress(): boolean {
         return this._analysisInProgress !== null;
@@ -75,9 +76,10 @@ export class VaultSemanticAnalysisManager {
     }
 
     /**
-     * Ensure responses directory exists
+     * Ensure responses directory exists (cached per session)
      */
     private async ensureResponsesDirectory(): Promise<void> {
+        if (this.responsesDirectoryEnsured) return;
         try {
             const responsesDir = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses`;
             try {
@@ -88,6 +90,7 @@ export class VaultSemanticAnalysisManager {
         } catch (error) {
             console.error('Failed to create responses directory:', error);
         }
+        this.responsesDirectoryEnsured = true;
     }
 
     constructor(app: App, settings: GraphAnalysisSettings) {
@@ -319,17 +322,18 @@ export class VaultSemanticAnalysisManager {
     /**
      * Identify which files need to be re-analyzed
      * Compares file modification times with existing analysis results
+     * Uses TFile.stat.mtime (synchronous) instead of adapter.stat for performance
      * Returns: { changedFiles, newFiles, deletedFilePaths, unchangedResults }
      */
-    private async identifyChangedFiles(
+    private identifyChangedFiles(
         currentFiles: TFile[],
         existingAnalysis: VaultAnalysisData | null
-    ): Promise<{
+    ): {
         changedFiles: TFile[];
         newFiles: TFile[];
         deletedFilePaths: string[];
         unchangedResults: VaultAnalysisResult[];
-    }> {
+    } {
         const changedFiles: TFile[] = [];
         const newFiles: TFile[] = [];
         const unchangedResults: VaultAnalysisResult[] = [];
@@ -351,31 +355,24 @@ export class VaultSemanticAnalysisManager {
             existingResultsMap.set(result.path, result);
         });
 
-        // Check each current file
+        // Check each current file - use TFile.stat.mtime (synchronous, no I/O)
         for (const file of currentFiles) {
             const existingResult = existingResultsMap.get(file.path);
-            
+
             if (!existingResult) {
                 // File doesn't exist in analysis - it's new
                 newFiles.push(file);
             } else {
                 // File exists - check if it's been modified
-                try {
-                    const stat = await this.app.vault.adapter.stat(file.path);
-                    const currentMtime = stat?.mtime ? new Date(stat.mtime).getTime() : 0;
-                    const existingMtime = existingResult.modified ? new Date(existingResult.modified).getTime() : 0;
-                    
-                    if (currentMtime > existingMtime) {
-                        // File has been modified since last analysis
-                        changedFiles.push(file);
-                    } else {
-                        // File hasn't changed - keep existing result
-                        unchangedResults.push(existingResult);
-                    }
-                } catch (error) {
-                    // If we can't stat the file, treat it as changed to be safe
-                    console.warn(`Could not stat file ${file.path}, treating as changed:`, error);
+                const currentMtime = file.stat.mtime;
+                const existingMtime = existingResult.modified ? new Date(existingResult.modified).getTime() : 0;
+
+                if (currentMtime > existingMtime) {
+                    // File has been modified since last analysis
                     changedFiles.push(file);
+                } else {
+                    // File hasn't changed - keep existing result
+                    unchangedResults.push(existingResult);
                 }
             }
         }
@@ -399,9 +396,10 @@ export class VaultSemanticAnalysisManager {
     /**
      * Check if there are pending changes (modified or new files) that would require
      * re-running semantic analysis. Used to enable/disable the Update Analysis button.
+     * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
      */
-    public async hasPendingSemanticChanges(): Promise<boolean> {
-        const existingAnalysis = await this.loadExistingAnalysisData();
+    public async hasPendingSemanticChanges(preloadedData?: VaultAnalysisData | null): Promise<boolean> {
+        const existingAnalysis = preloadedData !== undefined ? preloadedData : await this.loadExistingAnalysisData();
         const isIncrementalUpdate = existingAnalysis !== null && existingAnalysis.results && existingAnalysis.results.length > 0;
 
         if (!isIncrementalUpdate) {
@@ -413,7 +411,7 @@ export class VaultSemanticAnalysisManager {
 
         const allFiles = this.app.vault.getMarkdownFiles();
         const includedFiles = allFiles.filter(file => !this.isFileExcluded(file));
-        const changeInfo = await this.identifyChangedFiles(includedFiles, existingAnalysis);
+        const changeInfo = this.identifyChangedFiles(includedFiles, existingAnalysis);
         const pendingCount = changeInfo.changedFiles.length + changeInfo.newFiles.length;
         return pendingCount > 0;
     }
@@ -551,7 +549,7 @@ export class VaultSemanticAnalysisManager {
 
             if (isIncrementalUpdate) {
                 // Incremental update: only process changed/new files
-                const changeInfo = await this.identifyChangedFiles(includedFiles, existingAnalysis);
+                const changeInfo = this.identifyChangedFiles(includedFiles, existingAnalysis);
                 filesToProcess = [...changeInfo.changedFiles, ...changeInfo.newFiles];
                 unchangedResults = changeInfo.unchangedResults;
                 deletedFilePaths = changeInfo.deletedFilePaths;
@@ -1190,84 +1188,77 @@ export class VaultSemanticAnalysisManager {
 
     public async viewVaultAnalysisResults(): Promise<void> {
         try {
-            // Ensure the file exists
-            await this.ensureVaultAnalysisFileExists();
-            
-            // Try to read existing vault analysis results from responses folder
             const filePath = this.getVaultAnalysisFilePath();
-            let analysisData = null;
+            let analysisData: VaultAnalysisData | null = null;
             let hasExistingData = false;
-            
+
             try {
                 const content = await this.app.vault.adapter.read(filePath);
-                analysisData = JSON.parse(content);
-                hasExistingData = analysisData.results && analysisData.results.length > 0;
-                
-                // Check if the data has graph metrics
-                if (hasExistingData) {
-                    const hasGraphMetrics = analysisData.results.some((result: VaultAnalysisResult) => 
-                        result.graphMetrics && Object.keys(result.graphMetrics).length > 0
-                    );
-                    
-                    if (!hasGraphMetrics) {
-                        // Offer to enhance with graph metrics
-                        const shouldEnhance = await new Promise<boolean>((resolve) => {
-                            const notice = new Notice('Your vault analysis exists but lacks graph metrics. Click to enhance it with centrality scores.', 0);
-                            
-                            // Create enhance button in the notice
-                            const enhanceBtn = notice.noticeEl.createEl('button', { 
-                                text: 'Enhance with Graph Metrics',
-                                cls: 'graph-enhance-btn'
-                            });
-                            enhanceBtn.style.marginLeft = '10px';
-                            enhanceBtn.style.padding = '4px 8px';
-                            enhanceBtn.style.backgroundColor = 'var(--interactive-accent)';
-                            enhanceBtn.style.color = 'var(--text-on-accent)';
-                            enhanceBtn.style.border = 'none';
-                            enhanceBtn.style.borderRadius = '4px';
-                            enhanceBtn.style.cursor = 'pointer';
-                            
-                            enhanceBtn.onclick = () => {
-                                notice.hide();
-                                resolve(true);
-                            };
-                            
-                            // Auto-resolve to false after 8 seconds
-                            setTimeout(() => {
-                                notice.hide();
-                                resolve(false);
-                            }, 8000);
-                        });
-
-                        if (shouldEnhance) {
-                            // Show loading notice and enhance with graph metrics
-                            const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
-                            try {
-                                await this.enhanceWithGraphMetrics();
-                                enhanceNotice.hide();
-                                new Notice('✅ Vault analysis enhanced with graph metrics!');
-                                
-                                // Reload the enhanced data
-                                const enhancedContent = await this.app.vault.adapter.read(filePath);
-                                analysisData = JSON.parse(enhancedContent);
-                                
-                            } catch (error) {
-                                enhanceNotice.hide();
-                                console.error('Error enhancing with graph metrics:', error);
-                                new Notice(`❌ Failed to enhance analysis: ${(error as Error).message}`);
-                                // Continue with original data
-                            }
-                        }
-                    }
+                const parsed = JSON.parse(content);
+                if (parsed && typeof parsed === 'object' && Array.isArray(parsed.results)) {
+                    analysisData = parsed as VaultAnalysisData;
+                    hasExistingData = analysisData.results.length > 0;
+                } else {
+                    throw new Error('Invalid vault analysis format');
                 }
-            } catch (error) {
-                // File doesn't exist or is invalid, we'll show empty state
+            } catch {
+                // File doesn't exist or is invalid - create empty structure if needed
+                const initialData: VaultAnalysisData = {
+                    generatedAt: new Date().toISOString(),
+                    totalFiles: 0,
+                    generatedFiles: 0,
+                    updatedFiles: 0,
+                    apiProvider: 'Google Gemini',
+                    results: []
+                };
+                await this.ensureResponsesDirectory();
+                await this.app.vault.adapter.write(filePath, JSON.stringify(initialData, null, 2));
+                analysisData = initialData;
                 hasExistingData = false;
             }
-            
-            // Always display modal, passing whether we have existing data
+
+            // Open modal immediately (no blocking enhancement prompt)
             const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this, this.settings);
             modal.open();
+
+            // Non-blocking: offer graph metrics enhancement after modal is visible
+            if (hasExistingData && analysisData) {
+                const hasGraphMetrics = analysisData.results.some((result: VaultAnalysisResult) =>
+                    result.graphMetrics && Object.keys(result.graphMetrics).length > 0
+                );
+
+                if (!hasGraphMetrics) {
+                    const notice = new Notice('Your vault analysis exists but lacks graph metrics. Click to enhance it with centrality scores.', 0);
+                    const enhanceBtn = notice.noticeEl.createEl('button', {
+                        text: 'Enhance with Graph Metrics',
+                        cls: 'graph-enhance-btn'
+                    });
+                    enhanceBtn.style.marginLeft = '10px';
+                    enhanceBtn.style.padding = '4px 8px';
+                    enhanceBtn.style.backgroundColor = 'var(--interactive-accent)';
+                    enhanceBtn.style.color = 'var(--text-on-accent)';
+                    enhanceBtn.style.border = 'none';
+                    enhanceBtn.style.borderRadius = '4px';
+                    enhanceBtn.style.cursor = 'pointer';
+
+                    enhanceBtn.onclick = async () => {
+                        notice.hide();
+                        const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
+                        try {
+                            await this.enhanceWithGraphMetrics();
+                            enhanceNotice.hide();
+                            new Notice('Vault analysis enhanced with graph metrics!');
+                            await this.viewVaultAnalysisResults();
+                        } catch (error) {
+                            enhanceNotice.hide();
+                            console.error('Error enhancing with graph metrics:', error);
+                            new Notice(`Failed to enhance analysis: ${(error as Error).message}`);
+                        }
+                    };
+
+                    setTimeout(() => notice.hide(), 8000);
+                }
+            }
         } catch (error) {
             console.error('Failed to load vault analysis results:', error);
             new Notice(error instanceof Error ? error.message : 'Failed to load vault analysis results');
