@@ -92,7 +92,7 @@ export class KnowledgeActionsManager {
     public async loadCachedActionsData(): Promise<KnowledgeActionsData | null> {
         try {
             // Use the tab-specific analysis file instead of master-analysis.json
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/actions-analysis.json`;
+            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/actions-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
             const data = JSON.parse(content);
             

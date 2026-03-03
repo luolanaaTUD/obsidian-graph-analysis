@@ -99,7 +99,7 @@ export class MasterAnalysisManager {
     private async ensureResponsesDirectory(): Promise<void> {
         if (this.responsesDirectoryEnsured) return;
         try {
-            const responsesDir = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses`;
+            const responsesDir = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses`;
             try {
                 await this.app.vault.adapter.mkdir(responsesDir);
             } catch {
@@ -118,7 +118,7 @@ export class MasterAnalysisManager {
             await this.ensureResponsesDirectory();
 
             // Look for the tab-specific analysis in the responses directory
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/${tabName}-analysis.json`;
+            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/${tabName}-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
             const data = JSON.parse(content);
 
@@ -148,7 +148,7 @@ export class MasterAnalysisManager {
      * Get the path to vault-analysis.json in the responses folder
      */
     private getVaultAnalysisFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/vault-analysis.json`;
+        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis.json`;
     }
 
     private async loadVaultAnalysisData(): Promise<VaultAnalysisData | null> {
@@ -357,7 +357,7 @@ ${formattedContext}`;
             await this.ensureResponsesDirectory();
             
             // Store the tab-specific analysis in the responses directory
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/${tabName}-analysis.json`;
+            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/${tabName}-analysis.json`;
             await this.app.vault.adapter.write(filePath, JSON.stringify(data, null, 2));
             // console.log(`${tabName} analysis cached successfully in responses directory`);
         } catch (error) {

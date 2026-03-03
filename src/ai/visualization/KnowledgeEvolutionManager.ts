@@ -103,7 +103,7 @@ export class KnowledgeEvolutionManager {
         try {
             // Use the tab-specific analysis file (evolution-analysis.json)
             // The file structure is: { knowledgeEvolution: KnowledgeEvolutionData, ... }
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/evolution-analysis.json`;
+            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/evolution-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
             const data = JSON.parse(content);
             

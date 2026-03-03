@@ -82,4 +82,7 @@ dist/
 data.json
 
 # Release directory
-release/ 
+release/
+
+# Obsidian marketplace submission (temporary fork)
+obsidian-releases-fork/ 

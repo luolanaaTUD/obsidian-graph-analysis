@@ -16,22 +16,22 @@ npm run build
 
 # Create plugin directory inside release
 cd release
-mkdir obsidian-graph-analysis
+mkdir knowledge-graph-analysis
 
 # Copy all required files
 echo "Copying files..."
-cp ../dist/main.js obsidian-graph-analysis/
-cp ../dist/graph_analysis_wasm_bg.wasm obsidian-graph-analysis/
-cp ../dist/knowledge-domains.json obsidian-graph-analysis/
-cp ../manifest.json obsidian-graph-analysis/
-cp ../README.md obsidian-graph-analysis/
-cp ../LICENSE obsidian-graph-analysis/
+cp ../dist/main.js knowledge-graph-analysis/
+cp ../dist/graph_analysis_wasm_bg.wasm knowledge-graph-analysis/
+cp ../dist/knowledge-domains.json knowledge-graph-analysis/
+cp ../manifest.json knowledge-graph-analysis/
+cp ../README.md knowledge-graph-analysis/
+cp ../LICENSE knowledge-graph-analysis/
 
 # Copy styles.css if it exists (won't fail if missing)
-cp ../dist/styles.css obsidian-graph-analysis/ 2>/dev/null || true
+cp ../dist/styles.css knowledge-graph-analysis/ 2>/dev/null || true
 
 # Create zip file
 echo "Creating zip file..."
-zip -r obsidian-graph-analysis.zip obsidian-graph-analysis/
+zip -r knowledge-graph-analysis.zip knowledge-graph-analysis/
 
-echo "Release package created successfully in release/obsidian-graph-analysis.zip" 
+echo "Release package created successfully in release/knowledge-graph-analysis.zip" 

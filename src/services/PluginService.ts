@@ -15,7 +15,7 @@ export class PluginService {
 
     constructor(app: App) {
         const extendedApp = app as ExtendedApp;
-        this.plugin = extendedApp.plugins.plugins['obsidian-graph-analysis'] as GraphAnalysisPlugin;
+        this.plugin = extendedApp.plugins.plugins['knowledge-graph-analysis'] as GraphAnalysisPlugin;
         if (!this.plugin) {
             throw new Error('Graph Analysis plugin not found');
         }

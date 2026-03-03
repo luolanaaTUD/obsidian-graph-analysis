@@ -56,7 +56,7 @@ export class KnowledgeDomainHelper {
     public async loadDomainTemplate(): Promise<void> {
         if (this.domainTemplate) return;
         try {
-            const templatePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/knowledge-domains.json`;
+            const templatePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/knowledge-domains.json`;
             let templateContent: string | null = null;
             try {
                 templateContent = await this.app.vault.adapter.read(templatePath);

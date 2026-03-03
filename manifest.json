@@ -1,9 +1,9 @@
 {
-	"id": "obsidian-graph-analysis",
-	"name": "Graph Analysis",
+	"id": "knowledge-graph-analysis",
+	"name": "Knowledge Graph Analysis",
 	"version": "0.5.1",
 	"minAppVersion": "1.7.2",
-	"description": "Analyze Obsidian vault using graph algorithms with Rust WASM for high-performance to provide insights into note structure and relationships",
+	"description": "Analyze your vault using graph algorithms with Rust WASM for high-performance insights into note structure and relationships.",
 	"author": "wluo",
 	"authorUrl": "https://github.com/luolanaaTUD",
 	"isDesktopOnly": false

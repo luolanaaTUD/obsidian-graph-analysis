@@ -64,11 +64,11 @@ export class VaultSemanticAnalysisManager {
      * Get the path to vault-analysis.json in the responses folder
      */
     private getVaultAnalysisFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/vault-analysis.json`;
+        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis.json`;
     }
 
     private getFailedBatchesFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/vault-analysis-failed-batches.json`;
+        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis-failed-batches.json`;
     }
 
     private getSemanticModelForBatch(batchIndex: number): string {
@@ -81,7 +81,7 @@ export class VaultSemanticAnalysisManager {
     private async ensureResponsesDirectory(): Promise<void> {
         if (this.responsesDirectoryEnsured) return;
         try {
-            const responsesDir = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses`;
+            const responsesDir = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses`;
             try {
                 await this.app.vault.adapter.mkdir(responsesDir);
             } catch {

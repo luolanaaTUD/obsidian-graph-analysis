@@ -7,8 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, '..');
 
 // Configuration
-const pluginId = 'obsidian-graph-analysis';
-const pluginName = 'Graph Analysis';
+const pluginId = 'knowledge-graph-analysis';
+const pluginName = 'Knowledge Graph Analysis';
 
 let vaultPath;
 

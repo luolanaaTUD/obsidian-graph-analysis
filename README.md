@@ -1,4 +1,4 @@
-# Obsidian Graph Analysis
+# Knowledge Graph Analysis
 
 An [Obsidian](https://obsidian.md) plugin that turns your vault into a knowledge graph, then feeds those graph-theory metrics to AI — giving it structured, quantitative context instead of raw note content. The result: deeper insights into how your knowledge is organized, how it evolves, and what to do next.
 
@@ -32,7 +32,7 @@ This plugin takes a different approach. It first computes real graph metrics —
 
 1. Download the latest release from the [releases page](https://github.com/luolanaaTUD/obsidian-graph-analysis/releases)
 2. Extract the zip into your vault's `.obsidian/plugins/` directory
-3. Enable **Graph Analysis** in Obsidian settings under Community Plugins
+3. Enable **Knowledge Graph Analysis** in Obsidian settings under Community Plugins
 
 ## Interactive Graph View
 
@@ -98,7 +98,7 @@ For a quick summary of the current note, click **AI Summary** in the status bar.
 
 ## Settings
 
-Under Obsidian settings → **Graph Analysis**:
+Under Obsidian settings → **Knowledge Graph Analysis**:
 
 | Setting | Description |
 |---|---|

@@ -78,7 +78,7 @@ export class KnowledgeStructureManager {
 
     public async loadCachedStructureData(): Promise<KnowledgeStructureData | null> {
         try {
-            const filePath = `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/structure-analysis.json`;
+            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/structure-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
             const data = JSON.parse(content);
             
@@ -175,7 +175,7 @@ export class KnowledgeStructureManager {
      * Get the path to vault-analysis.json in the responses folder
      */
     private getVaultAnalysisFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/obsidian-graph-analysis/responses/vault-analysis.json`;
+        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis.json`;
     }
 
     /**
