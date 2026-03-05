@@ -176,7 +176,7 @@ export class DomainDistributionChart {
     }
 
     private renderSunburstChart(container: HTMLElement = this.container): void {
-        /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unnecessary-type-assertion -- D3 Selection types are narrow when selecting by node; use any for chaining */
+         
         // Use extracted color generation method
         const getVividAccentColor = (i: number, total: number): string => {
             return this.generateAccentColor(i, total);
@@ -235,8 +235,8 @@ export class DomainDistributionChart {
             return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
         };
 
-        // Create SVG (cast to any - @types/d3 Selection has narrow typing for node selection)
-        const svg = d3.select(svgEl) as any;
+        // Create SVG (@types/d3 Selection has narrow typing for node selection)
+        const svg = d3.select(svgEl) as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>;
         svg.attr('width', width)
             .attr('height', height)
             .attr('viewBox', [-width / 2, -height / 2, width, height])
@@ -245,7 +245,7 @@ export class DomainDistributionChart {
             .style('margin', '0 auto')
             .style('font', '10px sans-serif');
 
-        const g = svg.append('g') as any;
+        const g = svg.append('g');
 
         // Create all arcs (excluding root) - show all layers immediately
         const descendants = root.descendants().slice(1);
@@ -315,7 +315,7 @@ export class DomainDistributionChart {
             .style('opacity', (d: PartitionNode) => +labelVisible(d));
 
         labelGroups.each(function(this: SVGGElement, d: PartitionNode) {
-            const group = d3.select(this) as any;
+            const group = d3.select(this) as unknown as d3.Selection<SVGGElement, PartitionNode, SVGGElement, unknown>;
             const arcSize = (d.y1 - d.y0) * (d.x1 - d.x0);
             const name = d.data.name;
             
@@ -381,10 +381,10 @@ export class DomainDistributionChart {
             // Center the text vertically
             const textElement = group.select('text');
             const tspanSelection = textElement.selectAll('tspan');
-            const numLines = (tspanSelection as any).size();
+            const numLines = (tspanSelection as unknown as d3.Selection<SVGTSpanElement, unknown, SVGTextElement, unknown>).size();
             if (numLines > 1) {
                 const offset = -(numLines - 1) * 0.5 * 1.1;
-                (tspanSelection as any).each(function(this: Element, _d: unknown, i: number) {
+                (tspanSelection as unknown as d3.Selection<SVGTSpanElement, unknown, SVGTextElement, unknown>).each(function(this: Element, _d: unknown, i: number) {
                     d3.select(this).attr('dy', `${offset + i * 1.1}em`);
                 });
             } else {
@@ -614,7 +614,7 @@ export class DomainDistributionChart {
                     updateCenterInfo();
                 });
         }
-        /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unnecessary-type-assertion */
+         
     }
 
     // Prepare optimized hierarchy - data is now pre-built by MasterAnalysisManager

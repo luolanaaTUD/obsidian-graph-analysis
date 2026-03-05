@@ -51,15 +51,15 @@ export class ConnectivityScatterChart {
         this.currentMode = this.options.mode || 'links';
     }
 
-    public async render(): Promise<void> {
+    public render(): Promise<void> {
         // Clear container
         this.container.empty();
 
         // Compute data based on current mode
         if (this.currentMode === 'links') {
-            await this.computeLinkData();
+            this.computeLinkData();
         } else {
-            await this.computeCentralityData();
+            this.computeCentralityData();
         }
 
         if (this.data.length === 0) {
@@ -71,7 +71,7 @@ export class ConnectivityScatterChart {
                 text: message,
                 cls: 'scatter-chart-no-data'
             });
-            return;
+            return Promise.resolve();
         }
 
         const { width, height, margin } = this.options;
@@ -88,8 +88,9 @@ export class ConnectivityScatterChart {
             .attr('viewBox', `0 0 ${width!} ${height!}`)
             .attr('style', 'max-width: 100%; height: auto; display: block; margin: 0 auto;');
 
-        /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- D3 Selection append omitted in @types/d3 */
-        const g = (this.svg as any).append('g')
+         
+        type SvgWithAppend = { append(name: string): d3.Selection<SVGGElement, unknown, SVGSVGElement, unknown> };
+        const g = (this.svg as unknown as SvgWithAppend).append('g')
             .attr('transform', `translate(${margin!.left},${margin!.top})`);
 
         // Create scales with proper bounds handling
@@ -287,9 +288,11 @@ export class ConnectivityScatterChart {
         // Style axes
         g.selectAll('.domain, .tick line')
             .attr('stroke', 'var(--background-modifier-border)');
+
+        return Promise.resolve();
     }
 
-    private async computeLinkData(): Promise<void> {
+    private computeLinkData(): void {
         const allFiles = this.app.vault.getMarkdownFiles();
         const dataPoints: ScatterDataPoint[] = [];
 
@@ -352,7 +355,7 @@ export class ConnectivityScatterChart {
         this.data = dataPoints;
     }
 
-    private async computeCentralityData(): Promise<void> {
+    private computeCentralityData(): void {
         const dataPoints: ScatterDataPoint[] = [];
 
         if (!this.options.analysisData || !this.options.analysisData.results) {
@@ -432,7 +435,7 @@ export class ConnectivityScatterChart {
         }
     }
 
-    private async openNote(path: string): Promise<void> {
+    private openNote(path: string): void {
         try {
             const file = this.app.vault.getAbstractFileByPath(path);
             if (file instanceof TFile) {
@@ -458,7 +461,7 @@ export class ConnectivityScatterChart {
     public destroy(): void {
         this.hideTooltip();
         if (this.svg) {
-            (this.svg as any).remove();
+            (this.svg as unknown as { remove(): void }).remove();
             this.svg = null;
         }
         this.container.empty();

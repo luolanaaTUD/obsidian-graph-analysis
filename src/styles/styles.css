@@ -78,6 +78,15 @@
     box-sizing: border-box;
 }
 
+.network-card-standalone {
+    width: 100%;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.network-card-content-padded {
+    padding: 20px;
+}
+
 .network-card:hover {
     transform: translateY(-3px);
     box-shadow: var(--shadow-l);
@@ -147,12 +156,12 @@
 
 /* Domain Item */
 .network-domain-item {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--background-modifier-border-subtle, #eaecef);
+    padding: 20px;
+    border-top: 1px solid var(--background-modifier-border);
 }
 
-.network-domain-item:last-child {
-    border-bottom: none;
+.network-domain-item:first-child {
+    border-top: none;
 }
 
 /* Domain Header */
@@ -160,7 +169,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
 }
 
 .network-domain-name {
@@ -182,18 +191,49 @@
 .network-domain-explanation {
     font-size: 14px;
     color: var(--text-normal, #24292e);
-    margin-bottom: 12px;
-    line-height: 1.5;
+    margin-bottom: 14px;
+    line-height: 1.6;
 }
 
-/* Notes Section */
-.network-notes-header {
-    font-size: 13px;
+/* Notes/Connections/Coverage/Influence/Insights sections - shared container style */
+.network-notes-section,
+.network-connections-section,
+.network-coverage-section,
+.network-influence-section,
+.network-insights-section {
+    margin-bottom: 14px;
+    padding: 12px;
+    background: var(--background-secondary-alt);
+    border-radius: 8px;
+}
+
+/* Section headers - shared style */
+.network-notes-header,
+.network-connections-header,
+.network-coverage-header,
+.network-influence-header,
+.network-insights-header {
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-muted, #656d76);
     margin-bottom: 8px;
     display: flex;
     align-items: center;
+    gap: 6px;
+}
+
+.network-notes-header .lucide,
+.network-connections-header .lucide,
+.network-coverage-header .lucide,
+.network-influence-header .lucide,
+.network-insights-header .lucide {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Notes Section */
+.network-notes-header {
+    font-size: 14px;
 }
 
 /* Removed old emoji icon - now using Lucide icon instead */
@@ -211,15 +251,15 @@
 
 .network-note-item {
     font-size: 13px;
-    margin-bottom: 6px;
+    padding: 6px 0;
     color: var(--text-normal, #24292e);
     display: flex;
     align-items: center;
-    justify-content: space-between;
 }
 
-.network-note-item:last-child {
-    margin-bottom: 0;
+.network-note-item + .network-note-item {
+    border-top: 1px dashed var(--background-modifier-border);
+    padding-top: 6px;
 }
 
 .network-note-link {
@@ -230,10 +270,43 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: color 0.2s ease, opacity 0.2s ease;
+    border-radius: 4px;
+    padding: 2px 4px;
 }
 
 .network-note-link:hover {
+    color: var(--text-accent-hover);
+    background: var(--background-modifier-hover);
     text-decoration: underline;
+}
+
+/* Connections/Coverage/Influence list and items */
+.network-connections-list,
+.network-coverage-list,
+.network-influence-list {
+    font-size: 13px;
+    color: var(--text-normal);
+    line-height: 1.5;
+}
+
+.network-connection-item,
+.network-coverage-item,
+.network-influence-item {
+    display: inline-block;
+    margin: 2px 4px 2px 0;
+    padding: 2px 6px;
+    background: var(--background-primary);
+    border-radius: 4px;
+    font-size: 12px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.network-insights-content {
+    font-size: 13px;
+    color: var(--text-normal);
+    line-height: 1.5;
+    margin: 0;
 }
 
 .network-note-score {
@@ -430,6 +503,8 @@
   box-shadow: var(--shadow-m);
   padding: var(--graph-tooltip-padding);
   position: absolute;
+  left: var(--graph-tooltip-x, 0);
+  top: var(--graph-tooltip-y, 0);
   z-index: 9999;
   width: var(--graph-tooltip-width);
   height: var(--graph-tooltip-height);
@@ -437,10 +512,14 @@
   pointer-events: auto;
   scroll-behavior: smooth;
   overscroll-behavior: contain;
-  display: flex;
+  display: none;
   flex-direction: column;
   color: var(--text-normal);
   scrollbar-width: none;
+}
+
+.graph-node-tooltip.graph-node-tooltip-visible {
+  display: flex;
 }
 
 .graph-node-tooltip::-webkit-scrollbar {
@@ -822,6 +901,11 @@
   padding: 20px;
   z-index: 1000;
   overflow-y: auto;
+  display: none;
+}
+
+.color-settings-dropdown.color-settings-dropdown-visible {
+  display: block;
 }
 
 /* Display toggles section */

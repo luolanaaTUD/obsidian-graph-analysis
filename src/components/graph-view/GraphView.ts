@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- D3 selection types and zoom/drag events */
-/* eslint-disable obsidianmd/no-static-styles-assignment -- Dynamic tooltip positioning and dropdown visibility require inline styles */
 /* eslint-disable @typescript-eslint/unbound-method -- D3 zoom.transform requires .call with bound method */
 import { App, Notice, TFile, setIcon } from 'obsidian';
 import * as d3 from 'd3';
@@ -852,10 +850,10 @@ export class GraphView {
             tooltipY = mouseY - offsetY - tooltipHeight;
         }
         
-        // Apply the calculated position (dynamic values require inline style)
-        tooltip.style.setProperty('display', 'block');
-        tooltip.style.setProperty('left', `${tooltipX}px`);
-        tooltip.style.setProperty('top', `${tooltipY}px`);
+        // Apply position via CSS variables (dynamic values allowed by rule)
+        tooltip.style.setProperty('--graph-tooltip-x', `${tooltipX}px`);
+        tooltip.style.setProperty('--graph-tooltip-y', `${tooltipY}px`);
+        tooltip.classList.add('graph-node-tooltip-visible');
     }
     
     private highlightConnections(nodeId: string, highlight: boolean) {
@@ -995,16 +993,17 @@ export class GraphView {
     }
     
     private setupDragBehavior() {
+        type DragEvent = d3.D3DragEvent<SVGCircleElement, SimulationGraphNode, SimulationGraphNode>;
         return d3.drag<SVGCircleElement, SimulationGraphNode>()
-            .on('start', (event, d) => {
+            .on('start', (event: DragEvent, d: SimulationGraphNode) => {
                 // Reheat simulation when drag starts
                 if (!event.active && this.simulation) {
                     this.simulation.alphaTarget(0.3).restart();
                 }
                 
                 // Fix the position of the dragged node
-                d.fx = d.x;
-                d.fy = d.y;
+                d.fx = d.x ?? null;
+                d.fy = d.y ?? null;
                 
                 // Set drag state and remove tooltip
                 this.isDraggingNode = true;
@@ -1013,10 +1012,11 @@ export class GraphView {
                 
                 // Apply highlighting
                 this.highlightedNodeId = d.id;
-                this.highlightNode(event.sourceEvent.currentTarget as SVGCircleElement, true);
+                const target = (event.sourceEvent as MouseEvent).currentTarget;
+                this.highlightNode(target as SVGCircleElement, true);
                 this.highlightConnections(d.id, true);
             })
-            .on('drag', (event, d) => {
+            .on('drag', (event: DragEvent, d: SimulationGraphNode) => {
                 // Update the fixed position of the dragged node
                 d.fx = event.x;
                 d.fy = event.y;
@@ -1024,30 +1024,28 @@ export class GraphView {
                 // Maintain highlighting during drag
                 if (this.highlightedNodeId !== d.id) {
                     this.highlightedNodeId = d.id;
-                    this.highlightNode(event.sourceEvent.currentTarget as SVGCircleElement, true);
+                    const target = (event.sourceEvent as MouseEvent).currentTarget;
+                    this.highlightNode(target as SVGCircleElement, true);
                     this.highlightConnections(d.id, true);
                 }
             })
-            .on('end', (event, d) => {
+            .on('end', (event: DragEvent, d: SimulationGraphNode) => {
                 // Cool down the simulation
                 if (!event.active && this.simulation) {
                     this.simulation.alphaTarget(0);
                 }
                 
                 // Release the fixed position if shift is not pressed
-                if (!event.sourceEvent.shiftKey) {
+                const sourceEvent = event.sourceEvent as MouseEvent;
+                if (!sourceEvent.shiftKey) {
                     d.fx = null;
                     d.fy = null;
                 }
-
-                // Reset drag state
                 this.isDraggingNode = false;
-
-                // Check if mouse is still over the node
-                const element = event.sourceEvent.target;
+                const element = sourceEvent.target as Element;
                 const bounds = element.getBoundingClientRect();
-                const mouseX = event.sourceEvent.clientX;
-                const mouseY = event.sourceEvent.clientY;
+                const mouseX = sourceEvent.clientX;
+                const mouseY = sourceEvent.clientY;
                 
                 const isMouseOver = mouseX >= bounds.left && mouseX <= bounds.right && 
                                   mouseY >= bounds.top && mouseY <= bounds.bottom;
@@ -1056,7 +1054,7 @@ export class GraphView {
                     // Reset highlights if mouse is not over the node
                     setTimeout(() => {
                         if (!this.isDraggingNode && this.highlightedNodeId === d.id) {
-                            this.highlightNode(element, false);
+                            this.highlightNode(element as SVGCircleElement, false);
                             this.highlightConnections(d.id, false);
                             this.highlightedNodeId = null;
                         }
@@ -1176,7 +1174,7 @@ export class GraphView {
         await this.updateData({ nodes, links });
     }
     
-    public async updateData(graphData: { nodes: SimulationGraphNode[], links: SimulationGraphLink[] }) {
+    public updateData(graphData: { nodes: SimulationGraphNode[], links: SimulationGraphLink[] }): Promise<void> {
         // Invalidate zoom limits cache when node data changes
         this.cachedZoomLimits = null;
 
@@ -1316,6 +1314,7 @@ export class GraphView {
                 }
             });
         }
+        return Promise.resolve();
     }
     
     /**
@@ -1727,7 +1726,6 @@ export class GraphView {
         setIcon(settingsButton, 'settings-2');
 
         const dropdown = this.container.createDiv({ cls: 'color-settings-dropdown' });
-        dropdown.style.display = 'none';
 
         // Display toggles section
         const displaySection = dropdown.createDiv({ cls: 'graph-settings-display-section' });
@@ -1961,8 +1959,7 @@ export class GraphView {
         // Toggle dropdown on button click
         settingsButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            const isVisible = dropdown.style.display !== 'none';
-            dropdown.style.display = isVisible ? 'none' : 'block';
+            dropdown.classList.toggle('color-settings-dropdown-visible');
         });
 
         // Prevent clicks inside the dropdown from closing it
@@ -1972,7 +1969,7 @@ export class GraphView {
 
         // Close dropdown only when clicking outside
         this.documentClickHandler = () => {
-            dropdown.style.display = 'none';
+            dropdown.classList.remove('color-settings-dropdown-visible');
         };
         document.addEventListener('click', this.documentClickHandler);
     }
@@ -2007,8 +2004,7 @@ export class GraphView {
             });
             colorRange.colors.forEach(color => {
                 const colorBox = element.createDiv({ cls: 'color-box' });
-                colorBox.style.backgroundColor = color;
-                colorBox.style.flex = '1';
+                colorBox.style.setProperty('background-color', color);
             });
         }
     }
@@ -2102,7 +2098,7 @@ export class GraphView {
         return button;
     }
 
-    private async calculateAndDisplayCentrality(type: typeof this.centralityTypes[number]) {
+    private calculateAndDisplayCentrality(type: typeof this.centralityTypes[number]): Promise<void> {
         try {
             // Get centrality scores based on type
             let results: GraphNode[];
@@ -2140,7 +2136,7 @@ export class GraphView {
             
             // Get the color palette
             const palette = this.colorPalettes.find(p => p.name === this.selectedPalettes[type]);
-            if (!palette) return;
+            if (!palette) return Promise.resolve();
 
             // Create color range with current settings
             const colorRange = colorPaletteToColorRange(palette, {
@@ -2214,9 +2210,10 @@ export class GraphView {
 
             // Display results in the right sidebar
             pluginInstance.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
-
+            return Promise.resolve();
         } catch (err) {
             new Notice(`Failed to calculate ${type} centrality: ${err instanceof Error ? err.message : String(err)}`);
+            return Promise.resolve();
         }
     }
 
@@ -2303,4 +2300,5 @@ export class GraphView {
             }
         });
     }
-} 
+}
+/* eslint-enable @typescript-eslint/unbound-method */ 

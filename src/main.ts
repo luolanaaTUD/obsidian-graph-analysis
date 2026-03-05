@@ -238,7 +238,7 @@ export default class GraphAnalysisPlugin extends Plugin {
     /**
      * Get WASM binary from embedded base64 (avoids requestUrl file:// protocol issues in Obsidian).
      */
-    private async getWasmBinary(): Promise<ArrayBuffer> {
+    private getWasmBinary(): Promise<ArrayBuffer> {
         if (typeof EMBEDDED_WASM_BASE64 === 'undefined' || !EMBEDDED_WASM_BASE64) {
             throw new Error('WASM binary not embedded - run "npm run build" to rebuild the plugin');
         }
@@ -247,10 +247,10 @@ export default class GraphAnalysisPlugin extends Plugin {
         for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
         }
-        return bytes.buffer;
+        return Promise.resolve(bytes.buffer);
     }
 
-    private async calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {
+    private calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {
         const array = new Uint8Array(buffer);
         const startBytes = array.slice(0, Math.min(1024, array.length));
         const endBytes = array.slice(Math.max(0, array.length - 1024));
@@ -265,7 +265,7 @@ export default class GraphAnalysisPlugin extends Plugin {
             hash |= 0;
         }
         
-        return hash.toString(16);
+        return Promise.resolve(hash.toString(16));
     }
 
     public async ensureWasmLoaded(): Promise<void> {

@@ -27,10 +27,11 @@ export class CentralityResultsView extends ItemView {
         return 'waypoints';
     }
 
-    async onOpen(): Promise<void> {
+    onOpen(): Promise<void> {
         // Ensure status bar is hidden when centrality results view is opened
         // This provides consistency with the graph analysis view behavior
         this.updateStatusBarForGraphViews();
+        return Promise.resolve();
     }
 
     async setResults(results: Node[], algorithm: string): Promise<void> {
@@ -40,7 +41,7 @@ export class CentralityResultsView extends ItemView {
         await this.updateView();
     }
 
-    private async updateView(): Promise<void> {
+    private updateView(): Promise<void> {
         const container = this.containerEl.children[1] as HTMLElement;
         container.empty();
         container.addClass('centrality-results-container');
@@ -67,6 +68,7 @@ export class CentralityResultsView extends ItemView {
         if (totalPages > 1) {
             this.createPaginationControls(resultsSection, totalPages, this.results.length);
         }
+        return Promise.resolve();
     }
 
     private calculateItemsPerPage(container: HTMLElement): number {
@@ -221,7 +223,7 @@ export class CentralityResultsView extends ItemView {
         return 0;
     }
 
-    async onClose(): Promise<void> {
+    onClose(): Promise<void> {
         this.contentEl.empty();
         
         // Update status bar visibility when closing centrality view
@@ -229,6 +231,7 @@ export class CentralityResultsView extends ItemView {
         setTimeout(() => {
             this.updateStatusBarForGraphViews();
         }, 10);
+        return Promise.resolve();
     }
 
     /**

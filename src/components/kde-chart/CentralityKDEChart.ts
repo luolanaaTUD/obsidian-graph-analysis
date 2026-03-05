@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- D3 Selection/scale types from @types/d3 */
+ 
 import * as d3 from 'd3';
 import { CentralityHistogramResult } from '../../utils/KDECalculationService';
 
@@ -56,8 +56,8 @@ export class CentralityKDEChart {
             .attr('style', 'max-width: 100%; height: auto;');
 
         if (!this.svg) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- D3 Selection append/remove omitted in @types/d3 when parent is null
-        const g = (this.svg as any).append('g')
+        type SvgWithAppend = { append(name: string): d3.Selection<SVGGElement, unknown, SVGSVGElement, unknown> };
+        const g = (this.svg as unknown as SvgWithAppend).append('g')
             .attr('transform', `translate(${margin!.left},${margin!.top})`);
 
         // Find max count across all bins and centrality types for y-axis scaling

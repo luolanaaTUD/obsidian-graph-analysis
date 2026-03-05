@@ -6,7 +6,7 @@ export default defineConfig([
   { ignores: ["dist/**", "release/**", "node_modules/**", "graph-analysis-wasm/**", "scripts/**"] },
   ...obsidianmd.configs.recommended,
   {
-    files: ["src/**/*.ts"],
+    files: ["**/*.ts"],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { project: "./tsconfig.json" },

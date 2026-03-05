@@ -43,7 +43,7 @@ export interface KnowledgeStructureData {
     gaps: string[];
 }
 
-/* eslint-disable obsidianmd/no-static-styles-assignment -- Domain card layout uses dynamic structure; styles in styles.css */
+ 
 export class KnowledgeStructureManager {
     private app: App;
     private container!: HTMLElement;
@@ -622,31 +622,19 @@ export class KnowledgeStructureManager {
         card.appendChild(content);
 
         // Show top domains (take top 3)
-        nodes.slice(0, 3).forEach((node, index) => {
+        nodes.slice(0, 3).forEach((node) => {
             const domainItem = document.createElement('div');
             domainItem.className = 'network-domain-item';
-            domainItem.style.padding = '20px';
-            // Add subtle separator line between items
-            if (index > 0) {
-                domainItem.style.borderTop = '1px solid var(--background-modifier-border)';
-            }
             content.appendChild(domainItem);
             
             // Domain header
             const domainHeader = document.createElement('div');
             domainHeader.className = 'network-domain-header';
-            domainHeader.style.display = 'flex';
-            domainHeader.style.justifyContent = 'space-between';
-            domainHeader.style.alignItems = 'center';
-            domainHeader.style.marginBottom = '12px';
             domainItem.appendChild(domainHeader);
             
             const domainName = document.createElement('strong');
             domainName.className = 'network-domain-name';
             domainName.textContent = node.domain;
-            domainName.style.fontSize = '16px';
-            domainName.style.fontWeight = '600';
-            domainName.style.color = 'var(--text-accent)';
             domainHeader.appendChild(domainName);
             
 
@@ -655,38 +643,21 @@ export class KnowledgeStructureManager {
             const explanation = document.createElement('p');
             explanation.className = 'network-domain-explanation';
             explanation.textContent = node.explanation;
-            explanation.style.fontSize = '14px';
-            explanation.style.color = 'var(--text-normal)';
-            explanation.style.marginBottom = '14px';
-            explanation.style.lineHeight = '1.6';
             domainItem.appendChild(explanation);
 
             // Top notes section (restructured to match Connections/Insights pattern)
             if (node.topNotes && node.topNotes.length > 0) {
                 const notesSection = document.createElement('div');
                 notesSection.className = 'network-notes-section';
-                notesSection.style.marginBottom = '14px'; // Consistent spacing with Connections/Insights
-                notesSection.style.padding = '12px';
-                notesSection.style.background = 'var(--background-secondary-alt)';
-                notesSection.style.borderRadius = '8px';
                 domainItem.appendChild(notesSection);
 
                 // Header inside container
                 const notesHeader = document.createElement('div');
                 notesHeader.className = 'network-notes-header';
-                notesHeader.style.fontSize = '14px';
-                notesHeader.style.fontWeight = '600';
-                notesHeader.style.color = 'var(--text-muted)';
-                notesHeader.style.marginBottom = '8px';
-                notesHeader.style.display = 'flex';
-                notesHeader.style.alignItems = 'center';
-                notesHeader.style.gap = '6px';
                 notesSection.appendChild(notesHeader);
 
                 // Add icon (similar style to Connections)
                 const notesIcon = document.createElement('span');
-                notesIcon.style.display = 'inline-flex';
-                notesIcon.style.alignItems = 'center';
                 notesHeader.appendChild(notesIcon);
                 setIcon(notesIcon, 'file-text');
 
@@ -697,55 +668,18 @@ export class KnowledgeStructureManager {
                 // Notes list inside container (no background/border since container provides it)
                 const notesList = document.createElement('ul');
                 notesList.className = 'network-notes-list';
-                notesList.style.listStyle = 'none';
-                notesList.style.padding = '0';
-                notesList.style.margin = '0';
-                notesList.style.background = 'transparent'; // Remove dark background
                 notesSection.appendChild(notesList);
                 
-                node.topNotes.slice(0, 3).forEach((note, noteIndex) => {
+                node.topNotes.slice(0, 3).forEach((note) => {
                     const noteItem = document.createElement('li');
                     noteItem.className = 'network-note-item';
-                    noteItem.style.fontSize = '13px';
-                    noteItem.style.padding = '6px 0';
-                    // Add subtle separators between notes
-                    if (noteIndex > 0) {
-                        noteItem.style.borderTop = '1px dashed var(--background-modifier-border)';
-                        noteItem.style.paddingTop = '6px';
-                    }
-                    noteItem.style.color = 'var(--text-normal)';
-                    noteItem.style.display = 'flex';
-                    noteItem.style.alignItems = 'center';
                     notesList.appendChild(noteItem);
                     
                     // Note link
                     const noteLink = document.createElement('span');
                     noteLink.className = 'network-note-link';
                     noteLink.textContent = note.title;
-                    noteLink.style.color = 'var(--text-accent)';
-                    noteLink.style.textDecoration = 'none';
-                    noteLink.style.cursor = 'pointer';
-                    noteLink.style.flex = '1';
-                    noteLink.style.whiteSpace = 'nowrap';
-                    noteLink.style.overflow = 'hidden';
-                    noteLink.style.textOverflow = 'ellipsis';
-                    noteLink.style.transition = 'color 0.2s ease, opacity 0.2s ease';
-                    noteLink.style.borderRadius = '4px';
-                    noteLink.style.padding = '2px 4px';
                     noteItem.appendChild(noteLink);
-
-                    // Add hover effects
-                    noteLink.addEventListener('mouseenter', () => {
-                        noteLink.style.color = 'var(--text-accent-hover)';
-                        noteLink.style.background = 'var(--background-modifier-hover)';
-                        noteLink.style.textDecoration = 'underline';
-                    });
-
-                    noteLink.addEventListener('mouseleave', () => {
-                        noteLink.style.color = 'var(--text-accent)';
-                        noteLink.style.background = 'transparent';
-                        noteLink.style.textDecoration = 'none';
-                    });
 
                     // Make note clickable
                     noteLink.addEventListener('click', () => {
@@ -774,26 +708,13 @@ export class KnowledgeStructureManager {
             if (node.connections && node.connections.length > 0) {
                 const connectionsSection = document.createElement('div');
                 connectionsSection.className = 'network-connections-section';
-                connectionsSection.style.marginBottom = '14px';
-                connectionsSection.style.padding = '12px';
-                connectionsSection.style.background = 'var(--background-secondary-alt)';
-                connectionsSection.style.borderRadius = '8px';
                 domainItem.appendChild(connectionsSection);
 
                 const connectionsHeader = document.createElement('div');
                 connectionsHeader.className = 'network-connections-header';
-                connectionsHeader.style.fontSize = '14px';
-                connectionsHeader.style.fontWeight = '600';
-                connectionsHeader.style.color = 'var(--text-muted)';
-                connectionsHeader.style.marginBottom = '8px';
-                connectionsHeader.style.display = 'flex';
-                connectionsHeader.style.alignItems = 'center';
-                connectionsHeader.style.gap = '6px';
                 connectionsSection.appendChild(connectionsHeader);
 
                 const connectionsIcon = document.createElement('span');
-                connectionsIcon.style.display = 'inline-flex';
-                connectionsIcon.style.alignItems = 'center';
                 connectionsHeader.appendChild(connectionsIcon);
                 setIcon(connectionsIcon, 'link');
 
@@ -803,21 +724,12 @@ export class KnowledgeStructureManager {
 
                 const connectionsList = document.createElement('div');
                 connectionsList.className = 'network-connections-list';
-                connectionsList.style.fontSize = '13px';
-                connectionsList.style.color = 'var(--text-normal)';
-                connectionsList.style.lineHeight = '1.5';
                 connectionsSection.appendChild(connectionsList);
 
-                node.connections.forEach((connection, connIndex) => {
+                node.connections.forEach((connection) => {
                     const connectionItem = document.createElement('span');
+                    connectionItem.className = 'network-connection-item';
                     connectionItem.textContent = connection;
-                    connectionItem.style.display = 'inline-block';
-                    connectionItem.style.margin = '2px 4px 2px 0';
-                    connectionItem.style.padding = '2px 6px';
-                    connectionItem.style.background = 'var(--background-primary)';
-                    connectionItem.style.borderRadius = '4px';
-                    connectionItem.style.fontSize = '12px';
-                    connectionItem.style.border = '1px solid var(--background-modifier-border)';
                     connectionsList.appendChild(connectionItem);
                 });
             }
@@ -826,26 +738,13 @@ export class KnowledgeStructureManager {
             if (node.coverage && node.coverage.length > 0) {
                 const coverageSection = document.createElement('div');
                 coverageSection.className = 'network-coverage-section';
-                coverageSection.style.marginBottom = '14px';
-                coverageSection.style.padding = '12px';
-                coverageSection.style.background = 'var(--background-secondary-alt)';
-                coverageSection.style.borderRadius = '8px';
                 domainItem.appendChild(coverageSection);
 
                 const coverageHeader = document.createElement('div');
                 coverageHeader.className = 'network-coverage-header';
-                coverageHeader.style.fontSize = '14px';
-                coverageHeader.style.fontWeight = '600';
-                coverageHeader.style.color = 'var(--text-muted)';
-                coverageHeader.style.marginBottom = '8px';
-                coverageHeader.style.display = 'flex';
-                coverageHeader.style.alignItems = 'center';
-                coverageHeader.style.gap = '6px';
                 coverageSection.appendChild(coverageHeader);
 
                 const coverageIcon = document.createElement('span');
-                coverageIcon.style.display = 'inline-flex';
-                coverageIcon.style.alignItems = 'center';
                 coverageHeader.appendChild(coverageIcon);
                 setIcon(coverageIcon, 'layers');
 
@@ -855,21 +754,12 @@ export class KnowledgeStructureManager {
 
                 const coverageList = document.createElement('div');
                 coverageList.className = 'network-coverage-list';
-                coverageList.style.fontSize = '13px';
-                coverageList.style.color = 'var(--text-normal)';
-                coverageList.style.lineHeight = '1.5';
                 coverageSection.appendChild(coverageList);
 
-                node.coverage.forEach((coverage, covIndex) => {
+                node.coverage.forEach((coverage) => {
                     const coverageItem = document.createElement('span');
+                    coverageItem.className = 'network-coverage-item';
                     coverageItem.textContent = coverage;
-                    coverageItem.style.display = 'inline-block';
-                    coverageItem.style.margin = '2px 4px 2px 0';
-                    coverageItem.style.padding = '2px 6px';
-                    coverageItem.style.background = 'var(--background-primary)';
-                    coverageItem.style.borderRadius = '4px';
-                    coverageItem.style.fontSize = '12px';
-                    coverageItem.style.border = '1px solid var(--background-modifier-border)';
                     coverageList.appendChild(coverageItem);
                 });
             }
@@ -878,26 +768,13 @@ export class KnowledgeStructureManager {
             if (node.influence && node.influence.length > 0) {
                 const influenceSection = document.createElement('div');
                 influenceSection.className = 'network-influence-section';
-                influenceSection.style.marginBottom = '14px';
-                influenceSection.style.padding = '12px';
-                influenceSection.style.background = 'var(--background-secondary-alt)';
-                influenceSection.style.borderRadius = '8px';
                 domainItem.appendChild(influenceSection);
 
                 const influenceHeader = document.createElement('div');
                 influenceHeader.className = 'network-influence-header';
-                influenceHeader.style.fontSize = '14px';
-                influenceHeader.style.fontWeight = '600';
-                influenceHeader.style.color = 'var(--text-muted)';
-                influenceHeader.style.marginBottom = '8px';
-                influenceHeader.style.display = 'flex';
-                influenceHeader.style.alignItems = 'center';
-                influenceHeader.style.gap = '6px';
                 influenceSection.appendChild(influenceHeader);
 
                 const influenceIcon = document.createElement('span');
-                influenceIcon.style.display = 'inline-flex';
-                influenceIcon.style.alignItems = 'center';
                 influenceHeader.appendChild(influenceIcon);
                 setIcon(influenceIcon, 'zap');
 
@@ -907,21 +784,12 @@ export class KnowledgeStructureManager {
 
                 const influenceList = document.createElement('div');
                 influenceList.className = 'network-influence-list';
-                influenceList.style.fontSize = '13px';
-                influenceList.style.color = 'var(--text-normal)';
-                influenceList.style.lineHeight = '1.5';
                 influenceSection.appendChild(influenceList);
 
-                node.influence.forEach((influence, infIndex) => {
+                node.influence.forEach((influence) => {
                     const influenceItem = document.createElement('span');
+                    influenceItem.className = 'network-influence-item';
                     influenceItem.textContent = influence;
-                    influenceItem.style.display = 'inline-block';
-                    influenceItem.style.margin = '2px 4px 2px 0';
-                    influenceItem.style.padding = '2px 6px';
-                    influenceItem.style.background = 'var(--background-primary)';
-                    influenceItem.style.borderRadius = '4px';
-                    influenceItem.style.fontSize = '12px';
-                    influenceItem.style.border = '1px solid var(--background-modifier-border)';
                     influenceList.appendChild(influenceItem);
                 });
             }
@@ -930,26 +798,13 @@ export class KnowledgeStructureManager {
             if (node.insights) {
                 const insightsSection = document.createElement('div');
                 insightsSection.className = 'network-insights-section';
-                insightsSection.style.marginBottom = '14px';
-                insightsSection.style.padding = '12px';
-                insightsSection.style.background = 'var(--background-secondary-alt)';
-                insightsSection.style.borderRadius = '8px';
                 domainItem.appendChild(insightsSection);
 
                 const insightsHeader = document.createElement('div');
                 insightsHeader.className = 'network-insights-header';
-                insightsHeader.style.fontSize = '14px';
-                insightsHeader.style.fontWeight = '600';
-                insightsHeader.style.color = 'var(--text-muted)';
-                insightsHeader.style.marginBottom = '8px';
-                insightsHeader.style.display = 'flex';
-                insightsHeader.style.alignItems = 'center';
-                insightsHeader.style.gap = '6px';
                 insightsSection.appendChild(insightsHeader);
 
                 const insightsIcon = document.createElement('span');
-                insightsIcon.style.display = 'inline-flex';
-                insightsIcon.style.alignItems = 'center';
                 insightsHeader.appendChild(insightsIcon);
                 setIcon(insightsIcon, 'lightbulb');
 
@@ -960,10 +815,6 @@ export class KnowledgeStructureManager {
                 const insightsContent = document.createElement('p');
                 insightsContent.className = 'network-insights-content';
                 insightsContent.textContent = node.insights;
-                insightsContent.style.fontSize = '13px';
-                insightsContent.style.color = 'var(--text-normal)';
-                insightsContent.style.lineHeight = '1.5';
-                insightsContent.style.margin = '0';
                 insightsSection.appendChild(insightsContent);
             }
         });
@@ -974,7 +825,7 @@ export class KnowledgeStructureManager {
     /**
      * Section 3: Knowledge Gap Analysis
      */
-    private async createKnowledgeGapSection(): Promise<void> {
+    private createKnowledgeGapSection(): Promise<void> {
         const section = this.container.createEl('div', { 
             cls: 'vault-analysis-section' 
         });
@@ -1006,6 +857,7 @@ export class KnowledgeStructureManager {
         } else {
             this.createEmptyStateFn(section, 'Generate AI analysis to identify potential knowledge gaps and areas for expansion in your vault.');
         }
+        return Promise.resolve();
     }
 
     /**
@@ -1015,16 +867,7 @@ export class KnowledgeStructureManager {
         // Reuse the domain item rendering logic from createNetworkCard
         // Create a simplified card wrapper
         const card = document.createElement('div');
-        card.className = 'network-card';
-        card.style.width = '100%';
-        card.style.background = 'var(--background-primary)';
-        card.style.borderRadius = '12px';
-        card.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
-        card.style.padding = '0';
-        card.style.overflow = 'hidden';
-        card.style.border = '1px solid var(--background-modifier-border)';
-        card.style.margin = '0';
-        card.style.boxSizing = 'border-box';
+        card.className = 'network-card network-card-standalone';
         parent.appendChild(card);
 
         // Create a temporary container to reuse existing logic
@@ -1034,63 +877,38 @@ export class KnowledgeStructureManager {
         // Create a single-item array to reuse createNetworkCard logic
         // We'll extract just the domain item part
         const content = document.createElement('div');
-        content.className = 'network-card-content';
-        content.style.padding = '20px';
+        content.className = 'network-card-content network-card-content-padded';
         tempContainer.appendChild(content);
 
         // Domain header
         const domainHeader = document.createElement('div');
         domainHeader.className = 'network-domain-header';
-        domainHeader.style.display = 'flex';
-        domainHeader.style.justifyContent = 'space-between';
-        domainHeader.style.alignItems = 'center';
-        domainHeader.style.marginBottom = '12px';
         content.appendChild(domainHeader);
 
         const domainName = document.createElement('strong');
         domainName.className = 'network-domain-name';
         domainName.textContent = node.domain;
-        domainName.style.fontSize = '16px';
-        domainName.style.fontWeight = '600';
-        domainName.style.color = 'var(--text-accent)';
         domainHeader.appendChild(domainName);
 
         // Domain explanation
         const explanation = document.createElement('p');
         explanation.className = 'network-domain-explanation';
         explanation.textContent = node.explanation;
-        explanation.style.fontSize = '14px';
-        explanation.style.color = 'var(--text-normal)';
-        explanation.style.marginBottom = '14px';
-        explanation.style.lineHeight = '1.6';
         content.appendChild(explanation);
 
         // Top notes section (restructured to match Connections/Insights pattern)
         if (node.topNotes && node.topNotes.length > 0) {
             const notesSection = document.createElement('div');
             notesSection.className = 'network-notes-section';
-            notesSection.style.marginBottom = '14px'; // Consistent spacing with Connections/Insights
-            notesSection.style.padding = '12px';
-            notesSection.style.background = 'var(--background-secondary-alt)';
-            notesSection.style.borderRadius = '8px';
             content.appendChild(notesSection);
 
             // Header inside container
             const notesHeader = document.createElement('div');
             notesHeader.className = 'network-notes-header';
-            notesHeader.style.fontSize = '14px';
-            notesHeader.style.fontWeight = '600';
-            notesHeader.style.color = 'var(--text-muted)';
-            notesHeader.style.marginBottom = '8px';
-            notesHeader.style.display = 'flex';
-            notesHeader.style.alignItems = 'center';
-            notesHeader.style.gap = '6px';
             notesSection.appendChild(notesHeader);
 
             // Add icon (similar style to Connections)
             const notesIcon = document.createElement('span');
-            notesIcon.style.display = 'inline-flex';
-            notesIcon.style.alignItems = 'center';
             notesHeader.appendChild(notesIcon);
             setIcon(notesIcon, 'file-text');
 
@@ -1101,44 +919,18 @@ export class KnowledgeStructureManager {
             // Notes list inside container (no background/border since container provides it)
             const notesList = document.createElement('ul');
             notesList.className = 'network-notes-list';
-            notesList.style.listStyle = 'none';
-            notesList.style.padding = '0';
-            notesList.style.margin = '0';
-            notesList.style.background = 'transparent'; // Remove dark background
             notesSection.appendChild(notesList);
 
-            node.topNotes.slice(0, 3).forEach((note, noteIndex) => {
+            node.topNotes.slice(0, 3).forEach((note) => {
                 const noteItem = document.createElement('li');
                 noteItem.className = 'network-note-item';
-                noteItem.style.fontSize = '13px';
-                noteItem.style.padding = '6px 0';
-                if (noteIndex > 0) {
-                    noteItem.style.borderTop = '1px dashed var(--background-modifier-border)';
-                    noteItem.style.paddingTop = '6px';
-                }
-                noteItem.style.color = 'var(--text-normal)';
-                noteItem.style.display = 'flex';
-                noteItem.style.alignItems = 'center';
                 notesList.appendChild(noteItem);
 
                 // Note link
                 const noteLink = document.createElement('span');
                 noteLink.className = 'network-note-link';
                 noteLink.textContent = note.title;
-                noteLink.style.color = 'var(--text-accent)';
-                noteLink.style.cursor = 'pointer';
-                noteLink.style.flex = '1';
-                noteLink.style.whiteSpace = 'nowrap';
-                noteLink.style.overflow = 'hidden';
-                noteLink.style.textOverflow = 'ellipsis';
                 noteItem.appendChild(noteLink);
-
-                noteLink.addEventListener('mouseenter', () => {
-                    noteLink.style.textDecoration = 'underline';
-                });
-                noteLink.addEventListener('mouseleave', () => {
-                    noteLink.style.textDecoration = 'none';
-                });
 
                 noteLink.addEventListener('click', () => {
                     void (async () => {
@@ -1182,36 +974,23 @@ export class KnowledgeStructureManager {
         // Insights section
         if (node.insights) {
             const insightsSection = document.createElement('div');
-            insightsSection.style.marginBottom = '14px';
-            insightsSection.style.padding = '12px';
-            insightsSection.style.background = 'var(--background-secondary-alt)';
-            insightsSection.style.borderRadius = '8px';
+            insightsSection.className = 'network-insights-section';
             container.appendChild(insightsSection);
 
             const insightsHeader = document.createElement('div');
-            insightsHeader.style.display = 'flex';
-            insightsHeader.style.alignItems = 'center';
-            insightsHeader.style.gap = '6px';
-            insightsHeader.style.marginBottom = '8px';
+            insightsHeader.className = 'network-insights-header';
             insightsSection.appendChild(insightsHeader);
 
             const insightsIcon = document.createElement('span');
-            insightsIcon.style.display = 'inline-flex';
-            insightsIcon.style.alignItems = 'center';
             insightsHeader.appendChild(insightsIcon);
             setIcon(insightsIcon, 'lightbulb');
 
             const insightsText = document.createElement('span');
             insightsText.textContent = 'Insights';
-            insightsText.style.fontSize = '14px';
-            insightsText.style.fontWeight = '600';
-            insightsText.style.color = 'var(--text-muted)';
             insightsHeader.appendChild(insightsText);
 
             const insightsContent = document.createElement('div');
-            insightsContent.style.fontSize = '13px';
-            insightsContent.style.color = 'var(--text-normal)';
-            insightsContent.style.lineHeight = '1.5';
+            insightsContent.className = 'network-insights-content';
             insightsContent.textContent = node.insights;
             insightsSection.appendChild(insightsContent);
         }
@@ -1219,48 +998,29 @@ export class KnowledgeStructureManager {
 
     private addSection(container: HTMLElement, title: string, iconName: string, items: string[]): void {
         const section = document.createElement('div');
-        section.style.marginBottom = '14px';
-        section.style.padding = '12px';
-        section.style.background = 'var(--background-secondary-alt)';
-        section.style.borderRadius = '8px';
+        section.className = 'network-connections-section';
         container.appendChild(section);
 
         const header = document.createElement('div');
-        header.style.display = 'flex';
-        header.style.alignItems = 'center';
-        header.style.gap = '6px';
-        header.style.marginBottom = '8px';
+        header.className = 'network-connections-header';
         section.appendChild(header);
 
         const icon = document.createElement('span');
-        icon.style.display = 'inline-flex';
-        icon.style.alignItems = 'center';
         header.appendChild(icon);
         setIcon(icon, iconName);
 
         const text = document.createElement('span');
         text.textContent = title;
-        text.style.fontSize = '14px';
-        text.style.fontWeight = '600';
-        text.style.color = 'var(--text-muted)';
         header.appendChild(text);
 
         const list = document.createElement('div');
-        list.style.fontSize = '13px';
-        list.style.color = 'var(--text-normal)';
-        list.style.lineHeight = '1.5';
+        list.className = 'network-connections-list';
         section.appendChild(list);
 
         items.forEach((item) => {
             const itemEl = document.createElement('span');
+            itemEl.className = 'network-connection-item';
             itemEl.textContent = item;
-            itemEl.style.display = 'inline-block';
-            itemEl.style.margin = '2px 4px 2px 0';
-            itemEl.style.padding = '2px 6px';
-            itemEl.style.background = 'var(--background-primary)';
-            itemEl.style.borderRadius = '4px';
-            itemEl.style.fontSize = '12px';
-            itemEl.style.border = '1px solid var(--background-modifier-border)';
             list.appendChild(itemEl);
         });
     }
@@ -1323,3 +1083,4 @@ export class KnowledgeStructureManager {
         await this.createKnowledgeNetworkAnalysisSection(container);
     }
 }
+ 

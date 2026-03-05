@@ -277,15 +277,13 @@ export class KnowledgeCalendarChart {
         });
         
         // D3 Selection append omitted in @types/d3 when parent is HTMLElement
-        /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any -- D3 types omit append for HTMLElement parent */
-        type D3SvgLike = { append(n: string): D3SvgLike; attr(a: string, v?: unknown): D3SvgLike; style(a: string, v?: string): D3SvgLike };
-        const svg = (d3.select(container) as unknown as { append(n: string): D3SvgLike })
-            .append('svg')
+         
+        const svg = (d3.select(container) as unknown as d3.Selection<HTMLElement, unknown, null, undefined>).append('svg')
             .attr('width', containerWidth)
             .attr('height', height)
             .attr('class', 'calendar-chart')
             .style('font', '10px sans-serif');
-        const g = (svg as any).append('g')
+        const g = svg.append('g')
             .attr('transform', `translate(${margin.left + calendarOffsetX}, ${margin.top})`);
         
         // Render each year
@@ -423,7 +421,7 @@ export class KnowledgeCalendarChart {
                 }
             });
         });
-        /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any */
+         
     }
 
     private getObsidianAccentColor(value: number, minValue: number, maxValue: number): string {

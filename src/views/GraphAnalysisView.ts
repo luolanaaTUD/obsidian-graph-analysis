@@ -145,7 +145,7 @@ export class GraphAnalysisView extends ItemView {
         };
     }
     
-    async onClose(): Promise<void> {
+    onClose(): Promise<void> {
         if (this.graphView) {
             try {
                 this.graphView.onunload();
@@ -161,7 +161,7 @@ export class GraphAnalysisView extends ItemView {
             this.updateStatusBarVisibility();
         }, 10);
         
-        return;
+        return Promise.resolve();
     }
     
     private hideStatusBar(): void {
@@ -228,13 +228,13 @@ export class GraphAnalysisView extends ItemView {
         }
     }
 
-    private async centerGraphSafely(): Promise<void> {
+    private centerGraphSafely(): Promise<void> {
         try {
             const graphView = this.graphView;
-            if (!graphView) return;
+            if (!graphView) return Promise.resolve();
             // Check if this view is currently active/visible
             const isActive = this.app.workspace.getActiveViewOfType(GraphAnalysisView) === this;
-            if (!isActive) return;
+            if (!isActive) return Promise.resolve();
             graphView.refreshGraphView();
             setTimeout(() => {
                 try {
@@ -246,6 +246,7 @@ export class GraphAnalysisView extends ItemView {
         } catch {
             // Error updating graph position - ignore
         }
+        return Promise.resolve();
     }
     
     public updateSettings(): void {

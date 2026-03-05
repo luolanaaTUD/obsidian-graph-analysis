@@ -34,7 +34,7 @@ interface ConnectionSubGraphOptions {
  * connection nodes and links. Users can delete nodes/links and then commit
  * the remaining suggestions to their vault via the "Add to Main Graph" button.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/unbound-method -- D3 Selection types require any for chaining; zoom.transform needs bind */
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/unbound-method -- D3 Selection types; zoom.transform needs bind */
 export class ConnectionSubGraph {
     private app: App;
     private container: HTMLElement;
@@ -134,7 +134,8 @@ export class ConnectionSubGraph {
         const svgWrapper = this.container.createEl('div', { cls: 'subgraph-svg-wrapper' });
         svgWrapper.style.setProperty('--subgraph-height', `${this.height}px`);
 
-        this.svg = (d3.select(svgWrapper) as any)
+        type DivWithAppend = { append(n: string): d3.Selection<SVGSVGElement, unknown, HTMLDivElement, unknown> };
+        this.svg = ((d3.select(svgWrapper) as unknown as DivWithAppend)
             .append('svg')
             .attr('width', '100%')
             .attr('height', '100%')
@@ -144,11 +145,11 @@ export class ConnectionSubGraph {
                 this.width,
                 this.height
             ].join(' '))
-            .attr('class', 'connection-subgraph-svg');
+            .attr('class', 'connection-subgraph-svg')) as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>;
 
         // Arrow marker for directional links (source -> target)
         this.markerId = `subgraph-arrow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        (this.svg as any).append('defs')
+        (this.svg as unknown as { append(n: string): d3.Selection<SVGDefsElement, unknown, SVGSVGElement, unknown> }).append('defs')
             .append('marker')
             .attr('id', this.markerId)
             .attr('markerUnits', 'userSpaceOnUse')
@@ -162,7 +163,7 @@ export class ConnectionSubGraph {
             .attr('d', 'M0,-4 L10,0 L0,4 Z')
             .attr('fill', 'var(--text-accent)');
 
-        this.svgGroup = (this.svg as any).append('g') as any;
+        this.svgGroup = (this.svg as unknown as { append(n: string): d3.Selection<SVGGElement, unknown, SVGSVGElement, unknown> }).append('g') as unknown as d3.Selection<SVGGElement, unknown, null, undefined>;
 
         // Pan only (no zoom) - constrain pan so graph stays within container
         const pad = 0.5; // Allow pan margin relative to content size
@@ -174,10 +175,10 @@ export class ConnectionSubGraph {
                 [this.width * (0.5 + pad), this.height * (0.5 + pad)]
             ])
             .on('zoom', (ev: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
-                (this.svgGroup as any).attr('transform', ev.transform);
+                this.svgGroup.attr('transform', ev.transform.toString());
             });
-        (this.svg as any).call(this.zoomBehavior);
-        (this.svg as any).call(this.zoomBehavior.transform, d3.zoomIdentity.scale(scale));
+        (this.svg as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>).call(this.zoomBehavior);
+        (this.svg as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>).call(this.zoomBehavior.transform, d3.zoomIdentity.scale(scale));
 
         // Reset view - icon only, no button chrome (div avoids default button styling)
         const resetBtn = svgWrapper.createEl('div', { cls: 'subgraph-reset-view-btn' });
@@ -274,7 +275,7 @@ export class ConnectionSubGraph {
     // ─────────────────── Drawing ───────────────────
 
     private drawLinks(): void {
-        const linksGroup = (this.svgGroup as any).append('g').attr('class', 'subgraph-links');
+        const linksGroup = (this.svgGroup as unknown as { append(n: string): d3.Selection<SVGGElement, unknown, SVGGElement, unknown> }).append('g').attr('class', 'subgraph-links');
 
         const linksSel = linksGroup.selectAll('line')
             .data(this.links.filter(l => !l.removed))
@@ -300,13 +301,13 @@ export class ConnectionSubGraph {
     }
 
     private drawNodes(): void {
-        const nodesGroup = (this.svgGroup as any).append('g').attr('class', 'subgraph-nodes');
+        const nodesGroup = (this.svgGroup as unknown as { append(n: string): d3.Selection<SVGGElement, unknown, SVGGElement, unknown> }).append('g').attr('class', 'subgraph-nodes');
 
-        const nodeGroups = nodesGroup.selectAll('g')
+        const nodeGroups = (nodesGroup.selectAll('g')
             .data(this.nodes.filter(n => !n.removed))
             .join('g')
             .attr('class', 'subgraph-node-group')
-            .style('cursor', 'pointer')
+            .style('cursor', 'pointer') as unknown as d3.Selection<SVGGElement, SubGraphNode, SVGGElement, unknown>)
             .call(d3.drag<SVGGElement, SubGraphNode>()
                 .on('start', (ev: d3.D3DragEvent<SVGGElement, SubGraphNode, SubGraphNode>, d: SubGraphNode) => {
                     if (!ev.active) this.simulation.alphaTarget(0.3).restart();
@@ -377,7 +378,7 @@ export class ConnectionSubGraph {
             .text('×');
 
         // Show/hide delete button on node group hover
-        nodeGroups
+        (nodeGroups as unknown as d3.Selection<SVGGElement, SubGraphNode, SVGGElement, unknown>)
             .on('mouseenter', function (this: SVGGElement) {
                 d3.select(this).select('.subgraph-delete-btn')
                     .transition().duration(150)
@@ -390,7 +391,7 @@ export class ConnectionSubGraph {
             });
 
         // Left-click on node circle opens note in new tab
-        nodeGroups.select('circle')
+        (nodeGroups as unknown as d3.Selection<SVGGElement, SubGraphNode, SVGGElement, unknown>).select('circle')
             .on('click', (event: MouseEvent, d: SubGraphNode) => {
                 // Only open on plain click (not after drag)
                 if (event.defaultPrevented) return;
@@ -419,7 +420,7 @@ export class ConnectionSubGraph {
 
     private resetView(): void {
         const transform = this.zoomBehavior.transform.bind(this.zoomBehavior);
-        (this.svg as any).transition()
+        (this.svg as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>).transition()
             .duration(300)
             .call(transform, d3.zoomIdentity.scale(ConnectionSubGraph.GRAPH_SCALE));
     }
@@ -571,9 +572,9 @@ export class ConnectionSubGraph {
             const tid = typeof d.target === 'string' ? d.target : (d.target as SubGraphNode).id;
             return `${sid}-${tid}`;
         };
-        const linksData = (linksGroup as any).selectAll('line').data(activeLinks, linkKey);
+        const linksData = (linksGroup as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>).selectAll<SVGLineElement, SubGraphLink>('line').data(activeLinks, linkKey);
         this.linksSelection = linksData.join(
-            (enter: d3.Selection<d3.EnterElement, SubGraphLink, SVGGElement, unknown>) => (enter as any).append('line')
+            (enter: d3.Selection<d3.EnterElement, SubGraphLink, SVGGElement, unknown>) => enter.append('line')
                     .attr('class', 'suggested-link')
                     .attr('stroke', 'var(--text-accent)')
                     .attr('stroke-width', 2)
@@ -591,13 +592,13 @@ export class ConnectionSubGraph {
                             .attr('stroke-opacity', 0.3 + d.confidence * 0.5);
                     }),
             (update: d3.Selection<SVGLineElement, SubGraphLink, SVGGElement, unknown>) => update,
-            (exit: d3.Selection<SVGLineElement, SubGraphLink, SVGGElement, unknown>) => (exit as any).remove()
+            (exit: d3.Selection<SVGLineElement, SubGraphLink, SVGGElement, unknown>) => exit.remove()
         ) as d3.Selection<SVGLineElement, SubGraphLink, d3.BaseType, unknown>;
 
         // Rebind nodes
         const nodesGroup = this.svgGroup.select('.subgraph-nodes');
         const nodeKey = (d: SubGraphNode): string => d.id;
-        const existingNodeGroups = (nodesGroup as any).selectAll('g.subgraph-node-group')
+        const existingNodeGroups = (nodesGroup as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>).selectAll<SVGGElement, SubGraphNode>('g.subgraph-node-group')
             .data(activeNodes, nodeKey);
 
         existingNodeGroups.exit().remove();
@@ -693,3 +694,4 @@ export class ConnectionSubGraph {
         }
     }
 }
+/* eslint-enable @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/unbound-method */

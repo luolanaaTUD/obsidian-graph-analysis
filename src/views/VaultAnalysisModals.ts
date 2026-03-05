@@ -746,10 +746,10 @@ export class VaultAnalysisModal extends Modal {
     /**
      * Display knowledge gaps from cached structure analysis data
      */
-    private async displayKnowledgeGaps(container: HTMLElement): Promise<void> {
+    private displayKnowledgeGaps(container: HTMLElement): Promise<void> {
         if (!this.structureAnalysisData?.knowledgeStructure?.gaps) {
             this.showKnowledgeGapsPlaceholder(container);
-            return;
+            return Promise.resolve();
         }
         
         const gaps = this.structureAnalysisData.knowledgeStructure.gaps;
@@ -776,6 +776,7 @@ export class VaultAnalysisModal extends Modal {
         } else {
             this.showKnowledgeGapsPlaceholder(container);
         }
+        return Promise.resolve();
     }
     
     /**
@@ -878,7 +879,7 @@ export class VaultAnalysisModal extends Modal {
         this.contentContainer = originalContentContainer;
     }
 
-    private async createUpdateAnalysisButtonSection(container: HTMLElement, tabName: string = '', isOutdated: boolean = false, isChecking: boolean = false): Promise<void> {
+    private createUpdateAnalysisButtonSection(container: HTMLElement, tabName: string = '', isOutdated: boolean = false, isChecking: boolean = false): Promise<void> {
         // Use modal-button-container style to match Semantic Analysis page
         // This includes the splitter line (border-top) and right alignment
         const buttonContainer = container.createEl('div', {
@@ -899,7 +900,7 @@ export class VaultAnalysisModal extends Modal {
                 text: 'Analysis is processing...'
             });
             disabledButton.disabled = true;
-            return;
+            return Promise.resolve();
         }
 
         if (isChecking) {
@@ -911,7 +912,7 @@ export class VaultAnalysisModal extends Modal {
                 text: 'Update analysis'
             });
             disabledButton.disabled = true;
-            return;
+            return Promise.resolve();
         }
 
         if (!isOutdated) {
@@ -983,9 +984,10 @@ export class VaultAnalysisModal extends Modal {
                 void this.triggerAIAnalysis(buttonContainer, true, tabName);
             }
         });
+        return Promise.resolve();
     }
 
-    private async createAnalysisButtonSection(container: HTMLElement, tabName: string = ''): Promise<void> {
+    private createAnalysisButtonSection(container: HTMLElement, tabName: string = ''): Promise<void> {
         // Add informational message about AI analysis
         const infoSection = container.createEl('div', { 
             cls: 'vault-analysis-section' 
@@ -1024,7 +1026,7 @@ export class VaultAnalysisModal extends Modal {
                 text: 'Analysis is processing...'
             });
             disabledButton.disabled = true;
-            return;
+            return Promise.resolve();
         }
 
         statusIndicator.addClass('status-empty');
@@ -1067,6 +1069,7 @@ export class VaultAnalysisModal extends Modal {
                 void this.triggerAIAnalysis(container, false, tabName);
             }
         });
+        return Promise.resolve();
     }
 
     private async triggerAIAnalysis(buttonSection: HTMLElement, isUpdate: boolean = false, tabName: string = ''): Promise<void> {
