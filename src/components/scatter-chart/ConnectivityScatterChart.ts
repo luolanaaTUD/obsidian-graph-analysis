@@ -67,14 +67,10 @@ export class ConnectivityScatterChart {
             const message = isCentralityMode 
                 ? 'No centrality data available. Please generate vault analysis first to view centrality metrics.'
                 : 'No connectivity data available for scatter plot analysis.';
-            const noDataMsg = this.container.createEl('p', {
+            this.container.createEl('p', {
                 text: message,
                 cls: 'scatter-chart-no-data'
             });
-            noDataMsg.style.textAlign = 'center';
-            noDataMsg.style.color = 'var(--text-muted)';
-            noDataMsg.style.padding = '40px 20px';
-            noDataMsg.style.width = '100%';
             return;
         }
 
@@ -83,15 +79,17 @@ export class ConnectivityScatterChart {
         const innerHeight = height! - margin!.top - margin!.bottom;
 
         // Create SVG - center aligned with auto-fit height
-        // The SVG height already accounts for margins, so use the configured height
-        this.svg = d3.select(this.container)
-            .append('svg')
+        // D3 Selection append omitted in @types/d3 when parent is HTMLElement
+        const svgSelection = (d3.select(this.container) as unknown as { append(n: string): d3.Selection<SVGSVGElement, unknown, null, undefined> })
+            .append('svg');
+        this.svg = svgSelection
             .attr('width', width!)
             .attr('height', height!)
             .attr('viewBox', `0 0 ${width!} ${height!}`)
             .attr('style', 'max-width: 100%; height: auto; display: block; margin: 0 auto;');
 
-        const g = this.svg.append('g')
+        /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- D3 Selection append omitted in @types/d3 */
+        const g = (this.svg as any).append('g')
             .attr('transform', `translate(${margin!.left},${margin!.top})`);
 
         // Create scales with proper bounds handling
@@ -126,8 +124,8 @@ export class ConnectivityScatterChart {
             .enter()
             .append('circle')
             .attr('class', 'scatter-dot')
-            .attr('cx', d => xScale(d.xValue))
-            .attr('cy', d => yScale(d.yValue))
+            .attr('cx', (d: ScatterDataPoint) => xScale(d.xValue))
+            .attr('cy', (d: ScatterDataPoint) => yScale(d.yValue))
             .attr('r', 4)
             .attr('fill', dotColor)
             .attr('stroke', 'var(--background-primary)')
@@ -319,8 +317,8 @@ export class ConnectivityScatterChart {
                         inboundLinkCounts.set(resolvedFile.path, currentCount + 1);
                     }
                 }
-            } catch (error) {
-                // console.warn(`Error processing links from file ${file.path}:`, error);
+            } catch {
+                // Skip file on error
             }
         }
 
@@ -346,8 +344,8 @@ export class ConnectivityScatterChart {
                         inboundLinks: inboundLinks
                     });
                 }
-            } catch (error) {
-                // console.warn(`Error processing file ${file.path}:`, error);
+            } catch {
+                // Skip file on error
             }
         }
 
@@ -391,27 +389,11 @@ export class ConnectivityScatterChart {
 
         const tooltip = this.container.createEl('div', { cls: 'scatter-tooltip' });
         tooltip.remove(); // Detach from container so we can append to body for positioning
-        tooltip.style.position = 'absolute';
-        tooltip.style.background = 'var(--background-primary)';
-        tooltip.style.border = '1px solid var(--background-modifier-border)';
-        tooltip.style.borderRadius = 'var(--radius-s)';
-        tooltip.style.padding = '8px 12px';
-        tooltip.style.fontSize = 'var(--font-ui-small)';
-        tooltip.style.color = 'var(--text-normal)';
-        tooltip.style.boxShadow = 'var(--shadow-s)';
-        tooltip.style.zIndex = '1000';
-        tooltip.style.pointerEvents = 'none';
-        tooltip.style.whiteSpace = 'nowrap';
-        tooltip.style.maxWidth = '300px';
         document.body.appendChild(tooltip);
 
-        const titleEl = tooltip.createEl('div', { text: data.title });
-        titleEl.style.fontWeight = 'var(--font-medium)';
-        titleEl.style.marginBottom = '4px';
-        titleEl.style.color = 'var(--text-normal)';
+        tooltip.createEl('div', { text: data.title, cls: 'scatter-tooltip-title' });
 
         const isCentralityMode = this.currentMode === 'centrality';
-        const mutedStyle = 'color: var(--text-muted); font-size: var(--font-ui-smaller); margin-bottom: 2px;';
         if (isCentralityMode) {
             const betweenness = data.betweennessCentrality ?? 0;
             const eigenvector = data.eigenvectorCentrality ?? 0;
@@ -419,17 +401,13 @@ export class ConnectivityScatterChart {
                 if (val < 0.01 && val > 0) return val.toExponential(3);
                 return val.toFixed(4);
             };
-            const bEl = tooltip.createEl('div', { text: `Betweenness: ${formatValue(betweenness)}` });
-            bEl.setAttribute('style', mutedStyle);
-            const eEl = tooltip.createEl('div', { text: `Eigenvector: ${formatValue(eigenvector)}` });
-            eEl.setAttribute('style', mutedStyle);
+            tooltip.createEl('div', { text: `Betweenness: ${formatValue(betweenness)}`, cls: 'scatter-tooltip-muted' });
+            tooltip.createEl('div', { text: `Eigenvector: ${formatValue(eigenvector)}`, cls: 'scatter-tooltip-muted' });
         } else {
             const outbound = data.outboundLinks ?? 0;
             const inbound = data.inboundLinks ?? 0;
-            const outEl = tooltip.createEl('div', { text: `Outbound: ${outbound} link${outbound !== 1 ? 's' : ''}` });
-            outEl.setAttribute('style', mutedStyle);
-            const inEl = tooltip.createEl('div', { text: `Inbound: ${inbound} link${inbound !== 1 ? 's' : ''}` });
-            inEl.setAttribute('style', mutedStyle);
+            tooltip.createEl('div', { text: `Outbound: ${outbound} link${outbound !== 1 ? 's' : ''}`, cls: 'scatter-tooltip-muted' });
+            tooltip.createEl('div', { text: `Inbound: ${inbound} link${inbound !== 1 ? 's' : ''}`, cls: 'scatter-tooltip-muted' });
         }
 
         this.tooltip = tooltip;
@@ -456,19 +434,19 @@ export class ConnectivityScatterChart {
 
     private async openNote(path: string): Promise<void> {
         try {
-            const file = this.app.vault.getAbstractFileByPath(path) as TFile;
-            if (file) {
+            const file = this.app.vault.getAbstractFileByPath(path);
+            if (file instanceof TFile) {
                 // Close modal first to show note completely
                 if (this.options.modal) {
                     this.options.modal.close();
                 }
                 // Small delay to ensure modal closes before opening note
-                setTimeout(async () => {
-                    await this.app.workspace.openLinkText(path, '', false);
+                setTimeout(() => {
+                    void this.app.workspace.openLinkText(path, '', false);
                 }, 100);
             }
-        } catch (error) {
-            // console.error(`Error opening note ${path}:`, error);
+        } catch {
+            // Error opening note - silently ignore
         }
     }
 
@@ -480,7 +458,7 @@ export class ConnectivityScatterChart {
     public destroy(): void {
         this.hideTooltip();
         if (this.svg) {
-            this.svg.remove();
+            (this.svg as any).remove();
             this.svg = null;
         }
         this.container.empty();

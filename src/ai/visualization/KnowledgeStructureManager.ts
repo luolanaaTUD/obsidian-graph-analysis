@@ -8,7 +8,8 @@ import {
 import { KnowledgeDomainHelper } from '../KnowledgeDomainHelper';
 import { KDECalculationService, StructuredCentralityStats } from '../../utils/KDECalculationService';
 import { CentralityKDEChart } from '../../components/kde-chart/CentralityKDEChart';
-import { VaultAnalysisData } from '../MasterAnalysisManager';
+import { VaultAnalysisData, VaultAnalysisResult } from '../MasterAnalysisManager';
+import type { KnowledgeDomain } from '../KnowledgeDomainHelper';
 
 
 export interface NetworkNode {
@@ -42,6 +43,7 @@ export interface KnowledgeStructureData {
     gaps: string[];
 }
 
+/* eslint-disable obsidianmd/no-static-styles-assignment -- Domain card layout uses dynamic structure; styles in styles.css */
 export class KnowledgeStructureManager {
     private app: App;
     private container!: HTMLElement;
@@ -80,15 +82,13 @@ export class KnowledgeStructureManager {
         try {
             const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/structure-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content);
-            
+            const data = JSON.parse(content) as { knowledgeStructure?: KnowledgeStructureData };
             if (data?.knowledgeStructure) {
                 this.data = data.knowledgeStructure;
                 return this.data;
             }
             return null;
-        } catch (error) {
-            // console.warn('No cached knowledge structure data found:', error);
+        } catch {
             return null;
         }
     }
@@ -119,7 +119,7 @@ export class KnowledgeStructureManager {
         });
 
         section.createEl('h3', {
-            text: 'Knowledge Domain Distribution',
+            text: 'Knowledge domain distribution',
             cls: 'vault-analysis-section-title'
         });
 
@@ -160,10 +160,9 @@ export class KnowledgeStructureManager {
             );
             
             await domainChart.renderWithData(domainData);
-        } catch (error) {
-            // console.error('Error creating domain distribution chart:', error);
+        } catch (err) {
             const errorMsg = container.createEl('div', { cls: 'error-message' });
-            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = err instanceof Error ? err.message : String(err);
             errorMsg.createEl('p', {
                 text: `Failed to create domain chart: ${errorMessage}`,
                 cls: 'error-text'
@@ -184,40 +183,41 @@ export class KnowledgeStructureManager {
      * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
      */
     private async buildDomainHierarchyFromVaultAnalysis(preloadedData?: VaultAnalysisData): Promise<DomainDistributionData | null> {
+        interface DomainMapNode {
+            ddcCode: string;
+            name: string;
+            noteCount: number;
+            level: number;
+            children?: DomainMapNode[];
+            parent?: string;
+            keywords?: string[];
+        }
         try {
-            const analysisData = preloadedData ?? JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath()));
-
+            const raw = preloadedData ?? (JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath())) as VaultAnalysisData);
+            const analysisData = raw;
             if (!analysisData?.results || analysisData.results.length === 0) {
                 return null;
             }
 
-            // Ensure knowledge domain template is loaded using KnowledgeDomainHelper singleton
             const domainHelper = KnowledgeDomainHelper.getInstance(this.app);
             await domainHelper.ensureDomainTemplateLoaded();
 
-            // Build hierarchy logic (moved from MasterAnalysisManager)
-            // Create maps for knowledge domain hierarchy - we'll use domain and subdivision
-            const domainMap = new Map<string, any>();
-            const subdivisionMap = new Map<string, any>();
-            // Count notes per knowledge domain subdivision
+            const domainMap = new Map<string, DomainMapNode>();
+            const subdivisionMap = new Map<string, DomainMapNode>();
             const subdivisionCounts = new Map<string, number>();
-            const subdivisionNotes = new Map<string, any[]>();
-            // Get knowledge domain name to code mapping for reverse lookup
+            const subdivisionNotes = new Map<string, VaultAnalysisResult[]>();
             const nameToCodeMap = new Map<string, string>();
             const codeToNameMap = domainHelper.getDomainCodeToNameMap();
-            // Add main domain names to the code-to-name map
             const domainTemplate = domainHelper.getDomainTemplate();
-            if (domainTemplate && domainTemplate.knowledge_domains && domainTemplate.knowledge_domains.domains) {
-                domainTemplate.knowledge_domains.domains.forEach((domain: any) => {
+            if (domainTemplate?.knowledge_domains?.domains) {
+                domainTemplate.knowledge_domains.domains.forEach((domain: KnowledgeDomain) => {
                     codeToNameMap.set(domain.id, domain.name);
                 });
             }
-            // Build reverse lookup map
             codeToNameMap.forEach((name: string, code: string) => {
                 nameToCodeMap.set(name, code);
             });
-            // Process each note to extract its knowledge domain codes or names
-            analysisData.results.forEach((note: any) => {
+            analysisData.results.forEach((note: VaultAnalysisResult) => {
                 if (note.knowledgeDomains && note.knowledgeDomains.length > 0) {
                     note.knowledgeDomains.forEach((domain: string) => {
                         let subdivisionId = '';
@@ -246,7 +246,7 @@ export class KnowledgeStructureManager {
                             });
                         }
                         if (!subdivisionMap.has(subdivisionId)) {
-                            const subdivisionNode: any = {
+                            const subdivisionNode: DomainMapNode = {
                                 ddcCode: subdivisionId,
                                 name: codeToNameMap.get(subdivisionId) || subdivisionId,
                                 noteCount: 0,
@@ -256,47 +256,38 @@ export class KnowledgeStructureManager {
                             subdivisionMap.set(subdivisionId, subdivisionNode);
                             domainMap.get(domainId)?.children?.push(subdivisionNode);
                         }
-                        if (subdivisionMap.has(subdivisionId)) {
-                            const subdivision = subdivisionMap.get(subdivisionId);
-                            if (subdivision) {
-                                subdivision.noteCount = (subdivision.noteCount || 0) + 1;
-                            }
+                        const subdivision = subdivisionMap.get(subdivisionId);
+                        if (subdivision) {
+                            subdivision.noteCount += 1;
                         }
-                        if (domainMap.has(domainId)) {
-                            const domainNode = domainMap.get(domainId);
-                            if (domainNode) {
-                                domainNode.noteCount = (domainNode.noteCount || 0) + 1;
-                            }
+                        const domainNode = domainMap.get(domainId);
+                        if (domainNode) {
+                            domainNode.noteCount += 1;
                         }
                     });
                 }
             });
-            // Extract keywords for each subdivision
             subdivisionMap.forEach((subdivision, subdivisionId) => {
                 const notes = subdivisionNotes.get(subdivisionId) || [];
                 const keywords = new Set<string>();
-                notes.forEach(note => {
+                notes.forEach((note) => {
                     if (note.keywords) {
                         note.keywords.split(',').forEach((keyword: string) => {
                             const trimmed = keyword.trim();
-                            if (trimmed) {
-                                keywords.add(trimmed);
-                            }
+                            if (trimmed) keywords.add(trimmed);
                         });
                     }
                 });
                 subdivision.keywords = Array.from(keywords);
             });
-            // Convert domain map to array and sort by note count
             const domainHierarchy = Array.from(domainMap.values())
-                .filter((domain: any) => domain.noteCount && domain.noteCount > 0)
-                .sort((a: any, b: any) => (b.noteCount || 0) - (a.noteCount || 0));
+                .filter((d) => d.noteCount > 0)
+                .sort((a, b) => b.noteCount - a.noteCount) as HierarchicalDomain[];
             return {
                 domainHierarchy,
                 domainConnections: []
             };
-        } catch (error) {
-            // console.error('Failed to build domain hierarchy from vault analysis:', error);
+        } catch {
             return null;
         }
     }
@@ -323,7 +314,7 @@ export class KnowledgeStructureManager {
             });
 
             section.createEl('h3', {
-                text: 'Knowledge Network Analysis',
+                text: 'Knowledge network analysis',
                 cls: 'vault-analysis-section-title'
             });
 
@@ -353,7 +344,7 @@ export class KnowledgeStructureManager {
      */
     public async renderKDEDistributionChart(section: HTMLElement, preloadedData?: VaultAnalysisData): Promise<void> {
         try {
-            const analysisData: VaultAnalysisData = preloadedData ?? JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath()));
+            const analysisData: VaultAnalysisData = preloadedData ?? (JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath())) as VaultAnalysisData);
             
             // Calculate histogram distributions
             const kdeService = new KDECalculationService();
@@ -376,7 +367,7 @@ export class KnowledgeStructureManager {
             const iconEl = titleContainer.createEl('div', { cls: 'kde-chart-icon' });
             setIcon(iconEl, 'bar-chart-2');
             titleContainer.createEl('h4', {
-                text: 'Centrality Score Distributions',
+                text: 'Centrality score distributions',
                 cls: 'kde-chart-title'
             });
             
@@ -393,7 +384,7 @@ export class KnowledgeStructureManager {
             // Add insights panel with statistics
             const structuredStats = kdeService.getStructuredStats(analysisData);
             this.renderInsightsPanel(chartContainer, structuredStats);
-        } catch (error) {
+        } catch {
             // console.error('Failed to render centrality distribution chart:', error);
             // Silently fail - don't break the UI if chart fails
         }
@@ -446,49 +437,41 @@ export class KnowledgeStructureManager {
     /**
      * Render network analysis in tabbed card-based layout
      */
-    private renderNetworkCards(section: HTMLElement, networkData: any): void {
-        // Define tabs configuration
+    private renderNetworkCards(section: HTMLElement, networkData: KnowledgeStructureData['knowledgeNetwork']): void {
         const tabs = [
-            { 
-                id: 'bridges', 
-                label: 'Knowledge Bridges', 
+            {
+                id: 'bridges',
+                label: 'Knowledge Bridges',
                 icon: 'route',
                 description: 'Domains that connect different areas of knowledge',
                 data: networkData.bridges || []
             },
-            { 
-                id: 'foundations', 
-                label: 'Knowledge Foundations', 
+            {
+                id: 'foundations',
+                label: 'Knowledge Foundations',
                 icon: 'star',
                 description: 'Core domains that serve as central access points',
                 data: networkData.foundations || []
             },
-            { 
-                id: 'authorities', 
-                label: 'Knowledge Authorities', 
+            {
+                id: 'authorities',
+                label: 'Knowledge Authorities',
                 icon: 'orbit',
                 description: 'Influential domains with high connectivity',
                 data: networkData.authorities || []
             }
         ];
 
-        // Create unified container (tabs + content together)
         const tabsContainer = document.createElement('div');
         tabsContainer.className = 'knowledge-network-tabs-container';
-        tabsContainer.style.width = '100%';
-        tabsContainer.style.marginBottom = '30px';
         section.appendChild(tabsContainer);
 
         const tabBar = document.createElement('div');
         tabBar.className = 'knowledge-network-tab-bar';
         tabsContainer.appendChild(tabBar);
 
-        // Create content container - consistent spacing with scatter plot
         const contentContainer = document.createElement('div');
         contentContainer.className = 'knowledge-network-tab-content';
-        contentContainer.style.width = '100%';
-        contentContainer.style.marginTop = '0'; // No margin, spacing handled by tabBar marginBottom
-        contentContainer.style.paddingTop = '0'; // No padding
         tabsContainer.appendChild(contentContainer);
 
         // Cache references for tab buttons and panels
@@ -504,13 +487,8 @@ export class KnowledgeStructureManager {
             tabBar.appendChild(tabButton);
             tabButtons.set(tab.id, tabButton);
 
-            // Create content panel for this tab
             const tabPanel = document.createElement('div');
-            tabPanel.className = `knowledge-network-tab-panel ${tab.id}`;
-            tabPanel.style.display = tab.id === activeTabId ? 'block' : 'none';
-            tabPanel.style.width = '100%';
-            tabPanel.style.marginTop = '0'; // No margin to connect with tabs
-            tabPanel.style.paddingTop = '0'; // No padding to connect with tabs
+            tabPanel.className = `knowledge-network-tab-panel ${tab.id}${tab.id === activeTabId ? ' active' : ''}`;
             contentContainer.appendChild(tabPanel);
             tabPanels.set(tab.id, tabPanel);
 
@@ -530,12 +508,6 @@ export class KnowledgeStructureManager {
             if (tab.data.length > 0) {
                 const cardsContainer = document.createElement('div');
                 cardsContainer.className = 'knowledge-network-cards-container network-cards-container';
-                cardsContainer.style.display = 'flex';
-                cardsContainer.style.flexDirection = 'column';
-                cardsContainer.style.gap = '20px';
-                cardsContainer.style.width = '100%';
-                cardsContainer.style.padding = '6px 0 20px 0'; // Small top padding for spacing
-                cardsContainer.style.boxSizing = 'border-box';
                 panel.appendChild(cardsContainer);
 
                 // Create individual cards for each domain
@@ -582,7 +554,7 @@ export class KnowledgeStructureManager {
      */
     private switchNetworkTab(
         tabId: string,
-        tabs: Array<{ id: string; label: string; icon: string; description: string; data: any[] }>,
+        tabs: Array<{ id: string; label: string; icon: string; description: string; data: unknown[] }>,
         tabButtons: Map<string, HTMLElement>,
         tabPanels: Map<string, HTMLElement>
     ): void {
@@ -593,7 +565,7 @@ export class KnowledgeStructureManager {
 
             const isActive = tab.id === tabId;
             btn.classList.toggle('active', isActive);
-            panel.style.display = isActive ? 'block' : 'none';
+            panel.classList.toggle('active', isActive);
         });
     }
 
@@ -601,44 +573,16 @@ export class KnowledgeStructureManager {
      * Create a card for a specific network category
      */
     private createNetworkCard(parent: HTMLElement, type: string, title: string, description: string, nodes: NetworkNode[]): void {
-        // Create card container
         const card = document.createElement('div');
         card.className = 'network-card';
-        card.style.width = '100%';
-        card.style.background = 'var(--background-primary)';
-        card.style.borderRadius = '12px';
-        card.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
-        card.style.padding = '0';
-        card.style.overflow = 'hidden';
-        card.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
-        card.style.border = '1px solid var(--background-modifier-border)';
-        card.style.margin = '0';
-        card.style.position = 'relative';
-        card.style.zIndex = '1';
-        card.style.boxSizing = 'border-box';
         parent.appendChild(card);
-        
-        // Card header
+
         const header = document.createElement('div');
         header.className = 'network-card-header';
-        header.style.padding = '16px 20px';
-        header.style.background = 'var(--background-secondary)';
-        header.style.borderBottom = '1px solid var(--background-modifier-border)';
-        header.style.display = 'flex';
-        header.style.alignItems = 'flex-start';
-        header.style.gap = '12px';
         card.appendChild(header);
-        
-        // Lucide icon
+
         const iconEl = document.createElement('div');
         iconEl.className = 'network-card-icon';
-        iconEl.style.display = 'flex';
-        iconEl.style.alignItems = 'center';
-        iconEl.style.justifyContent = 'center';
-        iconEl.style.width = '24px';
-        iconEl.style.height = '24px';
-        iconEl.style.color = 'var(--text-accent)';
-        iconEl.style.flexShrink = '0';
         header.appendChild(iconEl);
         
         // Set Lucide icon based on type
@@ -650,50 +594,31 @@ export class KnowledgeStructureManager {
             setIcon(iconEl, 'orbit');
         }
         
-        // Title container
         const titleContainer = document.createElement('div');
         titleContainer.className = 'network-card-title-container';
-        titleContainer.style.flex = '1';
         header.appendChild(titleContainer);
-        
+
         const titleEl = document.createElement('h4');
         titleEl.className = 'network-card-title';
         titleEl.textContent = title;
-        titleEl.style.fontSize = '18px';
-        titleEl.style.fontWeight = '600';
-        titleEl.style.color = 'var(--text-normal)';
-        titleEl.style.margin = '0';
-        titleEl.style.lineHeight = '1.3';
         titleContainer.appendChild(titleEl);
-        
-        // Count and description in the header
+
         const metaContainer = document.createElement('div');
-        metaContainer.style.display = 'flex';
-        metaContainer.style.flexDirection = 'column';
-        metaContainer.style.gap = '4px';
+        metaContainer.className = 'network-card-meta';
         titleContainer.appendChild(metaContainer);
-        
+
         const countEl = document.createElement('span');
         countEl.className = 'network-card-count';
         countEl.textContent = `${nodes.length} domain${nodes.length !== 1 ? 's' : ''}`;
-        countEl.style.fontSize = '14px';
-        countEl.style.color = 'var(--text-muted)';
-        countEl.style.fontWeight = '500';
         metaContainer.appendChild(countEl);
-        
-        // Description in header
+
         const descEl = document.createElement('span');
         descEl.className = 'network-card-description';
         descEl.textContent = description;
-        descEl.style.fontSize = '13px';
-        descEl.style.color = 'var(--text-muted)';
-        descEl.style.fontStyle = 'italic';
         metaContainer.appendChild(descEl);
 
-        // Content container
         const content = document.createElement('div');
         content.className = 'network-card-content';
-        content.style.padding = '0';
         card.appendChild(content);
 
         // Show top domains (take top 3)
@@ -766,7 +691,7 @@ export class KnowledgeStructureManager {
                 setIcon(notesIcon, 'file-text');
 
                 const notesText = document.createElement('span');
-                notesText.textContent = 'Top Notes';
+                notesText.textContent = 'Top notes';
                 notesHeader.appendChild(notesText);
 
                 // Notes list inside container (no background/border since container provides it)
@@ -823,27 +748,24 @@ export class KnowledgeStructureManager {
                     });
 
                     // Make note clickable
-                    noteLink.addEventListener('click', async () => {
-                        try {
-                            // Try to get the file using getFileByPath which returns TFile or null
-                            const tFile = this.app.vault.getFileByPath(note.path);
-                            if (tFile) {
-                                // Open the file in the active leaf
-                                const leaf = this.app.workspace.getLeaf(false);
-                                await leaf.openFile(tFile);
-                            } else {
-                                // Fallback: try to open by link text using title
-                                await this.app.workspace.openLinkText(note.title, '');
-                            }
-                        } catch (error) {
-                            // console.error('Failed to open note:', error);
-                            // Additional fallback: try to open by path directly
+                    noteLink.addEventListener('click', () => {
+                        void (async () => {
                             try {
-                                await this.app.workspace.openLinkText(note.path, '');
-                            } catch (fallbackError) {
-                                // console.error('Fallback also failed:', fallbackError);
+                                const tFile = this.app.vault.getFileByPath(note.path);
+                                if (tFile) {
+                                    const leaf = this.app.workspace.getLeaf(false);
+                                    await leaf.openFile(tFile);
+                                } else {
+                                    await this.app.workspace.openLinkText(note.title, '');
+                                }
+                            } catch {
+                                try {
+                                    await this.app.workspace.openLinkText(note.path, '');
+                                } catch {
+                                    // Fallback also failed
+                                }
                             }
-                        }
+                        })();
                     });
                 });
             }
@@ -1058,7 +980,7 @@ export class KnowledgeStructureManager {
         });
 
         section.createEl('h3', {
-            text: 'Knowledge Gap Analysis',
+            text: 'Knowledge gap analysis',
             cls: 'vault-analysis-section-title'
         });
 
@@ -1072,7 +994,7 @@ export class KnowledgeStructureManager {
             });
             const iconEl = titleEl.createEl('span', { cls: 'ai-insights-icon' });
             setIcon(iconEl, 'target');
-            titleEl.createEl('span', { text: 'Identified Knowledge Gaps' });
+            titleEl.createEl('span', { text: 'Identified knowledge gaps' });
 
             const gapsList = gapsContainer.createEl('ul', { 
                 cls: 'gaps-list' 
@@ -1173,7 +1095,7 @@ export class KnowledgeStructureManager {
             setIcon(notesIcon, 'file-text');
 
             const notesText = document.createElement('span');
-            notesText.textContent = 'Top Notes';
+            notesText.textContent = 'Top notes';
             notesHeader.appendChild(notesText);
 
             // Notes list inside container (no background/border since container provides it)
@@ -1218,18 +1140,20 @@ export class KnowledgeStructureManager {
                     noteLink.style.textDecoration = 'none';
                 });
 
-                noteLink.addEventListener('click', async () => {
-                    try {
-                        const tFile = this.app.vault.getFileByPath(note.path);
-                        if (tFile) {
-                            const leaf = this.app.workspace.getLeaf(false);
-                            await leaf.openFile(tFile);
-                        } else {
-                            await this.app.workspace.openLinkText(note.title, '');
+                noteLink.addEventListener('click', () => {
+                    void (async () => {
+                        try {
+                            const tFile = this.app.vault.getFileByPath(note.path);
+                            if (tFile) {
+                                const leaf = this.app.workspace.getLeaf(false);
+                                await leaf.openFile(tFile);
+                            } else {
+                                await this.app.workspace.openLinkText(note.title, '');
+                            }
+                        } catch {
+                            // Failed to open note
                         }
-                    } catch (error) {
-                        // console.error('Failed to open note:', error);
-                    }
+                    })();
                 });
             });
         }

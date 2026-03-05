@@ -110,6 +110,12 @@
     flex: 1;
 }
 
+.network-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
 .network-card-title {
     font-size: 18px;
     font-weight: 600;
@@ -699,6 +705,13 @@
 .centrality-result-item:hover {
   background-color: var(--nav-item-background-hover);
   color: var(--text-normal);
+}
+
+.result-item-number {
+  min-width: 20px;
+  margin-right: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
 .result-note-info {
@@ -1642,6 +1655,37 @@ button.is-disabled {
     font-size: 14px;
 }
 
+/* Histogram tooltip (CentralityKDEChart) */
+.histogram-tooltip {
+    position: absolute;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    padding: 8px 12px;
+    font-size: var(--font-ui-small);
+    color: var(--text-normal);
+    box-shadow: var(--shadow-s);
+    z-index: 1000;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.histogram-tooltip-title {
+    font-weight: var(--font-medium);
+    margin-bottom: 4px;
+    color: var(--text-normal);
+}
+
+.histogram-tooltip-range,
+.histogram-tooltip-count {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+}
+
+.histogram-tooltip-range {
+    margin-bottom: 2px;
+}
+
 /* KDE Chart Insights Panel */
 .kde-chart-insights {
     margin-top: 20px;
@@ -1710,6 +1754,34 @@ button.is-disabled {
 }
 
 /* Minimal tab style: text + icon only, color indicates active */
+/* Knowledge network tabs container */
+.knowledge-network-tabs-container {
+    width: 100%;
+    margin-bottom: 30px;
+}
+
+.knowledge-network-tab-content {
+    width: 100%;
+    margin-top: 0;
+    padding-top: 0;
+}
+
+.knowledge-network-tab-panel {
+    display: none;
+    width: 100%;
+    margin-top: 0;
+    padding-top: 0;
+}
+
+.knowledge-network-tab-panel.active {
+    display: block;
+}
+
+.knowledge-network-cards-container.network-cards-container {
+    flex-direction: column;
+    padding: 6px 0 20px 0;
+}
+
 .knowledge-network-tab-bar {
     display: flex;
     flex-direction: row;
@@ -1828,6 +1900,18 @@ button.is-disabled {
     pointer-events: none;
     white-space: nowrap;
     max-width: 300px;
+}
+
+.scatter-tooltip-title {
+    font-weight: var(--font-medium);
+    margin-bottom: 4px;
+    color: var(--text-normal);
+}
+
+.scatter-tooltip-muted {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    margin-bottom: 2px;
 }
 
 .vault-analysis-results {
@@ -2017,6 +2101,17 @@ button.is-disabled {
     color: var(--text-accent);
     font-size: var(--font-ui-medium);
     font-weight: 600;
+}
+
+/* Enhance button in Notice (vault analysis graph metrics) */
+.graph-enhance-btn {
+    margin-left: 10px;
+    padding: 4px 8px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
 }
 
 /* Responsive Design */
@@ -2560,6 +2655,15 @@ button.is-disabled {
 }
 
 
+/* AI loading text styles (VaultAnalysisModals) */
+.ai-loading-title {
+  color: var(--color-orange);
+}
+
+.ai-loading-note {
+  color: var(--text-muted);
+}
+
 /* Loading state for AI insights */
 .ai-insights-loading {
   display: flex;
@@ -2857,6 +2961,13 @@ button.is-disabled {
     border: 1px solid var(--background-modifier-border);
 }
 
+/* Dismissed state for action items and connection items */
+.action-item.actions-item-dismissed,
+.connection-item.actions-item-dismissed {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 .action-title {
     font-weight: var(--font-medium);
     color: var(--text-normal);
@@ -3045,19 +3156,29 @@ button.is-disabled {
 }
 
 .subgraph-svg-wrapper {
+    width: 100%;
+    position: relative;
+    height: var(--subgraph-height, 450px);
     background: var(--background-secondary);
     border-radius: 10px;
     border: 1px solid var(--background-modifier-border);
     overflow: hidden;
 }
 
+
 .connection-subgraph-svg {
     display: block;
 }
 
 /* Tooltip */
+.subgraph-tooltip.subgraph-tooltip-hidden {
+    display: none;
+}
+
 .subgraph-tooltip {
     position: absolute;
+    left: var(--tooltip-x, 0);
+    top: var(--tooltip-y, 0);
     background: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;

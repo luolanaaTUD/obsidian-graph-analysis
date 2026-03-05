@@ -129,8 +129,8 @@ export function buildCategoricalPalette({
 }): CategoricalPalette {
     let allColors: string[];
 
-    // find d3 color scheme
-    const scheme = (d3ScaleChromatic as any)[`scheme${name}`];
+    // find d3 color scheme (d3-scale-chromatic uses dynamic scheme names)
+    const scheme = (d3ScaleChromatic as unknown as Record<string, string[] | undefined>)[`scheme${name}`];
 
     if (!scheme && !colors) {
         // console.warn(`scheme${name} cant not be found in d3 scale chromatic, needs to provide colors`);
@@ -175,7 +175,7 @@ export function buildSequentialPalette({
         // console.warn(`${name} does not exists in COLOR_BLIND_SAFE_MAP`);
     }
 
-    const interpolator = (d3ScaleChromatic as any)[`interpolate${name}`];
+    const interpolator = (d3ScaleChromatic as unknown as Record<string, (t: number) => string>)[`interpolate${name}`];
 
     return {
         name,
@@ -183,11 +183,12 @@ export function buildSequentialPalette({
         category,
         colorBlindSafe: COLOR_BLIND_SAFE_MAP[name],
         colors: numColors => {
+            const divisor = Math.max(numColors - 1, 1);
             return range(0, numColors, 1)
-                .map(d => interpolator(d / (numColors - 1)))
+                .map((d: number) => (interpolator ? interpolator(d / divisor) : '#FFFFFF'))
                 .map(_colorToUppercase);
         },
-        linear: () => (n: number) => interpolator(n)
+        linear: () => (n: number) => (interpolator ? interpolator(n) : '#FFFFFF')
     };
 }
 
@@ -290,18 +291,16 @@ function buildPaletteBySchemeGroups(
     schemeGroups: typeof COLORBREWER_SCHEME | typeof D3_COLOR_CHROMATIC_SCHEME,
     category: ValueOf<typeof CATEGORIES>
 ): ColorPalette[] {
-    return Object.entries(schemeGroups).reduce((accu, [type, palettes]) => {
-        return [
-            ...accu,
-            ...palettes.reduce((group: ColorPalette[], name: string) => {
-                const colorPalette =
-                    type === PALETTE_TYPES.QUA
-                        ? buildCategoricalPalette({ name, category })
-                        : buildSequentialPalette({ name, type: type as SequentialPalette['type'], category });
-                group.push(colorPalette);
-                return group;
-            }, [])
-        ];
+    return Object.entries(schemeGroups).reduce((accu: ColorPalette[], [type, palettes]) => {
+        const newPalettes = (palettes as readonly string[]).reduce((group: ColorPalette[], name: string) => {
+            const colorPalette =
+                type === PALETTE_TYPES.QUA
+                    ? buildCategoricalPalette({ name, category })
+                    : buildSequentialPalette({ name, type: type as SequentialPalette['type'], category });
+            group.push(colorPalette);
+            return group;
+        }, [] as ColorPalette[]);
+        return [...accu, ...newPalettes];
     }, [] as ColorPalette[]);
 }
 

@@ -20,7 +20,7 @@ export class CentralityResultsView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Centrality Analysis';
+        return 'Centrality analysis';
     }
 
     getIcon(): string {
@@ -95,14 +95,10 @@ export class CentralityResultsView extends ItemView {
             
             // Item number (global position)
             const itemNumber = startIndex + index + 1;
-            const numberSpan = resultItem.createEl('span', {
+            resultItem.createEl('span', {
                 cls: 'result-item-number',
                 text: `${itemNumber}.`
             });
-            numberSpan.style.minWidth = '20px';
-            numberSpan.style.marginRight = '8px';
-            numberSpan.style.color = 'var(--text-muted)';
-            numberSpan.style.fontSize = 'var(--font-ui-smaller)';
             
             // Note name and link
             const noteInfo = resultItem.createEl('div', { cls: 'result-note-info' });
@@ -110,11 +106,11 @@ export class CentralityResultsView extends ItemView {
                 cls: 'result-note-link',
                 text: result.node_name
             });
-            noteLink.addEventListener('click', async (e) => {
+            noteLink.addEventListener('click', (e) => {
                 e.preventDefault();
                 const file = this.app.vault.getAbstractFileByPath(result.node_name);
                 if (file instanceof TFile) {
-                    await this.app.workspace.getLeaf().openFile(file);
+                    void this.app.workspace.getLeaf().openFile(file);
                 }
             });
 

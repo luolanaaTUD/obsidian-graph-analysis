@@ -1,11 +1,11 @@
 import { App } from 'obsidian';
-import { GraphData, Node, IGraphAnalysisPlugin, GraphNeighborsResult, GraphMetadata, VaultData } from '../types/types';
+import { GraphData, Node, GraphNeighborsResult, GraphMetadata } from '../types/types';
 import GraphAnalysisPlugin from '../main';
 
 interface ExtendedApp extends App {
     plugins: {
         plugins: {
-            [key: string]: any;
+            [key: string]: unknown;
         };
     };
 }

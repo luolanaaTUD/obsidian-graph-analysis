@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- D3 Selection/scale types from @types/d3 */
 import * as d3 from 'd3';
 import { CentralityHistogramResult } from '../../utils/KDECalculationService';
 
@@ -35,13 +36,10 @@ export class CentralityKDEChart {
                        this.data.totals.eigenvector > 0;
 
         if (!hasData) {
-            const noDataMsg = this.container.createEl('p', {
+            this.container.createEl('p', {
                 text: 'No centrality data available for distribution analysis.',
                 cls: 'kde-chart-no-data'
             });
-            noDataMsg.style.textAlign = 'center';
-            noDataMsg.style.color = 'var(--text-muted)';
-            noDataMsg.style.padding = '40px 20px';
             return;
         }
 
@@ -49,15 +47,17 @@ export class CentralityKDEChart {
         const innerWidth = width! - margin!.left - margin!.right;
         const innerHeight = height! - margin!.top - margin!.bottom;
 
-        // Create SVG
-        this.svg = d3.select(this.container)
+        // Create SVG (@types/d3 Selection omits append when parent is null)
+        this.svg = (d3.select(this.container) as unknown as { append(n: string): d3.Selection<SVGSVGElement, unknown, null, undefined> })
             .append('svg')
             .attr('width', width!)
             .attr('height', height!)
             .attr('viewBox', `0 0 ${width!} ${height!}`)
             .attr('style', 'max-width: 100%; height: auto;');
 
-        const g = this.svg.append('g')
+        if (!this.svg) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- D3 Selection append/remove omitted in @types/d3 when parent is null
+        const g = (this.svg as any).append('g')
             .attr('transform', `translate(${margin!.left},${margin!.top})`);
 
         // Find max count across all bins and centrality types for y-axis scaling
@@ -66,8 +66,9 @@ export class CentralityKDEChart {
             maxCount = Math.max(maxCount, bin.betweenness, bin.closeness, bin.eigenvector);
         });
 
-        // Create scales
-        const xScale = d3.scaleBand()
+        // Create scales (@types/d3 omits scaleBand; present at runtime)
+        type ScaleBandLike = { domain(d: string[]): ScaleBandLike; range(r: [number, number]): ScaleBandLike; padding(p: number): ScaleBandLike; bandwidth(): number; (x: string): number | undefined };
+        const xScale = (d3 as unknown as { scaleBand(): ScaleBandLike }).scaleBand()
             .domain(this.data.bins.map(bin => bin.range))
             .range([0, innerWidth])
             .padding(0.1);
@@ -151,12 +152,12 @@ export class CentralityKDEChart {
             .filter((_, i) => i % tickStep === 0 || i === numBins - 1)
             .map(bin => bin.range);
 
-        const xAxis = d3.axisBottom(xScale)
+        const xAxis = d3.axisBottom(xScale as unknown as d3.AxisScale<d3.AxisDomain>)
             .tickValues(tickValues)
             .tickFormat(d => {
                 // Show simplified label (e.g., "0.00" instead of "0.00-0.01")
-                const range = d as string;
-                return range.split('-')[0];
+                const range = String(d);
+                return range.split('-')[0] ?? range;
             });
 
         const xAxisGroup = g.append('g')
@@ -242,30 +243,14 @@ export class CentralityKDEChart {
 
         const tooltip = document.createElement('div');
         tooltip.className = 'histogram-tooltip';
-        tooltip.style.position = 'absolute';
-        tooltip.style.background = 'var(--background-primary)';
-        tooltip.style.border = '1px solid var(--background-modifier-border)';
-        tooltip.style.borderRadius = 'var(--radius-s)';
-        tooltip.style.padding = '8px 12px';
-        tooltip.style.fontSize = 'var(--font-ui-small)';
-        tooltip.style.color = 'var(--text-normal)';
-        tooltip.style.boxShadow = 'var(--shadow-s)';
-        tooltip.style.zIndex = '1000';
-        tooltip.style.pointerEvents = 'none';
-        tooltip.style.whiteSpace = 'nowrap';
 
         const centralityName = centralityType.charAt(0).toUpperCase() + centralityType.slice(1);
-        const titleEl = tooltip.createEl('div', { text: `${centralityName} Centrality` });
-        titleEl.style.fontWeight = 'var(--font-medium)';
-        titleEl.style.marginBottom = '4px';
-        titleEl.style.color = 'var(--text-normal)';
-        const rangeEl = tooltip.createEl('div', { text: `Range: ${range}` });
-        rangeEl.style.color = 'var(--text-muted)';
-        rangeEl.style.fontSize = 'var(--font-ui-smaller)';
-        rangeEl.style.marginBottom = '2px';
-        const countEl = tooltip.createEl('div', { text: `Count: ${count} note${count !== 1 ? 's' : ''}` });
-        countEl.style.color = 'var(--text-muted)';
-        countEl.style.fontSize = 'var(--font-ui-smaller)';
+        tooltip.createEl('div', { text: `${centralityName} Centrality`, cls: 'histogram-tooltip-title' });
+        tooltip.createEl('div', { text: `Range: ${range}`, cls: 'histogram-tooltip-range' });
+        tooltip.createEl('div', {
+            text: `Count: ${count} note${count !== 1 ? 's' : ''}`,
+            cls: 'histogram-tooltip-count'
+        });
 
         document.body.appendChild(tooltip);
         this.tooltip = tooltip;
@@ -279,8 +264,8 @@ export class CentralityKDEChart {
         const x = event.pageX - rect.width / 2;
         const y = event.pageY - rect.height - 10;
 
-        this.tooltip.style.left = `${x}px`;
-        this.tooltip.style.top = `${y}px`;
+        this.tooltip.style.setProperty('left', `${x}px`);
+        this.tooltip.style.setProperty('top', `${y}px`);
     }
 
     private hideTooltip(): void {
@@ -293,7 +278,7 @@ export class CentralityKDEChart {
     public destroy(): void {
         this.hideTooltip();
         if (this.svg) {
-            this.svg.remove();
+            (this.svg as unknown as { remove(): void }).remove();
             this.svg = null;
         }
         this.container.empty();

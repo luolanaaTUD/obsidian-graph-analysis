@@ -86,12 +86,13 @@ export class GraphDataBuilder {
             }
         }
 
-        // Convert edges set to array format - single pass with pre-allocated array
-        const edgesArray: [number, number][] = new Array(edges.size);
-        let edgeIndex = 0;
+        // Convert edges set to array format
+        const edgesArray: [number, number][] = [];
         for (const edge of edges) {
-            const [source, target] = edge.split(',').map(Number);
-            edgesArray[edgeIndex++] = [source, target];
+            const parts = edge.split(',');
+            const source = Number(parts[0] ?? 0);
+            const target = Number(parts[1] ?? 0);
+            edgesArray.push([source, target]);
         }
 
         // Build final graph data structure

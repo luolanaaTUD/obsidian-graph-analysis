@@ -1,4 +1,4 @@
-import { App, Modal, setIcon, Notice, TFile, MarkdownRenderer, Component } from 'obsidian';
+import { App, Modal, setIcon, Notice, MarkdownRenderer, Component } from 'obsidian';
 import { KnowledgeCalendarChart } from '../components/calendar-chart/KnowledgeCalendarChart';
 import { ConnectivityScatterChart } from '../components/scatter-chart/ConnectivityScatterChart';
 import { ConnectionSubGraph } from '../components/connection-subgraph/ConnectionSubGraph';
@@ -10,7 +10,7 @@ import {
     EvolutionAnalysisData,
     ActionsAnalysisData
 } from '../ai/MasterAnalysisManager';
-import { KnowledgeEvolutionData } from '../ai/visualization/KnowledgeEvolutionManager';
+import { KnowledgeEvolutionData, TimelineAnalysis, TopicPatternsAnalysis, FocusShiftAnalysis } from '../ai/visualization/KnowledgeEvolutionManager';
 import { KnowledgeStructureManager } from '../ai/visualization/KnowledgeStructureManager';
 import { KnowledgeActionsManager, ReviewCandidate } from '../ai/visualization/KnowledgeActionsManager';
 import { GraphAnalysisSettings } from '../types/types';
@@ -95,7 +95,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         // Load initial view
-        this.loadView(this.currentView);
+        void this.loadView(this.currentView);
     }
 
     private createHeader(container: HTMLElement): void {
@@ -140,10 +140,10 @@ export class VaultAnalysisModal extends Modal {
             
             if (isDisabled) {
                 tabButton.setAttribute('aria-disabled', 'true');
-                tabButton.setAttribute('title', 'Run Semantic Analysis first');
+                tabButton.setAttribute('title', 'Run semantic analysis first');
             } else {
-                tabButton.addEventListener('click', async () => {
-                    await this.switchView(tab.id);
+                tabButton.addEventListener('click', () => {
+                    void this.switchView(tab.id);
                 });
             }
         });
@@ -200,7 +200,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         summarySection.createEl('h3', {
-            text: 'Analysis Summary',
+            text: 'Analysis summary',
             cls: 'vault-analysis-section-title'
         });
         
@@ -245,7 +245,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         searchSection.createEl('h3', {
-            text: 'Search & Filter',
+            text: 'Search & filter',
             cls: 'vault-analysis-section-title'
         });
         
@@ -265,7 +265,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         this.resultsSection.createEl('h3', {
-            text: 'Analysis Results',
+            text: 'Analysis results',
             cls: 'vault-analysis-section-title'
         });
         
@@ -325,9 +325,9 @@ export class VaultAnalysisModal extends Modal {
         const buttonWrapper = this.contentContainer.createEl('div', { cls: 'semantic-update-button-wrapper' });
         await this.createUpdateAnalysisButtonSection(buttonWrapper, 'semantic', false, true);
 
-        this.vaultSemanticAnalysisManager.hasPendingSemanticChanges(this.analysisData).then(isOutdated => {
+        void this.vaultSemanticAnalysisManager.hasPendingSemanticChanges(this.analysisData).then(isOutdated => {
             buttonWrapper.empty();
-            this.createUpdateAnalysisButtonSection(buttonWrapper, 'semantic', isOutdated);
+            void this.createUpdateAnalysisButtonSection(buttonWrapper, 'semantic', isOutdated);
         });
 
         // Search functionality
@@ -374,11 +374,10 @@ export class VaultAnalysisModal extends Modal {
                 text: result.title,
                 cls: 'result-title'
             });
-            titleEl.addEventListener('click', async () => {
+            titleEl.addEventListener('click', () => {
                 const file = this.app.vault.getAbstractFileByPath(result.path);
                 if (file) {
-                    await this.app.workspace.openLinkText(file.path, '');
-                    this.close();
+                    void this.app.workspace.openLinkText(file.path, '').then(() => this.close());
                 }
             });
             
@@ -624,18 +623,18 @@ export class VaultAnalysisModal extends Modal {
             cls: 'mod-cta'
         });
         
-        actionButton.addEventListener('click', async () => {
+        actionButton.addEventListener('click', () => {
             this.close();
-            try {
-                const success = await this.vaultSemanticAnalysisManager.generateVaultAnalysis();
-                // Reopen modal with updated data after analysis completes successfully
-                if (success) {
-                    await this.vaultSemanticAnalysisManager.viewVaultAnalysisResults();
+            void (async () => {
+                try {
+                    const success = await this.vaultSemanticAnalysisManager.generateVaultAnalysis();
+                    if (success) {
+                        await this.vaultSemanticAnalysisManager.viewVaultAnalysisResults();
+                    }
+                } catch {
+                    // Error already shown by generateVaultAnalysis
                 }
-            } catch (error) {
-                // Error already shown by generateVaultAnalysis, no need to reopen modal
-                // console.error('Vault analysis failed:', error);
-            }
+            })();
         });
     }
 
@@ -656,7 +655,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         domainDistributionSection.createEl('h3', {
-            text: 'Knowledge Domain Distribution',
+            text: 'Knowledge domain distribution',
             cls: 'vault-analysis-section-title'
         });
         
@@ -665,7 +664,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         networkAnalysisSection.createEl('h3', {
-            text: 'Knowledge Network Analysis',
+            text: 'Knowledge network analysis',
             cls: 'vault-analysis-section-title'
         });
         
@@ -674,7 +673,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         gapsSection.createEl('h3', {
-            text: 'Knowledge Gaps',
+            text: 'Knowledge gaps',
             cls: 'vault-analysis-section-title'
         });
         
@@ -686,8 +685,7 @@ export class VaultAnalysisModal extends Modal {
             } else {
                 // console.log('No cached structure analysis available yet');
             }
-        } catch (error) {
-            // console.log('Error loading cached structure analysis:', error);
+        } catch {
             this.structureAnalysisData = null;
         }
         
@@ -766,7 +764,7 @@ export class VaultAnalysisModal extends Modal {
             });
             const iconEl = titleEl.createEl('span', { cls: 'ai-insights-icon' });
             setIcon(iconEl, 'target');
-            titleEl.createEl('span', { text: 'Identified Knowledge Gaps' });
+            titleEl.createEl('span', { text: 'Identified knowledge gaps' });
 
             const gapsList = gapsContainer.createEl('ul', { 
                 cls: 'gaps-list' 
@@ -843,7 +841,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         emptyState.createEl('h3', {
-            text: '🧠 Knowledge Structure Analysis',
+            text: '🧠 knowledge structure analysis',
             cls: 'vault-analysis-section-title'
         });
         
@@ -910,7 +908,7 @@ export class VaultAnalysisModal extends Modal {
             statusIndicator.appendText(' Checking for updates...');
             const disabledButton = buttonContainer.createEl('button', {
                 cls: 'mod-cta is-disabled',
-                text: 'Update Analysis'
+                text: 'Update analysis'
             });
             disabledButton.disabled = true;
             return;
@@ -928,7 +926,7 @@ export class VaultAnalysisModal extends Modal {
 
         const updateButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
-            text: 'Update Analysis'
+            text: 'Update analysis'
         });
 
         // Disable button if analysis is current
@@ -940,56 +938,49 @@ export class VaultAnalysisModal extends Modal {
             updateButton.setAttribute('title', 'Click to update analysis with recent vault changes');
         }
 
-        updateButton.addEventListener('click', async () => {
-            // Prevent action if button is disabled
-            if (updateButton.disabled) {
-                return;
-            }
-            // Semantic analysis: close, run analysis, reopen
+        updateButton.addEventListener('click', () => {
+            if (updateButton.disabled) return;
             if (tabName === 'semantic') {
                 this.close();
-                try {
-                    const success = await this.vaultSemanticAnalysisManager.generateVaultAnalysis();
-                    if (success) {
-                        await this.vaultSemanticAnalysisManager.viewVaultAnalysisResults();
+                void (async () => {
+                    try {
+                        const success = await this.vaultSemanticAnalysisManager.generateVaultAnalysis();
+                        if (success) {
+                            await this.vaultSemanticAnalysisManager.viewVaultAnalysisResults();
+                        }
+                    } catch {
+                        // Error shown by generateVaultAnalysis
                     }
-                } catch (error) {
-                    // console.error('Vault analysis failed:', error);
-                }
+                })();
                 return;
             }
-            // Use close-reopen pattern for structure, evolution, and actions tabs
             if (tabName === 'structure' || tabName === 'evolution' || tabName === 'actions') {
-                // Show notification before closing modal
                 const tabDisplayName = this.getTabDisplayName(tabName);
                 new Notice(`🧪 Updating ${tabDisplayName} Analysis... (est. 1–2 min)`);
-                
                 this.vaultSemanticAnalysisManager.setAnalysisInProgress(tabName);
                 this.close();
-                try {
-                    // Generate the appropriate analysis based on tab
-                    if (tabName === 'structure') {
-                        await this.masterAnalysisManager.generateKnowledgeStructureAnalysis();
-                    } else if (tabName === 'evolution') {
-                        await this.masterAnalysisManager.generateKnowledgeEvolutionAnalysis();
-                    } else if (tabName === 'actions') {
-                        await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                void (async () => {
+                    try {
+                        if (tabName === 'structure') {
+                            await this.masterAnalysisManager.generateKnowledgeStructureAnalysis();
+                        } else if (tabName === 'evolution') {
+                            await this.masterAnalysisManager.generateKnowledgeEvolutionAnalysis();
+                        } else if (tabName === 'actions') {
+                            await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                        }
+                        await this.masterAnalysisManager.reopenModalToTab(
+                            this.vaultSemanticAnalysisManager,
+                            this.settings,
+                            tabName
+                        );
+                    } catch (error) {
+                        new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
+                    } finally {
+                        this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
                     }
-                    // Reopen modal to the same tab with fresh data
-                    await this.masterAnalysisManager.reopenModalToTab(
-                        this.vaultSemanticAnalysisManager,
-                        this.settings,
-                        tabName
-                    );
-                } catch (error) {
-                    // console.error(`${tabName} analysis failed:`, error);
-                    new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
-                } finally {
-                    this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
-                }
+                })();
             } else {
-                // Fallback to inline loading for other cases
-                await this.triggerAIAnalysis(buttonContainer, true, tabName);
+                void this.triggerAIAnalysis(buttonContainer, true, tabName);
             }
         });
     }
@@ -1005,12 +996,12 @@ export class VaultAnalysisModal extends Modal {
         });
 
         infoContainer.createEl('p', {
-            text: 'This analysis uses Google Gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
+            text: 'This analysis uses google gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
             cls: 'analysis-info-text'
         });
 
         infoContainer.createEl('p', {
-            text: 'Before AI analysis, we use deterministic methods (graph theory, statistical analysis, KDE distributions) to preprocess your vault data, ensuring accurate and efficient insights.',
+            text: 'Before AI analysis, we use deterministic methods (graph theory, statistical analysis, kde distributions) to preprocess your vault data, ensuring accurate and efficient insights.',
             cls: 'analysis-info-text'
         });
 
@@ -1042,43 +1033,38 @@ export class VaultAnalysisModal extends Modal {
 
         const analysisButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
-            text: 'Generate Analysis'
+            text: 'Generate analysis'
         });
         analysisButton.setAttribute('title', 'Click to generate analysis for this tab');
 
-        analysisButton.addEventListener('click', async () => {
-            // Use close-reopen pattern for structure, evolution, and actions tabs
+        analysisButton.addEventListener('click', () => {
             if (tabName === 'structure' || tabName === 'evolution' || tabName === 'actions') {
-                // Show notification before closing modal
                 const tabDisplayName = this.getTabDisplayName(tabName);
                 new Notice(`🧪 Generating ${tabDisplayName} Analysis... (est. 1–2 min)`);
-                
                 this.vaultSemanticAnalysisManager.setAnalysisInProgress(tabName);
                 this.close();
-                try {
-                    // Generate the appropriate analysis based on tab
-                    if (tabName === 'structure') {
-                        await this.masterAnalysisManager.generateKnowledgeStructureAnalysis();
-                    } else if (tabName === 'evolution') {
-                        await this.masterAnalysisManager.generateKnowledgeEvolutionAnalysis();
-                    } else if (tabName === 'actions') {
-                        await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                void (async () => {
+                    try {
+                        if (tabName === 'structure') {
+                            await this.masterAnalysisManager.generateKnowledgeStructureAnalysis();
+                        } else if (tabName === 'evolution') {
+                            await this.masterAnalysisManager.generateKnowledgeEvolutionAnalysis();
+                        } else if (tabName === 'actions') {
+                            await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                        }
+                        await this.masterAnalysisManager.reopenModalToTab(
+                            this.vaultSemanticAnalysisManager,
+                            this.settings,
+                            tabName
+                        );
+                    } catch (error) {
+                        new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
+                    } finally {
+                        this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
                     }
-                    // Reopen modal to the same tab with fresh data
-                    await this.masterAnalysisManager.reopenModalToTab(
-                        this.vaultSemanticAnalysisManager,
-                        this.settings,
-                        tabName
-                    );
-                } catch (error) {
-                    // console.error(`${tabName} analysis failed:`, error);
-                    new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
-                } finally {
-                    this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
-                }
+                })();
             } else {
-                // Fallback to inline loading for other cases
-                await this.triggerAIAnalysis(container, false, tabName);
+                void this.triggerAIAnalysis(container, false, tabName);
             }
         });
     }
@@ -1101,8 +1087,7 @@ export class VaultAnalysisModal extends Modal {
         
         const loadingText = loadingContainer.createEl('p');
         const estTime = tabName ? '1–2 minutes' : '3–6 minutes';
-        const strongTitle = loadingText.createEl('strong');
-        strongTitle.style.color = 'var(--color-orange)';
+        const strongTitle = loadingText.createEl('strong', { cls: 'ai-loading-title' });
         strongTitle.setText(`🧪 ${tabName ? `Generating ${this.getTabDisplayName(tabName)} Analysis` : 'Generating All Analyses'}`);
         loadingText.createEl('br');
         loadingText.appendText(tabName ? `This includes ${this.getTabDescription(tabName)}.` : 'This includes knowledge structure, evolution, and recommendations.');
@@ -1111,8 +1096,7 @@ export class VaultAnalysisModal extends Modal {
         timeStrong.setText('Estimated time: ');
         loadingText.appendText(`${estTime}.`);
         loadingText.createEl('br');
-        const smallNote = loadingText.createEl('small');
-        smallNote.style.color = 'var(--text-muted)';
+        const smallNote = loadingText.createEl('small', { cls: 'ai-loading-note' });
         smallNote.setText('Results will be cached for future use.');
 
         try {
@@ -1162,7 +1146,7 @@ export class VaultAnalysisModal extends Modal {
                 if (aiResultsContainer) {
                     aiResultsContainer.empty();
                     this.displayRecommendedActionsResults(aiResultsContainer as HTMLElement);
-                    this.createUpdateAnalysisButtonSection(
+                    await this.createUpdateAnalysisButtonSection(
                         aiResultsContainer as HTMLElement, 
                         'actions',
                         this.actionsAnalysisData?.isOutdated ?? false
@@ -1197,7 +1181,7 @@ export class VaultAnalysisModal extends Modal {
             const errorContainer = buttonSection.createEl('div', {
                 cls: 'evolution-error'
             });
-            errorContainer.createEl('h4', { text: 'Error Generating AI Analysis' });
+            errorContainer.createEl('h4', { text: 'Error generating AI analysis' });
             errorContainer.createEl('p', {
                 text: `Failed to generate analysis: ${message}`
             });
@@ -1241,7 +1225,13 @@ export class VaultAnalysisModal extends Modal {
         ]);
     }
 
-    private async createStructuredAnalysisSection(container: HTMLElement, title: string, analysisData: any, includeCalendar: boolean = false): Promise<void> {
+    /** Evolution insight data: timeline phases, topic intro, or focus shifts */
+    private async createStructuredAnalysisSection(
+        container: HTMLElement,
+        title: string,
+        analysisData: TimelineAnalysis | TopicPatternsAnalysis | FocusShiftAnalysis,
+        includeCalendar: boolean = false
+    ): Promise<void> {
         const section = container.createEl('div', { cls: 'vault-analysis-section' });
         
         section.createEl('h3', {
@@ -1272,16 +1262,16 @@ export class VaultAnalysisModal extends Modal {
         }
         
         // Add details first (phases, timeline, shifts) - each item in its own rounded container
-        if (title.includes('Timeline') && analysisData.phases) {
+        if (title.includes('Timeline') && 'phases' in analysisData && analysisData.phases) {
             this.addTimelineVisualization(insightsContainer, analysisData.phases);
-        } else if (title.includes('Topic') && analysisData.introductionTimeline) {
+        } else if (title.includes('Topic') && 'introductionTimeline' in analysisData && analysisData.introductionTimeline) {
             this.addTopicVisualization(insightsContainer, analysisData.introductionTimeline);
-        } else if (title.includes('Focus') && analysisData.shifts) {
+        } else if (title.includes('Focus') && 'shifts' in analysisData && analysisData.shifts) {
             this.addFocusShiftVisualization(insightsContainer, analysisData.shifts);
         }
         
         // Then add conclusion section (only if there's content)
-        const narrative = analysisData.narrative || analysisData.exploration || analysisData.trends;
+        const narrative = ('narrative' in analysisData ? analysisData.narrative : null) || ('exploration' in analysisData ? analysisData.exploration : null);
         if (narrative && narrative.content) {
             const conclusionSection = insightsContainer.createEl('div', { cls: 'ai-conclusion-section' });
             
@@ -1298,19 +1288,19 @@ export class VaultAnalysisModal extends Modal {
             const conclusionText = conclusionSection.createEl('div', { 
                 cls: 'ai-conclusion-content'
             });
-            MarkdownRenderer.render(this.app, narrative.content, conclusionText, '', this.markdownComponent);
+            void MarkdownRenderer.render(this.app, narrative.content, conclusionText, '', this.markdownComponent);
         }
     }
 
     // Visualization helper methods - each item in its own rounded container
-    private addTimelineVisualization(section: HTMLElement, phases: any[]): void {
+    private addTimelineVisualization(section: HTMLElement, phases: Array<{ period: string; description: string }>): void {
         phases.forEach(phase => {
             const phaseEl = section.createEl('div', { cls: 'ai-bullet-item-container' });
-            MarkdownRenderer.render(this.app, `- **${phase.period}**: ${phase.description}`, phaseEl, '', this.markdownComponent);
+            void MarkdownRenderer.render(this.app, `- **${phase.period}**: ${phase.description}`, phaseEl, '', this.markdownComponent);
         });
     }
 
-    private addTopicVisualization(section: HTMLElement, timeline: any[]): void {
+    private addTopicVisualization(section: HTMLElement, timeline: Array<{ period: string; newDomains: string[] }>): void {
         timeline.forEach(item => {
             if (item.newDomains.length > 0) {
                 const itemEl = section.createEl('div', { cls: 'ai-bullet-item-container' });
@@ -1321,15 +1311,15 @@ export class VaultAnalysisModal extends Modal {
                     return domainParts[1] || domain;
                 });
                 
-                MarkdownRenderer.render(this.app, `- **${item.period}**: ${cleanDomains.join(', ')}`, itemEl, '', this.markdownComponent);
+                void MarkdownRenderer.render(this.app, `- **${item.period}**: ${cleanDomains.join(', ')}`, itemEl, '', this.markdownComponent);
             }
         });
     }
 
-    private addFocusShiftVisualization(section: HTMLElement, shifts: any[]): void {
+    private addFocusShiftVisualization(section: HTMLElement, shifts: Array<{ period: string; newAreas: string[]; decreasedFocus: string[] }>): void {
         shifts.forEach(shift => {
             const shiftEl = section.createEl('div', { cls: 'ai-bullet-item-container' });
-            MarkdownRenderer.render(this.app, `- **${shift.period}**: ${shift.newAreas.length} new areas, ${shift.decreasedFocus.length} reduced`, shiftEl, '', this.markdownComponent);
+            void MarkdownRenderer.render(this.app, `- **${shift.period}**: ${shift.newAreas.length} new areas, ${shift.decreasedFocus.length} reduced`, shiftEl, '', this.markdownComponent);
         });
     }
 
@@ -1376,7 +1366,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         chartSection.createEl('h3', {
-            text: 'Network Metrics Analysis',
+            text: 'Network metrics analysis',
             cls: 'vault-analysis-section-title'
         });
 
@@ -1389,11 +1379,11 @@ export class VaultAnalysisModal extends Modal {
 
         const linksTab = tabsContainer.createEl('button', { cls: 'knowledge-network-tab active' });
         setIcon(linksTab.createEl('span'), 'link');
-        linksTab.createEl('span', { text: 'Inbound vs Outbound Links' });
+        linksTab.createEl('span', { text: 'Inbound vs outbound links' });
 
         const centralityTab = tabsContainer.createEl('button', { cls: 'knowledge-network-tab' });
         setIcon(centralityTab.createEl('span'), 'activity');
-        centralityTab.createEl('span', { text: 'Betweenness vs Eigenvector' });
+        centralityTab.createEl('span', { text: 'Betweenness vs eigenvector' });
 
         const chartContainer = chartWrapper.createEl('div', { 
             cls: 'connectivity-chart-section' 
@@ -1418,14 +1408,14 @@ export class VaultAnalysisModal extends Modal {
             inactiveTab.classList.remove('active');
         };
 
-        linksTab.addEventListener('click', async () => {
+        linksTab.addEventListener('click', () => {
             updateTabStyles(linksTab, centralityTab);
-            await scatterChart.setMode('links');
+            void scatterChart.setMode('links');
         });
 
-        centralityTab.addEventListener('click', async () => {
+        centralityTab.addEventListener('click', () => {
             updateTabStyles(centralityTab, linksTab);
-            await scatterChart.setMode('centrality');
+            void scatterChart.setMode('centrality');
         });
 
         // Create a dedicated container for AI results (placeholder sections)
@@ -1435,10 +1425,10 @@ export class VaultAnalysisModal extends Modal {
         });
 
         // Check for cached tab-specific analysis
-        this.loadActionsAnalysisData().then(hasData => {
+        void this.loadActionsAnalysisData().then(hasData => {
             if (hasData) {
                 this.displayRecommendedActionsResults(aiResultsContainer);
-                this.createUpdateAnalysisButtonSection(
+                void this.createUpdateAnalysisButtonSection(
                     aiResultsContainer, 
                     'actions',
                     this.actionsAnalysisData?.isOutdated ?? false
@@ -1461,8 +1451,7 @@ export class VaultAnalysisModal extends Modal {
             
             // console.log('No cached actions analysis available yet');
             return false;
-        } catch (error) {
-            // console.log('Error loading cached actions analysis:', error);
+        } catch {
             return false;
         }
     }
@@ -1477,7 +1466,7 @@ export class VaultAnalysisModal extends Modal {
         if (actionsData.maintenance && actionsData.maintenance.length > 0) {
             const maintenanceSection = container.createEl('div', { cls: 'vault-analysis-section' });
             maintenanceSection.createEl('h3', {
-                text: 'Notes Needing Review',
+                text: 'Notes needing review',
                 cls: 'vault-analysis-section-title'
             });
 
@@ -1496,7 +1485,7 @@ export class VaultAnalysisModal extends Modal {
         if (actionsData.connections && actionsData.connections.length > 0) {
             const connectionsSection = container.createEl('div', { cls: 'vault-analysis-section' });
             connectionsSection.createEl('h3', {
-                text: 'Suggested Connections',
+                text: 'Suggested connections',
                 cls: 'vault-analysis-section-title'
             });
 
@@ -1540,17 +1529,17 @@ export class VaultAnalysisModal extends Modal {
 
             // Card header: title + priority badge
             const header = card.createEl('div', { cls: 'review-card-header' });
-            const titleEl = header.createEl('span', {
+            header.createEl('span', {
                 text: candidate.title,
                 cls: 'review-card-title'
             });
-            const badge = header.createEl('span', {
+            header.createEl('span', {
                 text: candidate.priority.toUpperCase(),
                 cls: `review-card-badge badge-${candidate.priority}`
             });
 
             // Reason
-            const reasonEl = card.createEl('div', {
+            card.createEl('div', {
                 text: candidate.reason,
                 cls: 'review-card-reason'
             });
@@ -1582,10 +1571,9 @@ export class VaultAnalysisModal extends Modal {
             }
 
             // Click handler: open note in new tab
-            card.addEventListener('click', async () => {
-                // Close modal and open the note in a new tab
+            card.addEventListener('click', () => {
                 this.close();
-                await this.app.workspace.openLinkText(candidate.path, '', 'tab');
+                void this.app.workspace.openLinkText(candidate.path, '', 'tab');
             });
         }
     }
@@ -1638,12 +1626,12 @@ export class VaultAnalysisModal extends Modal {
         });
 
         infoContainer.createEl('p', {
-            text: 'This analysis uses Google Gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
+            text: 'This analysis uses google gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
             cls: 'analysis-info-text'
         });
 
         infoContainer.createEl('p', {
-            text: 'Before AI analysis, we use deterministic methods (graph theory, statistical analysis, KDE distributions) to preprocess your vault data, ensuring accurate and efficient insights.',
+            text: 'Before AI analysis, we use deterministic methods (graph theory, statistical analysis, kde distributions) to preprocess your vault data, ensuring accurate and efficient insights.',
             cls: 'analysis-info-text'
         });
 
@@ -1678,31 +1666,29 @@ export class VaultAnalysisModal extends Modal {
 
         const generateButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
-            text: 'Generate Analysis'
+            text: 'Generate analysis'
         });
         generateButton.setAttribute('title', 'Click to generate analysis for this tab');
 
-        generateButton.addEventListener('click', async () => {
-            // Use close-reopen pattern for actions tab (same as structure and evolution)
+        generateButton.addEventListener('click', () => {
             const tabDisplayName = this.getTabDisplayName('actions');
             new Notice(`🧪 Generating ${tabDisplayName} Analysis... (est. 1–2 min)`);
-            
             this.vaultSemanticAnalysisManager.setAnalysisInProgress('actions');
             this.close();
-            try {
-                await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
-                // Reopen modal to the same tab with fresh data
-                await this.masterAnalysisManager.reopenModalToTab(
-                    this.vaultSemanticAnalysisManager,
-                    this.settings,
-                    'actions'
-                );
-            } catch (error) {
-                // console.error('Actions analysis failed:', error);
-                new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
-            } finally {
-                this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
-            }
+            void (async () => {
+                try {
+                    await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
+                    await this.masterAnalysisManager.reopenModalToTab(
+                        this.vaultSemanticAnalysisManager,
+                        this.settings,
+                        'actions'
+                    );
+                } catch (error) {
+                    new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
+                } finally {
+                    this.vaultSemanticAnalysisManager.clearAnalysisInProgress();
+                }
+            })();
         });
     }
 
@@ -1730,8 +1716,7 @@ export class VaultAnalysisModal extends Modal {
                 // console.log('No cached evolution analysis available yet');
                 this.knowledgeEvolutionData = null;
             }
-        } catch (error) {
-            // console.log('Error loading cached evolution analysis:', error);
+        } catch {
             this.evolutionAnalysisData = null;
             this.knowledgeEvolutionData = null;
         }
@@ -1787,12 +1772,12 @@ export class VaultAnalysisModal extends Modal {
         });
         
         emptyState.createEl('h3', {
-            text: 'Knowledge Evolution Analysis',
+            text: 'Knowledge evolution analysis',
             cls: 'vault-analysis-section-title'
         });
         
         emptyState.createEl('p', {
-            text: 'Knowledge Evolution Analysis requires AI-powered vault analysis to be completed first.',
+            text: 'Knowledge evolution analysis requires AI-powered vault analysis to be completed first.',
             cls: 'analysis-required'
         });
         
@@ -1829,7 +1814,7 @@ export class VaultAnalysisModal extends Modal {
         });
 
         calendarSection.createEl('h3', {
-            text: 'Knowledge Development Timeline',
+            text: 'Knowledge development timeline',
             cls: 'vault-analysis-section-title'
         });
 
@@ -1871,7 +1856,7 @@ export class VaultAnalysisInfoModal extends Modal {
         contentEl.empty();
         
         contentEl.createEl('h2', { 
-            text: 'About Vault Analysis',
+            text: 'About vault analysis',
             cls: 'modal-title'
         });
         
@@ -1880,7 +1865,7 @@ export class VaultAnalysisInfoModal extends Modal {
         });
         
         infoContainer.createEl('p', {
-            text: 'Vault Analysis uses AI to analyze your entire Obsidian vault and provides:'
+            text: 'Vault analysis uses AI to analyze your entire Obsidian vault and provides:'
         });
         
         const featureList = infoContainer.createEl('ul');
@@ -1899,10 +1884,10 @@ export class VaultAnalysisInfoModal extends Modal {
         
         infoContainer.createEl('h3', { text: 'Requirements' });
         infoContainer.createEl('p', {
-            text: '• Google Gemini API key (configured in plugin settings)'
+            text: '• google gemini API key (configured in plugin settings)'
         });
         infoContainer.createEl('p', {
-            text: '• Internet connection for AI processing'
+            text: '• internet connection for AI processing'
         });
         
         infoContainer.createEl('h3', { text: 'Exclusions' });
@@ -1910,7 +1895,7 @@ export class VaultAnalysisInfoModal extends Modal {
             text: 'The analysis respects your exclusion settings for folders and tags, ensuring only relevant notes are processed.'
         });
         
-        infoContainer.createEl('h3', { text: 'Rate Limiting' });
+        infoContainer.createEl('h3', { text: 'Rate limiting' });
         infoContainer.createEl('p', {
             text: 'Processing is done in batches with delays to respect API rate limits. Large vaults may take several minutes to complete.'
         });

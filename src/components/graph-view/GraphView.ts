@@ -1,4 +1,7 @@
-import { App, Notice, TFile, TAbstractFile, EventRef, setIcon } from 'obsidian';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- D3 selection types and zoom/drag events */
+/* eslint-disable obsidianmd/no-static-styles-assignment -- Dynamic tooltip positioning and dropdown visibility require inline styles */
+/* eslint-disable @typescript-eslint/unbound-method -- D3 zoom.transform requires .call with bound method */
+import { App, Notice, TFile, setIcon } from 'obsidian';
 import * as d3 from 'd3';
 import * as ss from 'simple-statistics';
 import { 
@@ -358,15 +361,15 @@ export class GraphView {
                 }
                 this.container.addClass('zooming');
             })
-            .on('zoom', (event) => {
+            .on('zoom', (evt: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
                 // Validate transform values before applying
-                if (!isFinite(event.transform.x) || !isFinite(event.transform.y) || !isFinite(event.transform.k)) {
+                const t = evt.transform;
+                if (!isFinite(t.x) || !isFinite(t.y) || !isFinite(t.k)) {
                     // console.warn('Invalid transform values detected, skipping zoom update');
                     return;
                 }
-                
-                // Update SVG group transform
-                this.svgGroup.attr('transform', event.transform);
+                // Update SVG group transform (ZoomTransform.toString() yields "translate(x,y) scale(k)")
+                this.svgGroup.attr('transform', String(t));
                 
                 
                 // Request a frame to update graph elements
@@ -430,8 +433,8 @@ export class GraphView {
                 // Default D3 behavior - lower alpha for gentle restart
                 this.simulation.alpha(0.3).restart();
             }
-        } catch (e) {
-            // console.error("Error restarting simulation:", e);
+        } catch {
+            // Simulation may not be initialized
         }
     }
 
@@ -555,9 +558,8 @@ export class GraphView {
                 if (this.nodes.length > 0 && this.simulation) {
                     this.recenterGraph(false); // false to skip animation during resize
                 }
-            } catch (error) {
-                // console.warn('Error in resize observer:', error);
-                // If we encounter an error, it's safer to disconnect the observer
+            } catch {
+                // If we encounter an error, disconnect the observer
                 if (this.resizeObserver) {
                     this.resizeObserver.disconnect();
                     this.resizeObserver = null;
@@ -579,23 +581,14 @@ export class GraphView {
             .on('click', this.onNodeClick.bind(this));
     }
     
-    private onNodeMouseOver(event: any, d: SimulationGraphNode) {
-        // Don't process mouseover during drag operations
-        if (this.isDraggingNode) {
-            return;
-        }
-
-        // Clear any existing hide timeout
+    private onNodeMouseOver(event: MouseEvent, d: SimulationGraphNode) {
+        if (this.isDraggingNode) return;
         if (this._hideTooltipTimeout) {
             window.clearTimeout(this._hideTooltipTimeout);
             this._hideTooltipTimeout = null;
         }
-
-        // Set the highlighted node ID
         this.highlightedNodeId = d.id;
-        
-        // Highlight the node visually
-        this.highlightNode(event.currentTarget, true);
+        this.highlightNode(event.currentTarget as SVGCircleElement, true);
         
         // Highlight connections
         this.highlightConnections(d.id, true);
@@ -607,14 +600,9 @@ export class GraphView {
         }
     }
     
-    private onNodeMouseOut(event: any, d: SimulationGraphNode) {
-        // Don't process mouseout during drag operations
-        if (this.isDraggingNode) {
-            return;
-        }
-        
-        // Remove visual highlight
-        this.highlightNode(event.currentTarget, false);
+    private onNodeMouseOut(event: MouseEvent, d: SimulationGraphNode) {
+        if (this.isDraggingNode) return;
+        this.highlightNode(event.currentTarget as SVGCircleElement, false);
         
         // Remove connections highlight
         this.highlightConnections(d.id, false);
@@ -625,14 +613,14 @@ export class GraphView {
         this.highlightedNodeId = null;
     }
     
-    private onNodeClick(event: any, d: SimulationGraphNode) {
+    private onNodeClick(event: MouseEvent, d: SimulationGraphNode) {
         event.stopPropagation();
         
         // Open the note when clicked
         if (d.path) {
             const file = this.app.vault.getAbstractFileByPath(d.path);
             if (file instanceof TFile) {
-                this.app.workspace.getLeaf(false).openFile(file);
+                void this.app.workspace.getLeaf(false).openFile(file);
             }
         }
     }
@@ -644,7 +632,7 @@ export class GraphView {
         }
     }
     
-    private createTooltip(node: SimulationGraphNode, event: any) {
+    private createTooltip(node: SimulationGraphNode, event: MouseEvent) {
         // Remove existing tooltip if any
         this.removeNodeTooltip();
 
@@ -738,7 +726,7 @@ export class GraphView {
                             } else if (typeof value === 'object') {
                                 try {
                                     displayValue = JSON.stringify(value);
-                                } catch (e) {
+                                } catch {
                                     displayValue = '[Object]';
                                 }
                             } else {
@@ -756,18 +744,18 @@ export class GraphView {
                 // Create a button to open the note
                 const actionHint = metadataContainer.createDiv({ cls: 'action-hint' });
                 const openNoteBtn = actionHint.createEl('button', {
-                    text: 'Open Note',
+                    text: 'Open note',
                     cls: 'open-note-button',
                 });
                 
                 // Add click handler to open the note
-                openNoteBtn.addEventListener('click', (e: MouseEvent) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+                openNoteBtn.addEventListener('click', (ev: MouseEvent) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
                     if (node.path) {
                         const file = this.app.vault.getAbstractFileByPath(node.path);
                         if (file instanceof TFile) {
-                            this.app.workspace.getLeaf().openFile(file);
+                            void this.app.workspace.getLeaf().openFile(file);
                         }
                     }
                 });
@@ -775,7 +763,7 @@ export class GraphView {
                 // Note preview section
                 const previewSection = tooltip.createDiv({ cls: 'note-preview-section' });
                 previewSection.createEl('div', {
-                    text: 'Note Preview',
+                    text: 'Note preview',
                     cls: 'preview-section-title'
                 });
                 
@@ -783,7 +771,7 @@ export class GraphView {
                 const previewContent = previewSection.createDiv({ cls: 'preview-content' });
                 
                 // Load and display raw note content (condensed, one blank line before each heading)
-                this.app.vault.read(file).then(content => {
+                void this.app.vault.read(file).then(content => {
                     if (this.currentTooltip !== tooltip) return;
                     const previewText = this.formatNotePreview(content);
                     previewContent.setText(previewText);
@@ -864,10 +852,10 @@ export class GraphView {
             tooltipY = mouseY - offsetY - tooltipHeight;
         }
         
-        // Apply the calculated position
-        tooltip.style.display = 'block';
-        tooltip.style.left = `${tooltipX}px`;
-        tooltip.style.top = `${tooltipY}px`;
+        // Apply the calculated position (dynamic values require inline style)
+        tooltip.style.setProperty('display', 'block');
+        tooltip.style.setProperty('left', `${tooltipX}px`);
+        tooltip.style.setProperty('top', `${tooltipY}px`);
     }
     
     private highlightConnections(nodeId: string, highlight: boolean) {
@@ -915,8 +903,7 @@ export class GraphView {
                     // console.error('Unexpected result format from WASM neighbor function', neighborResult);
                     throw new Error('Unexpected result format from WASM');
                 }
-            } catch (error) {
-                // console.error('Error in highlightConnections with WASM:', error);
+            } catch {
                 this.cachedNodeId = null;
                 this.cachedNeighbors = null;
                 return;
@@ -1026,7 +1013,7 @@ export class GraphView {
                 
                 // Apply highlighting
                 this.highlightedNodeId = d.id;
-                this.highlightNode(event.sourceEvent.currentTarget, true);
+                this.highlightNode(event.sourceEvent.currentTarget as SVGCircleElement, true);
                 this.highlightConnections(d.id, true);
             })
             .on('drag', (event, d) => {
@@ -1037,7 +1024,7 @@ export class GraphView {
                 // Maintain highlighting during drag
                 if (this.highlightedNodeId !== d.id) {
                     this.highlightedNodeId = d.id;
-                    this.highlightNode(event.sourceEvent.currentTarget, true);
+                    this.highlightNode(event.sourceEvent.currentTarget as SVGCircleElement, true);
                     this.highlightConnections(d.id, true);
                 }
             })
@@ -1116,7 +1103,7 @@ export class GraphView {
     /**
      * Schedule tooltip display after delay
      */
-    private scheduleTooltip(node: SimulationGraphNode, event: any) {
+    private scheduleTooltip(node: SimulationGraphNode, event: MouseEvent) {
         // Clear any existing tooltip timeout
         this.clearTooltipTimeout();
         
@@ -1144,25 +1131,24 @@ export class GraphView {
     }
     
     private async loadVaultData() {
-        try {
-            // Get graph data, degree centrality and metadata from builder
-            const { graphData, degreeCentrality, metadata } = await this.graphDataBuilder.buildGraphData();
+        // Get graph data, degree centrality and metadata from builder
+        const { graphData, degreeCentrality, metadata } = await this.graphDataBuilder.buildGraphData();
             
-            // Store metadata for later use
-            this.graphMetadata = metadata;
+        // Store metadata for later use
+        this.graphMetadata = metadata;
 
-            // Build O(1) lookup map for degree centrality
+        // Build O(1) lookup map for degree centrality
             const degreeMap = new Map<number, number>();
-            if (degreeCentrality) {
-                for (const r of degreeCentrality) {
-                    if (r?.centrality?.degree !== undefined) {
-                        degreeMap.set(r.node_id, r.centrality.degree);
-                    }
+        if (degreeCentrality) {
+            for (const r of degreeCentrality) {
+                if (r?.centrality?.degree !== undefined) {
+                    degreeMap.set(r.node_id, r.centrality.degree);
                 }
             }
+        }
 
-            // Convert edges to links format
-            const nodes: SimulationGraphNode[] = graphData.nodes.map((nodePath: string, index: number) => {
+        // Convert edges to links format
+        const nodes: SimulationGraphNode[] = graphData.nodes.map((nodePath: string, index: number) => {
                 const fileName = nodePath.split('/').pop() || nodePath;
                 const displayName = fileName.replace('.md', '');
                 const degreeCentralityScore = degreeMap.get(index) ?? 0;
@@ -1181,17 +1167,13 @@ export class GraphView {
                 };
             });
             
-            const links: SimulationGraphLink[] = graphData.edges.map(([sourceIdx, targetIdx]: [number, number]) => ({
-                source: sourceIdx.toString(),
-                target: targetIdx.toString()
-            }));
+        const links: SimulationGraphLink[] = graphData.edges.map(([sourceIdx, targetIdx]: [number, number]) => ({
+            source: sourceIdx.toString(),
+            target: targetIdx.toString()
+        }));
             
-            // Update the graph with the processed data
-            await this.updateData({ nodes, links });
-        } catch (error) {
-            // console.error('Error in loadVaultData:', error);
-            throw error;
-        }
+        // Update the graph with the processed data
+        await this.updateData({ nodes, links });
     }
     
     public async updateData(graphData: { nodes: SimulationGraphNode[], links: SimulationGraphLink[] }) {
@@ -1213,8 +1195,8 @@ export class GraphView {
         this.linksSelection = this.svgGroup.select('.links-group')
             .selectAll<SVGLineElement, SimulationGraphLink>('line')
             .data(this.links, (d: SimulationGraphLink) => {
-                const sid = typeof d.source === 'string' ? d.source : (d.source as SimulationGraphNode).id;
-                const tid = typeof d.target === 'string' ? d.target : (d.target as SimulationGraphNode).id;
+                const sid = typeof d.source === 'string' ? d.source : (d.source).id;
+                const tid = typeof d.target === 'string' ? d.target : (d.target).id;
                 return `${sid}-${tid}`;
             })
             .join(
@@ -1442,9 +1424,8 @@ export class GraphView {
         try {
             this.showLoadingIndicator();
             await this.loadVaultData();
-        } catch (error) {
-            // console.error('Error reloading vault data:', error);
-            new Notice(`Error reloading graph data: ${(error as Error).message}`);
+        } catch (err) {
+            new Notice(`Error reloading graph data: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
             this.hideLoadingIndicator();
         }
@@ -1452,7 +1433,7 @@ export class GraphView {
     
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.vaultAnalysisManager.updateSettings(settings);
-        this.reloadVaultData();
+        void this.reloadVaultData();
     }
     
     public recenterGraph(animate: boolean = true): void {
@@ -1820,14 +1801,17 @@ export class GraphView {
                 const target = e.target as HTMLSelectElement;
                 this.gradientSettings[type].distribution = target.value as 'linear' | 'quantize' | 'jenks';
                 if (this.centralityState[type]) {
-                    this.calculateAndDisplayCentrality(type);
+                    void this.calculateAndDisplayCentrality(type);
                 }
             });
 
             typeSelect.addEventListener('change', (e) => {
-                e.stopPropagation(); // Prevent event from bubbling up
+                e.stopPropagation();
                 const target = e.target as HTMLSelectElement;
-                this.gradientSettings[type].type = target.value as any;
+                const val = target.value;
+                if (val === 'sequential' || val === 'diverging' || val === 'cyclical' || val === 'qualitative') {
+                    this.gradientSettings[type].type = val;
+                }
                 
                 // Clear existing options
                 optionsContainer.querySelectorAll('.gradient-option').forEach(opt => opt.remove());
@@ -1864,14 +1848,14 @@ export class GraphView {
                             );
                             option.classList.add('selected');
                             if (this.centralityState[type]) {
-                                this.calculateAndDisplayCentrality(type);
+                                void this.calculateAndDisplayCentrality(type);
                             }
                         });
                     });
 
                 this.updateGradientPreview(preview, this.selectedPalettes[type], type);
                 if (this.centralityState[type]) {
-                    this.calculateAndDisplayCentrality(type);
+                    void this.calculateAndDisplayCentrality(type);
                 }
             });
 
@@ -1892,7 +1876,7 @@ export class GraphView {
                 this.gradientSettings[type].steps = value;
                 this.updateGradientPreview(preview, this.selectedPalettes[type], type);
                 if (this.centralityState[type]) {
-                    this.calculateAndDisplayCentrality(type);
+                    void this.calculateAndDisplayCentrality(type);
                 }
             });
 
@@ -1911,7 +1895,7 @@ export class GraphView {
                 reversedButton.setText(this.gradientSettings[type].reversed ? 'on' : 'off');
                 this.updateGradientPreview(preview, this.selectedPalettes[type], type);
                 if (this.centralityState[type]) {
-                    this.calculateAndDisplayCentrality(type);
+                    void this.calculateAndDisplayCentrality(type);
                 }
             });
 
@@ -1948,7 +1932,7 @@ export class GraphView {
                         );
                         option.classList.add('selected');
                         if (this.centralityState[type]) {
-                            this.calculateAndDisplayCentrality(type);
+                            void this.calculateAndDisplayCentrality(type);
                         }
                     });
                 });
@@ -2061,11 +2045,10 @@ export class GraphView {
         }
         
         // Add click handler
-        button.addEventListener('click', async () => {
-            const isActive = this.centralityState[type];
-            const plugin = this.pluginService.getPlugin();
-
-            if (isActive) {
+        button.addEventListener('click', () => {
+            void (async () => {
+                const isActive = this.centralityState[type];
+                if (isActive) {
                 // If already active, deactivate it
                 button.removeClass('active');
                 this.centralityState[type] = false;
@@ -2092,7 +2075,7 @@ export class GraphView {
                         rightSplit.collapse();
                     }
                 }
-            } else {
+                } else {
                 // Deactivate other buttons and states
                 this.centralityTypes.forEach(t => {
                     this.centralityState[t] = false;
@@ -2109,7 +2092,8 @@ export class GraphView {
                 
                 // Calculate and display the selected centrality
                 await this.calculateAndDisplayCentrality(type);
-            }
+                }
+            })();
         });
         
         // Add data attribute for type identification
@@ -2122,25 +2106,22 @@ export class GraphView {
         try {
             // Get centrality scores based on type
             let results: GraphNode[];
-            const plugin = this.pluginService.getPlugin();
-            
+            const pluginInstance = this.pluginService.getPlugin();
+
             switch (type) {
                 case 'betweenness':
-                    results = plugin.calculateBetweennessCentralityCached();
+                    results = pluginInstance.calculateBetweennessCentralityCached();
                     break;
                 case 'closeness':
-                    results = plugin.calculateClosenessCentralityCached();
+                    results = pluginInstance.calculateClosenessCentralityCached();
                     break;
                 case 'eigenvector':
-                    results = plugin.calculateEigenvectorCentralityCached();
+                    results = pluginInstance.calculateEigenvectorCentralityCached();
                     break;
             }
 
-            // DEBUG: Log raw centrality scores from WASM
-            const rawScores = results.map(n => n.centrality[type]);
-            const nonNullCount = rawScores.filter(s => s !== undefined && s !== null).length;
-            const nonZeroCount = rawScores.filter(s => typeof s === 'number' && s !== 0).length;
-            // console.log(`[GraphAnalysis] Raw ${type} scores: total=${rawScores.length}, non-null=${nonNullCount}, non-zero=${nonZeroCount}, sample=`, rawScores.slice(0, 5));
+            // DEBUG: rawScores available for logging if needed
+            // const rawScores = results.map(n => n.centrality[type]);
 
             // Store the scores for later use - use for loop for better performance
             this.lastCentralityScores = {};
@@ -2155,10 +2136,7 @@ export class GraphView {
             const minScore = scores.reduce((min, v) => Math.min(min, v), Infinity);
             const maxScore = scores.reduce((max, v) => Math.max(max, v), -Infinity);
 
-            // DEBUG: Log cleaned scores before Jenks classification
-            const uniqueScoreCount = new Set(scores).size;
-            const zeroCount = scores.filter(s => s === 0).length;
-            // console.log(`[GraphAnalysis] Cleaned ${type} scores for Jenks: count=${scores.length}, min=${minScore}, max=${maxScore}, unique=${uniqueScoreCount}, zeros=${zeroCount}`);
+            // DEBUG: scores available for logging if needed
             
             // Get the color palette
             const palette = this.colorPalettes.find(p => p.name === this.selectedPalettes[type]);
@@ -2235,11 +2213,10 @@ export class GraphView {
             }
 
             // Display results in the right sidebar
-            plugin.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
+            pluginInstance.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
 
-        } catch (error) {
-            // console.error(`Failed to calculate ${type} centrality:`, error);
-            new Notice(`Failed to calculate ${type} centrality: ${(error as Error).message}`);
+        } catch (err) {
+            new Notice(`Failed to calculate ${type} centrality: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 
@@ -2287,8 +2264,8 @@ export class GraphView {
         let breaks: number[] | null = null;
         try {
             breaks = ss.jenks(sorted, effectiveClasses);
-        } catch (error) {
-            // console.warn('[GraphAnalysis] Jenks calculation failed, using quantile fallback:', error);
+        } catch {
+            // Jenks failed; quantile fallback used below
         }
 
         if (!breaks || !Array.isArray(breaks) || breaks.length < 2) {
@@ -2317,7 +2294,7 @@ export class GraphView {
         this.nodesSelection.each(function(d: SimulationGraphNode) {
             const node = results.find(r => r.node_id.toString() === d.id);
             if (node && node.centrality[type] !== undefined) {
-                const normalizedValue = (node.centrality[type]! - minValue) / (maxValue - minValue);
+                const normalizedValue = (node.centrality[type] - minValue) / (maxValue - minValue);
                 const color = d3.interpolateRdYlBu(1 - normalizedValue); // Using a color scale that works well for both light and dark themes
                 d3.select(this)
                     .transition()

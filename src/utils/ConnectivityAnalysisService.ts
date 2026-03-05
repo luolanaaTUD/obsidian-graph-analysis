@@ -221,17 +221,16 @@ export class ConnectivityAnalysisService {
                         inboundLinkCounts.set(resolvedFile.path, currentCount + 1);
                     }
                 }
-            } catch (error) {
-                // console.warn(`Error processing links from file ${file.path}:`, error);
+            } catch {
+                // console.warn(`Error processing links from file ${file.path}`);
             }
         }
 
         // Second pass: create stats for notes in vault analysis
-        const vaultPaths = new Set(analysisData.results.map(r => r.path));
-
         for (const result of analysisData.results) {
-            const file = app.vault.getAbstractFileByPath(result.path) as TFile;
-            if (!file) continue;
+            const abstractFile = app.vault.getAbstractFileByPath(result.path);
+            if (!abstractFile || !(abstractFile instanceof TFile)) continue;
+            const file = abstractFile;
 
             try {
                 const cache = app.metadataCache.getFileCache(file);
@@ -248,8 +247,8 @@ export class ConnectivityAnalysisService {
                     totalLinks,
                     linkRatio
                 });
-            } catch (error) {
-                // console.warn(`Error processing file ${result.path}:`, error);
+            } catch {
+                // console.warn(`Error processing file ${result.path}`);
             }
         }
 

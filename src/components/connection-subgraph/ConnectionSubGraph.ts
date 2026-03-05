@@ -1,4 +1,4 @@
-import { App, Notice, TFile, setIcon } from 'obsidian';
+import { App, Notice, setIcon } from 'obsidian';
 import * as d3 from 'd3';
 import type { ActionsAnalysisData } from '../../ai/MasterAnalysisManager';
 import { ConnectionSuggestion, KnowledgeActionsManager } from '../../ai/visualization/KnowledgeActionsManager';
@@ -34,6 +34,7 @@ interface ConnectionSubGraphOptions {
  * connection nodes and links. Users can delete nodes/links and then commit
  * the remaining suggestions to their vault via the "Add to Main Graph" button.
  */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/unbound-method -- D3 Selection types require any for chaining; zoom.transform needs bind */
 export class ConnectionSubGraph {
     private app: App;
     private container: HTMLElement;
@@ -129,13 +130,11 @@ export class ConnectionSubGraph {
     // ─────────────────── SVG Setup ───────────────────
 
     private createSVG(): void {
-        // Wrapper for sizing
+        // Wrapper for sizing (width/position via CSS; height via CSS variable for dynamic value)
         const svgWrapper = this.container.createEl('div', { cls: 'subgraph-svg-wrapper' });
-        svgWrapper.style.width = '100%';
-        svgWrapper.style.height = `${this.height}px`;
-        svgWrapper.style.position = 'relative';
+        svgWrapper.style.setProperty('--subgraph-height', `${this.height}px`);
 
-        this.svg = d3.select(svgWrapper)
+        this.svg = (d3.select(svgWrapper) as any)
             .append('svg')
             .attr('width', '100%')
             .attr('height', '100%')
@@ -149,7 +148,7 @@ export class ConnectionSubGraph {
 
         // Arrow marker for directional links (source -> target)
         this.markerId = `subgraph-arrow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        this.svg.append('defs')
+        (this.svg as any).append('defs')
             .append('marker')
             .attr('id', this.markerId)
             .attr('markerUnits', 'userSpaceOnUse')
@@ -163,7 +162,7 @@ export class ConnectionSubGraph {
             .attr('d', 'M0,-4 L10,0 L0,4 Z')
             .attr('fill', 'var(--text-accent)');
 
-        this.svgGroup = this.svg.append('g');
+        this.svgGroup = (this.svg as any).append('g') as any;
 
         // Pan only (no zoom) - constrain pan so graph stays within container
         const pad = 0.5; // Allow pan margin relative to content size
@@ -174,11 +173,11 @@ export class ConnectionSubGraph {
                 [-this.width * (0.5 + pad), -this.height * (0.5 + pad)],
                 [this.width * (0.5 + pad), this.height * (0.5 + pad)]
             ])
-            .on('zoom', (event) => {
-                this.svgGroup.attr('transform', event.transform);
+            .on('zoom', (ev: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+                (this.svgGroup as any).attr('transform', ev.transform);
             });
-        this.svg.call(this.zoomBehavior);
-        this.svg.call(this.zoomBehavior.transform, d3.zoomIdentity.scale(scale));
+        (this.svg as any).call(this.zoomBehavior);
+        (this.svg as any).call(this.zoomBehavior.transform, d3.zoomIdentity.scale(scale));
 
         // Reset view - icon only, no button chrome (div avoids default button styling)
         const resetBtn = svgWrapper.createEl('div', { cls: 'subgraph-reset-view-btn' });
@@ -186,11 +185,11 @@ export class ConnectionSubGraph {
         resetBtn.setAttribute('tabindex', '0');
         setIcon(resetBtn, 'refresh-cw');
         resetBtn.title = 'Reset view';
-        resetBtn.addEventListener('click', (e) => {
+        resetBtn.addEventListener('click', (e: MouseEvent) => {
             e.stopPropagation();
             this.resetView();
         });
-        resetBtn.addEventListener('keydown', (e) => {
+        resetBtn.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 this.resetView();
@@ -199,8 +198,7 @@ export class ConnectionSubGraph {
     }
 
     private createTooltip(): void {
-        this.tooltip = this.container.createEl('div', { cls: 'subgraph-tooltip' });
-        this.tooltip.style.display = 'none';
+        this.tooltip = this.container.createEl('div', { cls: 'subgraph-tooltip subgraph-tooltip-hidden' });
     }
 
     // ─────────────────── Simulation ───────────────────
@@ -242,8 +240,8 @@ export class ConnectionSubGraph {
         const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
         const dx = tx - sx, dy = ty - sy;
         const len = Math.hypot(dx, dy) || 1;
-        const nx = dx / len, ny = dy / len;
-        return sx + nx * this.getNodeRadius(s);
+        const normX = dx / len;
+        return sx + normX * this.getNodeRadius(s);
     }
     private linkStartY(d: SubGraphLink): number {
         const s = d.source as SubGraphNode;
@@ -251,8 +249,8 @@ export class ConnectionSubGraph {
         const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
         const dx = tx - sx, dy = ty - sy;
         const len = Math.hypot(dx, dy) || 1;
-        const nx = dx / len, ny = dy / len;
-        return sy + ny * this.getNodeRadius(s);
+        const normY = dy / len;
+        return sy + normY * this.getNodeRadius(s);
     }
     private linkEndX(d: SubGraphLink): number {
         const s = d.source as SubGraphNode;
@@ -260,8 +258,8 @@ export class ConnectionSubGraph {
         const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
         const dx = tx - sx, dy = ty - sy;
         const len = Math.hypot(dx, dy) || 1;
-        const nx = dx / len;
-        return tx - nx * this.getNodeRadius(t);
+        const normX = dx / len;
+        return tx - normX * this.getNodeRadius(t);
     }
     private linkEndY(d: SubGraphLink): number {
         const s = d.source as SubGraphNode;
@@ -269,56 +267,58 @@ export class ConnectionSubGraph {
         const sx = s.x ?? 0, sy = s.y ?? 0, tx = t.x ?? 0, ty = t.y ?? 0;
         const dx = tx - sx, dy = ty - sy;
         const len = Math.hypot(dx, dy) || 1;
-        const ny = dy / len;
-        return ty - ny * this.getNodeRadius(t);
+        const normY = dy / len;
+        return ty - normY * this.getNodeRadius(t);
     }
 
     // ─────────────────── Drawing ───────────────────
 
     private drawLinks(): void {
-        const linksGroup = this.svgGroup.append('g').attr('class', 'subgraph-links');
+        const linksGroup = (this.svgGroup as any).append('g').attr('class', 'subgraph-links');
 
-        this.linksSelection = linksGroup.selectAll<SVGLineElement, SubGraphLink>('line')
+        const linksSel = linksGroup.selectAll('line')
             .data(this.links.filter(l => !l.removed))
-            .join('line')
+            .join('line');
+        linksSel
             .attr('class', 'suggested-link')
             .attr('stroke', 'var(--text-accent)')
             .attr('stroke-width', 2)
-            .attr('stroke-opacity', d => 0.3 + d.confidence * 0.5)
+            .attr('stroke-opacity', (d: SubGraphLink) => 0.3 + d.confidence * 0.5)
             .attr('stroke-dasharray', '6,3')
             .attr('marker-end', 'url(#' + this.markerId + ')')
-            .on('mouseover', (event, d) => {
+            .on('mouseover', (event: MouseEvent, d: SubGraphLink) => {
                 this.showLinkTooltip(event, d);
-                d3.select(event.currentTarget)
+                d3.select(event.currentTarget as SVGLineElement)
                     .attr('stroke-opacity', 1);
             })
-            .on('mouseout', (event, d) => {
+            .on('mouseout', (event: MouseEvent, d: SubGraphLink) => {
                 this.hideTooltip();
-                d3.select(event.currentTarget)
+                d3.select(event.currentTarget as SVGLineElement)
                     .attr('stroke-opacity', 0.3 + d.confidence * 0.5);
             });
+        this.linksSelection = linksSel as d3.Selection<SVGLineElement, SubGraphLink, d3.BaseType, unknown>;
     }
 
     private drawNodes(): void {
-        const nodesGroup = this.svgGroup.append('g').attr('class', 'subgraph-nodes');
+        const nodesGroup = (this.svgGroup as any).append('g').attr('class', 'subgraph-nodes');
 
-        const nodeGroups = nodesGroup.selectAll<SVGGElement, SubGraphNode>('g')
+        const nodeGroups = nodesGroup.selectAll('g')
             .data(this.nodes.filter(n => !n.removed))
             .join('g')
             .attr('class', 'subgraph-node-group')
             .style('cursor', 'pointer')
             .call(d3.drag<SVGGElement, SubGraphNode>()
-                .on('start', (event, d) => {
-                    if (!event.active) this.simulation.alphaTarget(0.3).restart();
-                    d.fx = d.x;
-                    d.fy = d.y;
+                .on('start', (ev: d3.D3DragEvent<SVGGElement, SubGraphNode, SubGraphNode>, d: SubGraphNode) => {
+                    if (!ev.active) this.simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x ?? null;
+                    d.fy = d.y ?? null;
                 })
-                .on('drag', (event, d) => {
-                    d.fx = event.x;
-                    d.fy = event.y;
+                .on('drag', (ev: d3.D3DragEvent<SVGGElement, SubGraphNode, SubGraphNode>, d: SubGraphNode) => {
+                    d.fx = ev.x;
+                    d.fy = ev.y;
                 })
-                .on('end', (event, d) => {
-                    if (!event.active) this.simulation.alphaTarget(0);
+                .on('end', (ev: d3.D3DragEvent<SVGGElement, SubGraphNode, SubGraphNode>, d: SubGraphNode) => {
+                    if (!ev.active) this.simulation.alphaTarget(0);
                     d.fx = null;
                     d.fy = null;
                 })
@@ -326,18 +326,18 @@ export class ConnectionSubGraph {
 
         // Node circles (no outline)
         nodeGroups.append('circle')
-            .attr('r', d => this.getNodeRadius(d))
+            .attr('r', (d: SubGraphNode) => this.getNodeRadius(d))
             .attr('fill', 'var(--interactive-accent)')
             .attr('stroke', 'none')
-            .on('mouseover', (event, d) => {
+            .on('mouseover', (event: MouseEvent, d: SubGraphNode) => {
                 this.showTooltip(event, d.title);
-                d3.select(event.currentTarget)
+                d3.select(event.currentTarget as SVGCircleElement)
                     .transition().duration(150)
                     .attr('r', this.getNodeRadius(d) + 3);
             })
-            .on('mouseout', (event, d) => {
+            .on('mouseout', (event: MouseEvent, d: SubGraphNode) => {
                 this.hideTooltip();
-                d3.select(event.currentTarget)
+                d3.select(event.currentTarget as SVGCircleElement)
                     .transition().duration(150)
                     .attr('r', this.getNodeRadius(d));
             });
@@ -345,9 +345,9 @@ export class ConnectionSubGraph {
         // Node labels
         nodeGroups.append('text')
             .attr('class', 'subgraph-node-label')
-            .attr('dy', d => this.getNodeRadius(d) + 18)
+            .attr('dy', (d: SubGraphNode) => this.getNodeRadius(d) + 18)
             .attr('text-anchor', 'middle')
-            .text(d => d.title.length > 20 ? d.title.slice(0, 18) + '...' : d.title)
+            .text((d: SubGraphNode) => d.title.length > 20 ? d.title.slice(0, 18) + '...' : d.title)
             .attr('fill', 'var(--text-muted)')
             .attr('font-size', '11px')
             .style('pointer-events', 'none');
@@ -355,10 +355,10 @@ export class ConnectionSubGraph {
         // Delete button (x) - appears on hover
         const deleteBtn = nodeGroups.append('g')
             .attr('class', 'subgraph-delete-btn')
-            .attr('transform', d => `translate(${this.getNodeRadius(d) + 2}, ${-this.getNodeRadius(d) - 2})`)
+            .attr('transform', (d: SubGraphNode) => `translate(${this.getNodeRadius(d) + 2}, ${-this.getNodeRadius(d) - 2})`)
             .style('opacity', 0)
             .style('cursor', 'pointer')
-            .on('click', (event, d) => {
+            .on('click', (event: MouseEvent, d: SubGraphNode) => {
                 event.stopPropagation();
                 this.removeNode(d);
             });
@@ -378,12 +378,12 @@ export class ConnectionSubGraph {
 
         // Show/hide delete button on node group hover
         nodeGroups
-            .on('mouseenter', function () {
+            .on('mouseenter', function (this: SVGGElement) {
                 d3.select(this).select('.subgraph-delete-btn')
                     .transition().duration(150)
                     .style('opacity', 1);
             })
-            .on('mouseleave', function () {
+            .on('mouseleave', function (this: SVGGElement) {
                 d3.select(this).select('.subgraph-delete-btn')
                     .transition().duration(150)
                     .style('opacity', 0);
@@ -391,13 +391,13 @@ export class ConnectionSubGraph {
 
         // Left-click on node circle opens note in new tab
         nodeGroups.select('circle')
-            .on('click', (event, d) => {
+            .on('click', (event: MouseEvent, d: SubGraphNode) => {
                 // Only open on plain click (not after drag)
                 if (event.defaultPrevented) return;
-                this.openNoteInNewTab(d.path);
+                void this.openNoteInNewTab(d.path);
             });
 
-        this.nodesSelection = nodeGroups as any;
+        this.nodesSelection = nodeGroups as d3.Selection<SVGGElement, SubGraphNode, d3.BaseType, unknown>;
     }
 
     // ─────────────────── Legend ───────────────────
@@ -412,15 +412,16 @@ export class ConnectionSubGraph {
 
         for (const item of items) {
             const row = legend.createEl('div', { cls: 'subgraph-legend-item' });
-            const dot = row.createEl('span', { cls: `legend-dot ${item.cls}` });
+            row.createEl('span', { cls: `legend-dot ${item.cls}` });
             row.createEl('span', { text: item.label, cls: 'legend-text' });
         }
     }
 
     private resetView(): void {
-        this.svg.transition()
+        const transform = this.zoomBehavior.transform.bind(this.zoomBehavior);
+        (this.svg as any).transition()
             .duration(300)
-            .call(this.zoomBehavior.transform, d3.zoomIdentity.scale(ConnectionSubGraph.GRAPH_SCALE));
+            .call(transform, d3.zoomIdentity.scale(ConnectionSubGraph.GRAPH_SCALE));
     }
 
     // ─────────────────── Add to Graph Button ───────────────────
@@ -444,7 +445,8 @@ export class ConnectionSubGraph {
             setIcon(iconSpan, 'plus-circle');
         }
 
-        button.addEventListener('click', async () => {
+        button.addEventListener('click', () => {
+            void (async () => {
             const remaining = this.getRemainingConnections();
             if (remaining.length === 0) {
                 new Notice('No connections remaining to add.');
@@ -468,7 +470,7 @@ export class ConnectionSubGraph {
                 }
 
                 // Disable button and persist status to cache
-                button.textContent = 'Connections Added';
+                button.textContent = 'Connections added';
                 button.disabled = true;
                 button.classList.add('subgraph-btn-done');
 
@@ -477,12 +479,12 @@ export class ConnectionSubGraph {
                     actionsAnalysisData.connectionsAddedAt = new Date().toISOString();
                     await saveCacheFn(actionsAnalysisData);
                 }
-            } catch (error) {
-                // console.error('Failed to write connections:', error);
+            } catch {
                 new Notice('Failed to write connections. Check console for details.');
                 button.disabled = false;
-                button.textContent = 'Add to Main Graph';
+                button.textContent = 'Add to main graph';
             }
+            })();
         });
     }
 
@@ -494,8 +496,8 @@ export class ConnectionSubGraph {
         // Collect neighbors (other ends of connections to this node)
         const neighborsToCheck = new Set<string>();
         for (const link of this.links) {
-            const sourceId = typeof link.source === 'string' ? link.source : (link.source as SubGraphNode).id;
-            const targetId = typeof link.target === 'string' ? link.target : (link.target as SubGraphNode).id;
+            const sourceId = typeof link.source === 'string' ? link.source : (link.source).id;
+            const targetId = typeof link.target === 'string' ? link.target : (link.target).id;
             if (sourceId === node.id || targetId === node.id) {
                 link.removed = true;
                 const otherId = sourceId === node.id ? targetId : sourceId;
@@ -507,8 +509,8 @@ export class ConnectionSubGraph {
         for (const neighborId of neighborsToCheck) {
             const hasOtherLinks = this.links.some(l => {
                 if (l.removed) return false;
-                const sourceId = typeof l.source === 'string' ? l.source : (l.source as SubGraphNode).id;
-                const targetId = typeof l.target === 'string' ? l.target : (l.target as SubGraphNode).id;
+                const sourceId = typeof l.source === 'string' ? l.source : (l.source).id;
+                const targetId = typeof l.target === 'string' ? l.target : (l.target).id;
                 return (sourceId === neighborId || targetId === neighborId);
             });
             if (!hasOtherLinks) {
@@ -528,8 +530,8 @@ export class ConnectionSubGraph {
             if (node.removed) continue;
             const hasLinks = this.links.some(l => {
                 if (l.removed) return false;
-                const sourceId = typeof l.source === 'string' ? l.source : (l.source as SubGraphNode).id;
-                const targetId = typeof l.target === 'string' ? l.target : (l.target as SubGraphNode).id;
+                const sourceId = typeof l.source === 'string' ? l.source : (l.source).id;
+                const targetId = typeof l.target === 'string' ? l.target : (l.target).id;
                 return sourceId === node.id || targetId === node.id;
             });
             if (!hasLinks) {
@@ -549,8 +551,8 @@ export class ConnectionSubGraph {
             n.degree = 0;
         }
         for (const l of activeLinks) {
-            const sourceId = typeof l.source === 'string' ? l.source : (l.source as SubGraphNode).id;
-            const targetId = typeof l.target === 'string' ? l.target : (l.target as SubGraphNode).id;
+            const sourceId = typeof l.source === 'string' ? l.source : (l.source).id;
+            const targetId = typeof l.target === 'string' ? l.target : (l.target).id;
             const sn = activeNodes.find(n => n.id === sourceId);
             const tn = activeNodes.find(n => n.id === targetId);
             if (sn) sn.degree++;
@@ -564,46 +566,47 @@ export class ConnectionSubGraph {
 
         // Rebind links
         const linksGroup = this.svgGroup.select('.subgraph-links');
-        this.linksSelection = linksGroup.selectAll<SVGLineElement, SubGraphLink>('line')
-            .data(activeLinks, (d: any) => {
-                const sid = typeof d.source === 'string' ? d.source : d.source.id;
-                const tid = typeof d.target === 'string' ? d.target : d.target.id;
-                return `${sid}-${tid}`;
-            })
-            .join(
-                enter => enter.append('line')
+        const linkKey = (d: SubGraphLink): string => {
+            const sid = typeof d.source === 'string' ? d.source : (d.source as SubGraphNode).id;
+            const tid = typeof d.target === 'string' ? d.target : (d.target as SubGraphNode).id;
+            return `${sid}-${tid}`;
+        };
+        const linksData = (linksGroup as any).selectAll('line').data(activeLinks, linkKey);
+        this.linksSelection = linksData.join(
+            (enter: d3.Selection<d3.EnterElement, SubGraphLink, SVGGElement, unknown>) => (enter as any).append('line')
                     .attr('class', 'suggested-link')
                     .attr('stroke', 'var(--text-accent)')
                     .attr('stroke-width', 2)
-                    .attr('stroke-opacity', d => 0.3 + d.confidence * 0.5)
+                    .attr('stroke-opacity', (d: SubGraphLink) => 0.3 + d.confidence * 0.5)
                     .attr('stroke-dasharray', '6,3')
                     .attr('marker-end', 'url(#' + this.markerId + ')')
-                    .on('mouseover', (event, d) => {
+                    .on('mouseover', (event: MouseEvent, d: SubGraphLink) => {
                         this.showLinkTooltip(event, d);
-                        d3.select(event.currentTarget)
+                        d3.select(event.currentTarget as SVGLineElement)
                             .attr('stroke-opacity', 1);
                     })
-                    .on('mouseout', (event, d) => {
+                    .on('mouseout', (event: MouseEvent, d: SubGraphLink) => {
                         this.hideTooltip();
-                        d3.select(event.currentTarget)
+                        d3.select(event.currentTarget as SVGLineElement)
                             .attr('stroke-opacity', 0.3 + d.confidence * 0.5);
                     }),
-                update => update,
-                exit => exit.remove()
-            );
+            (update: d3.Selection<SVGLineElement, SubGraphLink, SVGGElement, unknown>) => update,
+            (exit: d3.Selection<SVGLineElement, SubGraphLink, SVGGElement, unknown>) => (exit as any).remove()
+        ) as d3.Selection<SVGLineElement, SubGraphLink, d3.BaseType, unknown>;
 
         // Rebind nodes
         const nodesGroup = this.svgGroup.select('.subgraph-nodes');
-        const existingNodeGroups = nodesGroup.selectAll<SVGGElement, SubGraphNode>('g.subgraph-node-group')
-            .data(activeNodes, (d: any) => d.id);
+        const nodeKey = (d: SubGraphNode): string => d.id;
+        const existingNodeGroups = (nodesGroup as any).selectAll('g.subgraph-node-group')
+            .data(activeNodes, nodeKey);
 
         existingNodeGroups.exit().remove();
 
         // Update remaining node circles sizes
         existingNodeGroups.select('circle')
-            .attr('r', d => this.getNodeRadius(d));
+            .attr('r', (d: SubGraphNode) => this.getNodeRadius(d));
 
-        this.nodesSelection = existingNodeGroups as any;
+        this.nodesSelection = existingNodeGroups as unknown as d3.Selection<SVGGElement, SubGraphNode, d3.BaseType, unknown>;
 
         // Restart simulation
         this.simulation.alpha(0.5).restart();
@@ -635,7 +638,7 @@ export class ConnectionSubGraph {
     }
 
     private showTooltip(event: MouseEvent, text: string): void {
-        this.tooltip.style.display = 'block';
+        this.tooltip.classList.remove('subgraph-tooltip-hidden');
         this.tooltip.textContent = '';
         // Split by newlines for multi-line tooltip
         const lines = text.split('\n');
@@ -645,20 +648,20 @@ export class ConnectionSubGraph {
         }
 
         const rect = this.container.getBoundingClientRect();
-        this.tooltip.style.left = `${event.clientX - rect.left + 12}px`;
-        this.tooltip.style.top = `${event.clientY - rect.top - 10}px`;
+        this.tooltip.style.setProperty('--tooltip-x', `${event.clientX - rect.left + 12}px`);
+        this.tooltip.style.setProperty('--tooltip-y', `${event.clientY - rect.top - 10}px`);
     }
 
     private hideTooltip(): void {
-        this.tooltip.style.display = 'none';
+        this.tooltip.classList.add('subgraph-tooltip-hidden');
     }
 
     private getRemainingConnections(): ConnectionSuggestion[] {
         return this.links
             .filter(l => !l.removed)
             .map(l => {
-                const sourceId = typeof l.source === 'string' ? l.source : (l.source as SubGraphNode).id;
-                const targetId = typeof l.target === 'string' ? l.target : (l.target as SubGraphNode).id;
+                const sourceId = typeof l.source === 'string' ? l.source : (l.source).id;
+                const targetId = typeof l.target === 'string' ? l.target : (l.target).id;
                 return {
                     sourceId,
                     targetId,

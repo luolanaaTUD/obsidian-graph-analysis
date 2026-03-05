@@ -3,7 +3,7 @@ import { Type } from '@google/genai';
 /**
  * Schema for recommended actions analysis using Google Gemini structured output
  */
-export function createRecommendedActionsSchema(): any {
+export function createRecommendedActionsSchema(): unknown {
     return {
         type: Type.OBJECT,
         properties: {

@@ -49,14 +49,16 @@ export class GraphAnalysisView extends ItemView {
             // Only reload if switching FROM inactive TO active (not on initial load)
             if (isNowActive && this.hasInitialized && !this.wasActive) {
                 // Reload graph data when switching back to the view to ensure it's up to date
-                setTimeout(async () => {
-                    await this.reloadGraphData();
-                    this.centerGraphSafely();
+                setTimeout(() => {
+                    void (async () => {
+                        await this.reloadGraphData();
+                        await this.centerGraphSafely();
+                    })();
                 }, 100); // Small delay to ensure the view is fully rendered
             } else if (isNowActive) {
                 // Already active or first time - just center the graph
                 setTimeout(() => {
-                    this.centerGraphSafely();
+                    void this.centerGraphSafely();
                 }, 100);
             }
             
@@ -73,7 +75,7 @@ export class GraphAnalysisView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Graph Analysis';
+        return 'Graph analysis';
     }
 
     getIcon(): string {
@@ -84,7 +86,7 @@ export class GraphAnalysisView extends ItemView {
         const container = this.containerEl.children[1] as HTMLElement;
         container.empty();
         container.classList.add('graph-analysis-view-container');
-        
+
         // Wait for workspace to be ready before managing status bar
         if (this.app.workspace.layoutReady) {
             this.updateStatusBarVisibility();
@@ -94,7 +96,7 @@ export class GraphAnalysisView extends ItemView {
                 this.updateStatusBarVisibility();
             });
         }
-        
+
         // Initialize the graph view
         await this.graphView.onload(container);
 
@@ -105,7 +107,7 @@ export class GraphAnalysisView extends ItemView {
         // Mark as initialized and active after first load
         this.hasInitialized = true;
         this.wasActive = true; // View is active after onOpen completes
-        
+
         // Register event listener for view activation/deactivation
         // Use a small delay to avoid immediate trigger on registration
         setTimeout(() => {
@@ -113,11 +115,9 @@ export class GraphAnalysisView extends ItemView {
                 this.app.workspace.on('active-leaf-change', this.activeLeafChangeHandler)
             );
         }, 200);
-        
-        return;
     }
-    
-    async onResize(): Promise<void> {
+
+    onResize(): void {
         if (this.graphView) {
             const rect = this.containerEl.getBoundingClientRect();
             if (Math.abs(rect.width - this.lastKnownWidth) < 1 &&
@@ -127,21 +127,20 @@ export class GraphAnalysisView extends ItemView {
             this.lastKnownWidth = rect.width;
             this.lastKnownHeight = rect.height;
             setTimeout(() => {
-                this.centerGraphSafely();
+                void this.centerGraphSafely();
             }, 50);
         }
-        return;
     }
     
-    setEphemeralState(state: any): void {
+    setEphemeralState(state: unknown): void {
         super.setEphemeralState(state);
-        this.centerGraphSafely();
+        void this.centerGraphSafely();
     }
     
-    getState(): any {
+    getState(): Record<string, unknown> {
         const state = super.getState();
         return {
-            ...state,
+            ...(state),
             lastActive: Date.now()
         };
     }
@@ -150,8 +149,8 @@ export class GraphAnalysisView extends ItemView {
         if (this.graphView) {
             try {
                 this.graphView.onunload();
-            } catch (e) {
-                // console.warn('Error unloading graph view:', e);
+            } catch {
+                // Error unloading graph view - ignore
             }
         }
         
@@ -218,44 +217,34 @@ export class GraphAnalysisView extends ItemView {
      */
     private async reloadGraphData(): Promise<void> {
         try {
-            if (this.graphView) {
-                // Check if this view is currently active/visible
-                const isActive = this.app.workspace.getActiveViewOfType(GraphAnalysisView) === this;
-                
-                // Only reload data if this view is active and visible
-                if (isActive) {
-                    await this.graphView.reloadVaultData();
-                }
-            }
-        } catch (e) {
-            // console.warn("Error reloading graph data:", e);
+            const graphView = this.graphView;
+            if (!graphView) return;
+            // Check if this view is currently active/visible
+            const isActive = this.app.workspace.getActiveViewOfType(GraphAnalysisView) === this;
+            if (!isActive) return;
+            await graphView.reloadVaultData();
+        } catch {
+            // Error reloading graph data - ignore
         }
     }
 
     private async centerGraphSafely(): Promise<void> {
         try {
-            if (this.graphView) {
-                // Check if this view is currently active/visible
-                const isActive = this.app.workspace.getActiveViewOfType(GraphAnalysisView) === this;
-                
-                // Only refresh the graph if this view is active and visible
-                if (isActive) {
-                    this.graphView.refreshGraphView();
-                    // console.log("Graph position updated after view activation/resize");
-                    
-                    setTimeout(() => {
-                        try {
-                            if (this.graphView) {
-                                this.graphView.restartSimulationGently();
-                            }
-                        } catch (e) {
-                            // console.warn("Error restarting force simulation:", e);
-                        }
-                    }, 50);
+            const graphView = this.graphView;
+            if (!graphView) return;
+            // Check if this view is currently active/visible
+            const isActive = this.app.workspace.getActiveViewOfType(GraphAnalysisView) === this;
+            if (!isActive) return;
+            graphView.refreshGraphView();
+            setTimeout(() => {
+                try {
+                    graphView.restartSimulationGently();
+                } catch {
+                    // Error restarting force simulation - ignore
                 }
-            }
-        } catch (e) {
-            // console.warn("Error updating graph position:", e);
+            }, 50);
+        } catch {
+            // Error updating graph position - ignore
         }
     }
     

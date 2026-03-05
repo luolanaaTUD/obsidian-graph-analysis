@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, TAbstractFile, WorkspaceLeaf } from 'obsidian';
+import { Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata, VaultData, VaultNote, CentralityScores } from './types/types';
 import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
@@ -11,7 +11,8 @@ import { ExclusionUtils } from './utils/ExclusionUtils';
 // Import our styles 
 import './styles/styles.css';
 
-// The WASM module code will be injected at the top of this file during build
+// The WASM module code and EMBEDDED_WASM_BASE64 will be injected at the top of this file during build
+declare const EMBEDDED_WASM_BASE64: string;
 declare function build_graph_from_vault(vault_data_json: string): string;
 declare function calculate_degree_centrality_cached(): string;
 declare function calculate_eigenvector_centrality_cached(): string;
@@ -20,7 +21,7 @@ declare function calculate_closeness_centrality_cached(): string;
 declare function clear_graph(): string;
 declare function get_node_neighbors_cached(node_id: number): string;
 declare function get_graph_metadata(): string;
-declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<any>;
+declare function __wbg_init(options: { module_or_path: WebAssembly.Module | string | URL | Response | BufferSource }): Promise<unknown>;
 
 export default class GraphAnalysisPlugin extends Plugin {
     settings!: GraphAnalysisSettings;
@@ -42,7 +43,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.exclusionUtils = new ExclusionUtils(this.app, this.settings);
 
         // Initialize WASM module with improved async handling
-        this.initializeWasmModule();
+        void this.initializeWasmModule();
         
         // Mark plugin as loaded (event listeners removed - graph only updates when explicitly opened)
         this.app.workspace.onLayoutReady(() => {
@@ -95,7 +96,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add command to show exclusion statistics
         this.addCommand({
             id: 'show-exclusion-stats',
-            name: 'Show Exclusion Statistics',
+            name: 'Show exclusion statistics',
             callback: () => this.showExclusionStats()
         });
 
@@ -109,12 +110,12 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add command for AI summary
         this.addCommand({
             id: 'generate-ai-summary',
-            name: 'Generate AI Summary for Current Note',
+            name: 'Generate AI summary for current note',
             checkCallback: (checking: boolean) => {
                 const activeFile = this.app.workspace.getActiveFile();
                 if (activeFile && activeFile.extension === 'md') {
                     if (!checking) {
-                        this.aiSummaryManager?.generateAISummaryForCurrentNote();
+                        void this.aiSummaryManager?.generateAISummaryForCurrentNote();
                     }
                     return true;
                 }
@@ -125,12 +126,12 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add command for vault analysis
         this.addCommand({
             id: 'generate-vault-analysis',
-            name: 'Generate AI Analysis for Entire Vault',
+            name: 'Generate AI analysis for entire vault',
             callback: () => {
                 if (this.vaultAnalysisManager) {
-                    this.vaultAnalysisManager.generateVaultAnalysis();
+                    void this.vaultAnalysisManager.generateVaultAnalysis();
                 } else {
-                    new Notice('Vault Analysis Manager not initialized');
+                    new Notice('Vault analysis manager not initialized');
                 }
             }
         });
@@ -138,38 +139,38 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add command to view vault analysis results
         this.addCommand({
             id: 'view-vault-analysis',
-            name: 'View Vault Analysis Results',
+            name: 'View vault analysis results',
             callback: () => {
                 if (this.vaultAnalysisManager) {
-                    this.vaultAnalysisManager.viewVaultAnalysisResults();
+                    void this.vaultAnalysisManager.viewVaultAnalysisResults();
                 } else {
-                    new Notice('Vault Analysis Manager not initialized');
+                    new Notice('Vault analysis manager not initialized');
                 }
             }
         });
 
         // Add a ribbon icon to show the graph view
-        this.addRibbonIcon('waypoints', 'Graph Analysis View', async () => {
-            const existing = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
-            if (existing.length > 0) {
-                this.app.workspace.revealLeaf(existing[0]);
-                return;
-            }
-            
-            await this.ensureWasmLoaded();
-            
-            let leaf = this.app.workspace.getLeaf(false);
-            await leaf.setViewState({
-                type: GRAPH_ANALYSIS_VIEW_TYPE,
-                active: true
-            });
-            
-            this.app.workspace.revealLeaf(leaf);
+        this.addRibbonIcon('waypoints', 'Graph analysis view', () => {
+            void (async () => {
+                const existing = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
+                if (existing.length > 0) {
+                    void this.app.workspace.revealLeaf(existing[0]);
+                    return;
+                }
+                await this.ensureWasmLoaded();
+                const leaf = this.app.workspace.getLeaf(false);
+                await leaf.setViewState({
+                    type: GRAPH_ANALYSIS_VIEW_TYPE,
+                    active: true
+                });
+                void this.app.workspace.revealLeaf(leaf);
+            })();
         });
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        const data = await this.loadData() as Partial<GraphAnalysisSettings> | null;
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
     }
 
     async saveSettings() {
@@ -197,33 +198,19 @@ export default class GraphAnalysisPlugin extends Plugin {
 
     private async initializeWasmModule() {
         if (this.wasmLoadingPromise) return;
-        
+
         this.wasmLoadingPromise = (async () => {
             try {
-                this.wasmLoadingNotice = new Notice('Initializing Graph Analysis...', 0);
-                
-                const wasmBinaryPath = this.manifest.dir ? 
-                    `${this.manifest.dir}/graph_analysis_wasm_bg.wasm` : 
-                    'graph_analysis_wasm_bg.wasm';
-                
-                const adapter = this.app.vault.adapter;
-                const wasmAbsPath = adapter.getResourcePath(wasmBinaryPath);
-                
-                const wasmCache = await this.loadData();
-                // const wasmHash = wasmCache?.wasmHash;
-                
-                const timeoutPromise = new Promise<ArrayBuffer>((_, reject) => {
-                    setTimeout(() => reject(new Error('WASM loading timed out')), 10000);
-                });
-                
-                const fetchPromise = fetch(wasmAbsPath).then(r => r.arrayBuffer());
-                const wasmBinary = await Promise.race([fetchPromise, timeoutPromise]);
-                
+                this.wasmLoadingNotice = new Notice('Initializing graph analysis...', 0);
+
+                // Use embedded WASM (base64) to avoid requestUrl file:// protocol issues in Obsidian
+                const wasmBinary = await this.getWasmBinary();
+
                 const wasmBinaryHash = await this.calculateBinaryHash(wasmBinary);
-                
+
                 await __wbg_init({ module_or_path: wasmBinary });
                 
-                const dataToSave = await this.loadData() || {};
+                const dataToSave = (await this.loadData() as Record<string, unknown>) || {};
                 dataToSave.wasmHash = wasmBinaryHash;
                 await this.saveData(dataToSave);
                 
@@ -246,6 +233,21 @@ export default class GraphAnalysisPlugin extends Plugin {
                 this.wasmLoadingPromise = null;
             }
         })();
+    }
+
+    /**
+     * Get WASM binary from embedded base64 (avoids requestUrl file:// protocol issues in Obsidian).
+     */
+    private async getWasmBinary(): Promise<ArrayBuffer> {
+        if (typeof EMBEDDED_WASM_BASE64 === 'undefined' || !EMBEDDED_WASM_BASE64) {
+            throw new Error('WASM binary not embedded - run "npm run build" to rebuild the plugin');
+        }
+        const binaryString = globalThis.atob(EMBEDDED_WASM_BASE64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
     }
 
     private async calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {
@@ -275,7 +277,7 @@ export default class GraphAnalysisPlugin extends Plugin {
             return this.wasmLoadingPromise;
         }
         
-        this.initializeWasmModule();
+        void this.initializeWasmModule();
         return this.wasmLoadingPromise!;
     }
 
@@ -347,25 +349,16 @@ export default class GraphAnalysisPlugin extends Plugin {
      */
     public async buildGraphFromVault(): Promise<GraphData> {
         await this.ensureWasmLoaded();
-        
-        try {
-            // Build the graph data structure from vault files
-            const graphData = this.buildGraphDataFromVault();
-            
-            // Convert to VaultData format for Rust
-            const vaultData = this.createVaultDataFromGraph(graphData);
-            
-            // Call Rust function to build graph
-            this.processJsonResult<{ status: string }>(
-                build_graph_from_vault(JSON.stringify(vaultData)),
-                'Graph Building'
-            );
-            
-            return graphData;
-        } catch (error) {
-            // console.error('Failed to build graph from vault:', error);
-            throw error;
-        }
+        // Build the graph data structure from vault files
+        const graphData = this.buildGraphDataFromVault();
+        // Convert to VaultData format for Rust
+        const vaultData = this.createVaultDataFromGraph(graphData);
+        // Call Rust function to build graph
+        this.processJsonResult<{ status: string }>(
+            build_graph_from_vault(JSON.stringify(vaultData)),
+            'Graph Building'
+        );
+        return graphData;
     }
     
     /**
@@ -394,7 +387,8 @@ export default class GraphAnalysisPlugin extends Plugin {
             if (sourceIndex === undefined) continue;
             
             // Get links from the file using metadata cache
-            const cache = this.app.metadataCache.getFileCache(this.app.vault.getAbstractFileByPath(file.path) as TFile);
+            const abstractFile = this.app.vault.getAbstractFileByPath(file.path);
+            const cache = abstractFile instanceof TFile ? this.app.metadataCache.getFileCache(abstractFile) : null;
             
             if (!cache) continue;
             
@@ -453,21 +447,15 @@ export default class GraphAnalysisPlugin extends Plugin {
      * @returns Processed Node array with normalized centrality values
      */
     private processCentralityResult(jsonResult: string, centralityType: 'degree' | 'eigenvector' | 'betweenness' | 'closeness'): Node[] {
-        const parsedResult = JSON.parse(jsonResult);
-        
-        if (parsedResult.error) {
-            // console.error(`${centralityType} Centrality Error:`, parsedResult.error);
-            throw new Error(parsedResult.error);
+        const parsed = JSON.parse(jsonResult) as unknown;
+        if (parsed && typeof parsed === 'object' && 'error' in parsed && typeof (parsed as { error: string }).error === 'string') {
+            throw new Error((parsed as { error: string }).error);
         }
-        
-        // Verify that the parsed result is an array of nodes
-        if (!Array.isArray(parsedResult)) {
-            // console.error('Unexpected result format:', parsedResult);
+        if (!Array.isArray(parsed)) {
             throw new Error(`${centralityType} centrality result is not an array`);
         }
-        
-        // Validate and normalize each node to ensure it has the expected structure
-        return parsedResult.map((node: any) => {
+        const parsedResult = parsed as Array<{ node_id?: number; node_name?: string; centrality?: CentralityScores }>;
+        return parsedResult.map((node) => {
             const centralityScores: CentralityScores = {
                 degree: node.centrality?.degree,
                 eigenvector: node.centrality?.eigenvector,
@@ -479,8 +467,8 @@ export default class GraphAnalysisPlugin extends Plugin {
             centralityScores[centralityType] = centralityScores[centralityType] ?? 0;
             
             return {
-                node_id: node.node_id,
-                node_name: node.node_name,
+                node_id: node.node_id ?? 0,
+                node_name: node.node_name ?? '',
                 centrality: centralityScores
             };
         });
@@ -511,14 +499,11 @@ export default class GraphAnalysisPlugin extends Plugin {
      * @returns The parsed result
      */
     private processJsonResult<T>(jsonResult: string, errorContext: string): T {
-        const parsedResult = JSON.parse(jsonResult);
-        
-        if (parsedResult.error) {
-            // console.error(`${errorContext} Error:`, parsedResult.error);
-            throw new Error(parsedResult.error);
+        const parsed = JSON.parse(jsonResult) as unknown;
+        if (parsed && typeof parsed === 'object' && 'error' in parsed && typeof (parsed as { error: unknown }).error === 'string') {
+            throw new Error((parsed as { error: string }).error);
         }
-        
-        return parsedResult as T;
+        return parsed as T;
     }
     
     public getNodeNeighborsCached(nodeId: number): GraphNeighborsResult {
@@ -569,7 +554,7 @@ export default class GraphAnalysisPlugin extends Plugin {
     
     displayResults(results: Node[], algorithmName: string) {
         // Show results in the right sidebar (all results, pagination handled in view)
-        this.activateCentralityView(results, algorithmName);
+        void this.activateCentralityView(results, algorithmName);
         
         // console.log(`Graph Analysis Results (${algorithmName}):`, results);
     }
@@ -582,26 +567,8 @@ export default class GraphAnalysisPlugin extends Plugin {
 
         try {
             const stats = this.exclusionUtils.getExclusionStats();
-            const excludedFiles = this.exclusionUtils.getExcludedFiles();
-            
-            let message = `Exclusion Statistics:\n`;
-            message += `Total files: ${stats.totalFiles}\n`;
-            message += `Excluded by folder: ${stats.excludedByFolder}\n`;
-            message += `Excluded by tag: ${stats.excludedByTag}\n`;
-            message += `Total excluded: ${stats.totalExcluded}\n`;
-            message += `Included in analysis: ${stats.includedFiles}`;
-            
-            if (excludedFiles.length > 0) {
-                message += `\n\nExcluded files:\n${excludedFiles.slice(0, 10).join('\n')}`;
-                if (excludedFiles.length > 10) {
-                    message += `\n... and ${excludedFiles.length - 10} more`;
-                }
-            }
-            
-            // console.log(message);
             new Notice(`Check console for detailed exclusion statistics. ${stats.totalExcluded} files excluded.`);
-        } catch (error) {
-            // console.error('Error getting exclusion statistics:', error);
+        } catch {
             new Notice('Error getting exclusion statistics');
         }
     }
@@ -628,7 +595,7 @@ export default class GraphAnalysisPlugin extends Plugin {
 
         // Only reveal when leaf was just created - avoids triggering layout events when switching centrality
         if (isNewLeaf) {
-            this.app.workspace.revealLeaf(leaf);
+            void this.app.workspace.revealLeaf(leaf);
         }
 
         // Update the view with new results (resolve from leaf instead of storing reference)
@@ -659,22 +626,10 @@ export default class GraphAnalysisPlugin extends Plugin {
      */
     public async initializeGraphWithData(graphData: GraphData): Promise<void> {
         await this.ensureWasmLoaded();
-        
-        try {
-            // Convert GraphData to VaultData format expected by Rust
-            const vaultData = this.createVaultDataFromGraph(graphData);
-            
-            // Call Rust function to build graph
-            this.processJsonResult<{ status: string }>(
-                build_graph_from_vault(JSON.stringify(vaultData)),
-                'Graph Initialization'
-            );
-            
-            // Success
-            // console.log('Graph initialized with provided data');
-        } catch (error) {
-            // console.error('Failed to initialize graph with provided data:', error);
-            throw error;
-        }
+        const vaultData = this.createVaultDataFromGraph(graphData);
+        this.processJsonResult<{ status: string }>(
+            build_graph_from_vault(JSON.stringify(vaultData)),
+            'Graph Initialization'
+        );
     }
 }

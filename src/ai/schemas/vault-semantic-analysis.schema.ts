@@ -20,7 +20,7 @@ export interface VaultSemanticAnalysisBatch {
  * Schema for vault semantic analysis batch processing using Google Gemini structured output
  * This schema is used by VaultSemanticAnalysisManager.generateBatchAnalysis()
  */
-export function createVaultSemanticAnalysisSchema(expectedResultCount: number): any {
+export function createVaultSemanticAnalysisSchema(expectedResultCount: number): unknown {
     return {
         type: Type.ARRAY,
         items: {

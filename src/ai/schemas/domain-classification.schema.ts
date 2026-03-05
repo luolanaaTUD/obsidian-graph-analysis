@@ -37,7 +37,7 @@ export type DDCSection = KnowledgeSubdivision;
  * @param availableSubdivisions - Array of valid knowledge domain subdivisions from the loaded template
  * @returns Schema that ensures only valid subdivision codes are returned
  */
-export function createDomainClassificationSchema(availableSubdivisions: KnowledgeSubdivision[]): any {
+export function createDomainClassificationSchema(availableSubdivisions: KnowledgeSubdivision[]): unknown {
     // Extract valid subdivision IDs for enum constraint
     const validSubdivisionIds = availableSubdivisions.map(subdivision => subdivision.id);
     

@@ -74,7 +74,7 @@ export class DomainDistributionChart {
             this._themeChangeTimeout = setTimeout(() => {
                 // Only refresh if the chart is actually rendered
                 if (this.container.children.length > 0) {
-                    this.refresh();
+                    void this.refresh();
                 }
             }, 150); // Slightly longer debounce for smoother experience
         };
@@ -128,7 +128,7 @@ export class DomainDistributionChart {
 
     // Add a destructor to remove the event listener when the chart is destroyed
     private _themeChangeHandler?: () => void;
-    private _themeChangeTimeout?: NodeJS.Timeout;
+    private _themeChangeTimeout?: ReturnType<typeof setTimeout>;
     private _themeObserver?: MutationObserver;
     private _documentObserver?: MutationObserver;
     public destroy(): void {
@@ -171,11 +171,12 @@ export class DomainDistributionChart {
         const placeholder = this.container.createEl('div', { cls: 'domain-chart-placeholder' });
         const content = placeholder.createEl('div', { cls: 'placeholder-content' });
         content.createEl('div', { cls: 'placeholder-icon', text: '📊' });
-        content.createEl('div', { cls: 'placeholder-title', text: 'No Domain Hierarchy Available' });
+        content.createEl('div', { cls: 'placeholder-title', text: 'No domain hierarchy available' });
         content.createEl('div', { cls: 'placeholder-text', text: 'Please generate vault analysis with knowledge domain classification to see domain distribution.' });
     }
 
     private renderSunburstChart(container: HTMLElement = this.container): void {
+        /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unnecessary-type-assertion -- D3 Selection types are narrow when selecting by node; use any for chaining */
         // Use extracted color generation method
         const getVividAccentColor = (i: number, total: number): string => {
             return this.generateAccentColor(i, total);
@@ -189,54 +190,54 @@ export class DomainDistributionChart {
         const height = width; // Keep square aspect ratio
         const radius = width / 6; // Use D3 standard radius calculation
 
-        // Create container for chart
-        const sunburstContainer = d3.select(container)
-            .style('position', 'relative');
+        // Create container for chart (use DOM API for SVG to avoid D3 selection typing issues)
+        // Container already has position:relative via .domain-chart-container CSS
+        const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        container.appendChild(svgEl);
 
         // Prepare data - hierarchy is now pre-built by MasterAnalysisManager
         const hierarchyData = this.prepareOptimizedHierarchy();
         
         // Compute the layout using D3 standard approach
+        type PartitionNode = d3.HierarchyRectangularNode<D3HierarchyNode>;
         const hierarchy = d3.hierarchy<D3HierarchyNode>(hierarchyData)
             .sum((d: D3HierarchyNode) => d.value || 0)
             .sort((a, b) => (b.value || 0) - (a.value || 0));
         
         const root = d3.partition<D3HierarchyNode>()
-            .size([2 * Math.PI, hierarchy.height + 1])
-            (hierarchy);
+            .size([2 * Math.PI, hierarchy.height + 1])(hierarchy);
 
         // Remove color palette generation. We'll use CSS variables for fill and filter for distinction.
 
         // Create the arc generator following D3 example
-        const arc = d3.arc<any>()
-            .startAngle((d: any) => d.x0)
-            .endAngle((d: any) => d.x1)
-            .padAngle((d: any) => Math.min((d.x1 - d.x0) / 2, 0.005))
+        const arc = d3.arc<PartitionNode>()
+            .startAngle((d) => d.x0)
+            .endAngle((d) => d.x1)
+            .padAngle((d) => Math.min((d.x1 - d.x0) / 2, 0.005))
             .padRadius(radius * 1.5)
-            .innerRadius((d: any) => d.y0 * radius)
-            .outerRadius((d: any) => Math.max(d.y0 * radius, d.y1 * radius - 1));
+            .innerRadius((d) => d.y0 * radius)
+            .outerRadius((d) => Math.max(d.y0 * radius, d.y1 * radius - 1));
 
         // MODIFIED: Show all layers at once - removed depth filtering
-        const arcVisible = (d: any) => {
+        const arcVisible = (d: PartitionNode) => {
             return d.y0 >= 1 && d.x1 > d.x0;
         };
 
         // Label visibility function - show labels for all visible arcs
-        const labelVisible = (d: any) => {
+        const labelVisible = (d: PartitionNode) => {
             return d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.03;
         };
 
         // Label transform function
-        const labelTransform = (d: any) => {
+        const labelTransform = (d: PartitionNode) => {
             const x = (d.x0 + d.x1) / 2 * 180 / Math.PI;
             const y = (d.y0 + d.y1) / 2 * radius;
             return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
         };
 
-        // Create SVG
-        const svg = sunburstContainer
-            .append('svg')
-            .attr('width', width)
+        // Create SVG (cast to any - @types/d3 Selection has narrow typing for node selection)
+        const svg = d3.select(svgEl) as any;
+        svg.attr('width', width)
             .attr('height', height)
             .attr('viewBox', [-width / 2, -height / 2, width, height])
             .attr('class', 'domain-sunburst-chart')
@@ -244,7 +245,7 @@ export class DomainDistributionChart {
             .style('margin', '0 auto')
             .style('font', '10px sans-serif');
 
-        const g = svg.append('g');
+        const g = svg.append('g') as any;
 
         // Create all arcs (excluding root) - show all layers immediately
         const descendants = root.descendants().slice(1);
@@ -253,46 +254,42 @@ export class DomainDistributionChart {
             .data(descendants)
             .enter().append('path')
             .attr('d', arc)
-            .attr('data-index', (d: any) => {
+            .attr('data-index', (d: PartitionNode) => {
                 // Store the color index for in-place updates
                 let topIndex = 0;
-                let ancestor = d;
-                while (ancestor.depth > 1) ancestor = ancestor.parent;
-                if (ancestor.parent) {
-                    topIndex = ancestor.parent.children.indexOf(ancestor);
-                } else if (ancestor.depth === 1 && ancestor.parent) {
+                let ancestor: PartitionNode = d;
+                while (ancestor.depth > 1 && ancestor.parent) ancestor = ancestor.parent;
+                if (ancestor.parent?.children) {
                     topIndex = ancestor.parent.children.indexOf(ancestor);
                 } else if (ancestor.depth === 1) {
                     topIndex = descendants.filter(x => x.depth === 1).indexOf(ancestor);
                 }
                 return topIndex;
             })
-            .attr('fill', (d: any, i: number) => {
+            .attr('fill', (d: PartitionNode) => {
                 // Use vivid accent color for top-level sections, inherit for children
                 let topIndex = 0;
-                let ancestor = d;
-                while (ancestor.depth > 1) ancestor = ancestor.parent;
-                if (ancestor.parent) {
-                    topIndex = ancestor.parent.children.indexOf(ancestor);
-                } else if (ancestor.depth === 1 && ancestor.parent) {
+                let ancestor: PartitionNode = d;
+                while (ancestor.depth > 1 && ancestor.parent) ancestor = ancestor.parent;
+                if (ancestor.parent?.children) {
                     topIndex = ancestor.parent.children.indexOf(ancestor);
                 } else if (ancestor.depth === 1) {
                     topIndex = descendants.filter(x => x.depth === 1).indexOf(ancestor);
                 }
                 return getVividAccentColor(topIndex, totalTopLevel);
             })
-            .attr('fill-opacity', (d: any) => arcVisible(d) ? (d.children ? 0.8 : 0.9) : 0)
+            .attr('fill-opacity', (d: PartitionNode) => arcVisible(d) ? (d.children ? 0.8 : 0.9) : 0)
             .attr('stroke', 'var(--background-primary)')
             .attr('stroke-width', 1)
-            .attr('pointer-events', (d: any) => arcVisible(d) ? 'auto' : 'none')
+            .attr('pointer-events', (d: PartitionNode) => arcVisible(d) ? 'auto' : 'none')
             .style('cursor', 'default')
             .style('transition', 'fill 0.3s ease, opacity 0.2s ease, filter 0.2s ease');
 
         // Add tooltips to paths
         const format = d3.format(',d');
         paths.append('title')
-            .text((d: any) => {
-                const path = d.ancestors().map((ancestor: any) => ancestor.data.name).reverse().join(' → ');
+            .text((d: PartitionNode) => {
+                const path = d.ancestors().map((ancestor: PartitionNode) => ancestor.data.name).reverse().join(' → ');
                 const info = [
                     `${path}`,
                     `${format(d.value || d.data.noteCount || 0)} notes`,
@@ -314,11 +311,11 @@ export class DomainDistributionChart {
             .selectAll('g')
             .data(root.descendants().slice(1))
             .enter().append('g')
-            .attr('transform', (d: any) => labelTransform(d))
-            .style('opacity', (d: any) => +labelVisible(d));
+            .attr('transform', (d: PartitionNode) => labelTransform(d))
+            .style('opacity', (d: PartitionNode) => +labelVisible(d));
 
-        labelGroups.each(function(d: any) {
-            const group = d3.select(this);
+        labelGroups.each(function(this: SVGGElement, d: PartitionNode) {
+            const group = d3.select(this) as any;
             const arcSize = (d.y1 - d.y0) * (d.x1 - d.x0);
             const name = d.data.name;
             
@@ -329,7 +326,7 @@ export class DomainDistributionChart {
             // Skip tiny arcs
             if (arcSize < 0.02) return;
             
-                            // For very small arcs, just show abbreviated text
+            // For very small arcs, just show abbreviated text
                 if (arcSize < 0.1) {
                     group.append('text')
                         .attr('dy', '0.35em')
@@ -342,9 +339,8 @@ export class DomainDistributionChart {
             
             // For larger arcs, implement text wrapping
             const words = name.split(/\s+/);
-            let line: string[] = [];
             let lineNumber = 0;
-            let tspan = group.append('text')
+            group.append('text')
                 .attr('dy', 0)
                 .attr('fill', 'var(--chart-text, var(--text-normal))')
                 .style('font-size', `${fontSize}px`)
@@ -362,8 +358,7 @@ export class DomainDistributionChart {
                 
                 if (estimatedWidth > availableWidth && currentLine) {
                     // Add current line and start a new one
-                    tspan = group.select('text')
-                        .append('tspan')
+                    group.select('text').append('tspan')
                         .attr('x', 0)
                         .attr('y', 0)
                         .attr('dy', `${++lineNumber * 1.1}em`)
@@ -376,8 +371,7 @@ export class DomainDistributionChart {
             
             // Add the last line
             if (currentLine) {
-                tspan = group.select('text')
-                    .append('tspan')
+                group.select('text').append('tspan')
                     .attr('x', 0)
                     .attr('y', 0)
                     .attr('dy', `${lineNumber * 1.1}em`)
@@ -386,10 +380,11 @@ export class DomainDistributionChart {
             
             // Center the text vertically
             const textElement = group.select('text');
-            const numLines = textElement.selectAll('tspan').size();
+            const tspanSelection = textElement.selectAll('tspan');
+            const numLines = (tspanSelection as any).size();
             if (numLines > 1) {
                 const offset = -(numLines - 1) * 0.5 * 1.1;
-                textElement.selectAll('tspan').each(function(d: any, i: number) {
+                (tspanSelection as any).each(function(this: Element, _d: unknown, i: number) {
                     d3.select(this).attr('dy', `${offset + i * 1.1}em`);
                 });
             } else {
@@ -399,7 +394,7 @@ export class DomainDistributionChart {
 
         // Create enlarged center circle for info panel
         const centerRadius = Math.max(radius * 0.9, 40);
-        const centerCircle = g.append('circle')
+        g.append('circle')
             .datum(root)
             .attr('r', centerRadius)
             .attr('fill', 'var(--chart-background, var(--background-secondary))')
@@ -414,7 +409,7 @@ export class DomainDistributionChart {
             .attr('class', 'center-info-panel');
 
         // Function to update center info panel
-        const updateCenterInfo = (data: any = null) => {
+        const updateCenterInfo = (data: PartitionNode | null = null) => {
             // Fade out existing content
             centerInfo.selectAll('text')
                 .transition()
@@ -603,15 +598,15 @@ export class DomainDistributionChart {
         // Enhanced hover effects - REMOVED all click functionality
         if (this.options.showTooltips) {
             paths
-                .on('mouseover', (event, d: any) => {
-                    d3.select(event.currentTarget)
+                .on('mouseover', (event: MouseEvent, d: PartitionNode) => {
+                    d3.select(event.currentTarget as SVGPathElement)
                         .style('opacity', 1)
                         .style('filter', 'brightness(1.1)');
 
                     updateCenterInfo(d);
                 })
-                .on('mouseout', (event, d: any) => {
-                    d3.select(event.currentTarget)
+                .on('mouseout', (event: MouseEvent) => {
+                    d3.select(event.currentTarget as SVGPathElement)
                         .style('opacity', null)
                         .style('filter', 'none');
 
@@ -619,6 +614,7 @@ export class DomainDistributionChart {
                     updateCenterInfo();
                 });
         }
+        /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unnecessary-type-assertion */
     }
 
     // Prepare optimized hierarchy - data is now pre-built by MasterAnalysisManager
@@ -697,25 +693,22 @@ export class DomainDistributionChart {
             const paths = svg.querySelectorAll('path');
             const totalTopLevel = this.data.domainHierarchy.length;
             
-            paths.forEach((path, index) => {
-                const pathElement = path as SVGPathElement;
+            paths.forEach((path) => {
+                const pathElement = path;
                 const dataIndex = parseInt(pathElement.getAttribute('data-index') || '0');
                 const newColor = this.generateAccentColor(dataIndex, totalTopLevel);
-                
-                // Apply color with smooth transition
-                pathElement.style.transition = 'fill 0.3s ease';
-                pathElement.style.fill = newColor;
+                // Transition is handled by CSS (.domain-sunburst-chart path)
+                pathElement.setAttribute('fill', newColor);
             });
 
-            // Update center circle background
+            // Update center circle background (transition handled by CSS)
             const centerCircle = svg.querySelector('circle');
             if (centerCircle) {
-                (centerCircle as SVGCircleElement).style.transition = 'fill 0.3s ease, stroke 0.3s ease';
-                (centerCircle as SVGCircleElement).setAttribute('fill', 'var(--chart-background, var(--background-secondary))');
+                centerCircle.setAttribute('fill', 'var(--chart-background, var(--background-secondary))');
             }
 
             return true;
-        } catch (error) {
+        } catch {
             // If in-place update fails, fall back to full re-render
             return false;
         }

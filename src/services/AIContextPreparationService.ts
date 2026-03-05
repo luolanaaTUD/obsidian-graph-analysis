@@ -457,7 +457,7 @@ export class AIContextPreparationService {
         sections.push('=== CENTRALITY DISTRIBUTION BY INTERVALS ===');
         
         ['betweenness', 'closeness', 'eigenvector'].forEach(centralityType => {
-            const summaries = context.intervalSummaries[centralityType as keyof typeof context.intervalSummaries] as IntervalSummary[];
+            const summaries = context.intervalSummaries[centralityType as keyof typeof context.intervalSummaries];
             if (summaries.length === 0) return;
 
             sections.push(`\n${centralityType.toUpperCase()} Centrality Distribution:`);

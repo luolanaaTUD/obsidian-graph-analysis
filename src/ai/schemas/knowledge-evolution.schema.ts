@@ -1,10 +1,9 @@
 import { Type } from '@google/genai';
-import { EvolutionInsight, TimelineAnalysis, TopicPatternsAnalysis, FocusShiftAnalysis } from '../visualization/KnowledgeEvolutionManager';
 
 /**
  * Schema for knowledge evolution analysis using Google Gemini structured output
  */
-export function createKnowledgeEvolutionSchema(): any {
+export function createKnowledgeEvolutionSchema(): unknown {
     return {
         type: Type.OBJECT,
         properties: {

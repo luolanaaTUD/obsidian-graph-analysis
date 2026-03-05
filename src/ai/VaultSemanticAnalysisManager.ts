@@ -87,8 +87,8 @@ export class VaultSemanticAnalysisManager {
             } catch {
                 // Directory might already exist
             }
-        } catch (error) {
-            // console.error('Failed to create responses directory:', error);
+        } catch {
+            // Directory creation may fail if it already exists
         }
         this.responsesDirectoryEnsured = true;
     }
@@ -125,8 +125,7 @@ export class VaultSemanticAnalysisManager {
             
             // console.log(`📚 Knowledge domain template loaded for VaultSemanticAnalysisManager: ${this.subdivisionsList.length} subdivisions available`);
             return this.domainTemplateLoaded;
-        } catch (error) {
-            // console.error('Failed to load knowledge domain template for VaultSemanticAnalysisManager:', error);
+        } catch {
             return false;
         }
     }
@@ -152,24 +151,24 @@ export class VaultSemanticAnalysisManager {
         description.setText('AI-powered analysis of your entire vault to extract summaries, keywords, knowledge domains, and graph centrality metrics. Shift+click to force refresh graph metrics.');
         
         // Add click handler for vault analysis - directly open results modal
-        button.addEventListener('click', async (event) => {
-            // Check if shift is held to force graph metrics enhancement
+        button.addEventListener('click', (event: MouseEvent) => {
             if (event.shiftKey) {
-                try {
-                    const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
-                    const enhanced = await this.enhanceWithGraphMetrics();
-                    enhanceNotice.hide();
-                    
-                    if (enhanced) {
-                        new Notice('✅ Vault analysis enhanced with graph metrics!');
-                    } else {
-                        new Notice('ℹ️ No existing vault analysis found. Generate analysis first.');
+                void (async () => {
+                    try {
+                        const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
+                        const enhanced = await this.enhanceWithGraphMetrics();
+                        enhanceNotice.hide();
+                        if (enhanced) {
+                            new Notice('✅ vault analysis enhanced with graph metrics!');
+                        } else {
+                            new Notice('ℹ️ no existing vault analysis found. Generate analysis first.');
+                        }
+                    } catch (err) {
+                        new Notice(`❌ Failed to enhance: ${err instanceof Error ? err.message : String(err)}`);
                     }
-                } catch (error) {
-                    new Notice(`❌ Failed to enhance: ${(error as Error).message}`);
-                }
+                })();
             } else {
-                this.viewVaultAnalysisResults();
+                void this.viewVaultAnalysisResults();
             }
         });
 
@@ -235,8 +234,7 @@ export class VaultSemanticAnalysisManager {
                 metricsMap.set(filePath, metrics);
             });
             
-        } catch (error) {
-            // console.error('Error calculating graph metrics:', error);
+        } catch {
             // Return empty map on error - semantic analysis can proceed without graph metrics
         }
         
@@ -313,8 +311,8 @@ export class VaultSemanticAnalysisManager {
         try {
             const filePath = this.getVaultAnalysisFilePath();
             const content = await this.app.vault.adapter.read(filePath);
-            return JSON.parse(content);
-        } catch (error) {
+            return JSON.parse(content) as VaultAnalysisData;
+        } catch {
             return null;
         }
     }
@@ -463,9 +461,8 @@ export class VaultSemanticAnalysisManager {
             let existingData: VaultAnalysisData;
             try {
                 const content = await this.app.vault.adapter.read(filePath);
-                existingData = JSON.parse(content);
-            } catch (error) {
-                // File doesn't exist or invalid - return false to indicate no cached data
+                existingData = JSON.parse(content) as VaultAnalysisData;
+            } catch {
                 return false;
             }
             
@@ -517,7 +514,7 @@ export class VaultSemanticAnalysisManager {
         try {
             // Check if Gemini API key is configured
             if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
-                new Notice('Please configure your Gemini API key in settings to use vault analysis.');
+                new Notice('Please configure your gemini API key in settings to use vault analysis.');
                 return false;
             }
 
@@ -637,8 +634,7 @@ export class VaultSemanticAnalysisManager {
                         modified,
                         isShort
                     });
-                } catch (error) {
-                    // console.error(`Error reading file ${file.path}:`, error);
+                } catch {
                     fileDataList.push({
                         file,
                         content: '',
@@ -673,23 +669,12 @@ export class VaultSemanticAnalysisManager {
             }
 
             const totalBatches = batches.length;
-            const averageBatchSize = Math.round(fileDataList.length / totalBatches);
-            
-            // Log batch distribution for transparency
-            const updateType = isIncrementalUpdate ? 'incremental' : 'full';
-            // console.log(`Processing ${filesToProcess.length} files (${updateType} update) in ${totalBatches} note-based batches (max ${this.MAX_NOTES_PER_BATCH} notes per batch) using ${this.aiService.getSemanticModelName()}`);
-            if (isIncrementalUpdate) {
-                // console.log(`Incremental update: ${changedCount} changed, ${newCount} new, ${unchangedCount} unchanged files`);
-            }
-            // console.log(`Average batch size: ${averageBatchSize} notes per batch`);
-            
-            // Log batch size distribution for small vaults
-            if (totalBatches === 1 && fileDataList.length < this.MAX_NOTES_PER_BATCH) {
-                // console.log(`Small batch detected: processing all ${fileDataList.length} notes in a single batch`);
-            } else if (totalBatches > 1) {
-                const batchSizes = batches.map(batch => batch.length);
-                // console.log(`Batch size distribution: ${batchSizes.join(', ')} notes per batch`);
-            }
+            // Log batch distribution for transparency (uncomment for debugging)
+            // const _averageBatchSize = Math.round(fileDataList.length / totalBatches);
+            // const _updateType = isIncrementalUpdate ? 'incremental' : 'full';
+            // if (totalBatches > 1) {
+            //     const _batchSizes = batches.map(batch => batch.length);
+            // }
             
             // Aggregate token usage across all batches
             let totalTokenUsage = { promptTokens: 0, candidatesTokens: 0, totalTokens: 0 };
@@ -774,7 +759,7 @@ export class VaultSemanticAnalysisManager {
                     const perNoteFailures: Array<{ path: string; basename: string; charCount: number }> = [];
                     for (let i = 0; i < batch.length; i++) {
                         const fileData = batch[i];
-                        const result = batchResult!.results[i];
+                        const result = batchResult.results[i];
                         if (result && result.success && result.data) {
                             results.push(result.data);
                             processed++;
@@ -1082,7 +1067,18 @@ export class VaultSemanticAnalysisManager {
         const filePath = this.getFailedBatchesFilePath();
         try {
             const content = await this.app.vault.adapter.read(filePath);
-            const raw = JSON.parse(content);
+            const raw = JSON.parse(content) as {
+                remaining?: FailedBatchesData['remaining'];
+                failed?: FailedBatchEntry[];
+                failedBatches?: Array<{
+                    timestamp?: string;
+                    batchIndex?: number;
+                    primaryModel?: string;
+                    retryModel?: string;
+                    error?: string;
+                    notes?: FailedBatchEntry['notes'];
+                }>;
+            };
             if (raw.remaining != null || Array.isArray(raw.failed)) {
                 return { remaining: raw.remaining ?? null, failed: raw.failed ?? [] };
             }
@@ -1194,7 +1190,7 @@ export class VaultSemanticAnalysisManager {
 
             try {
                 const content = await this.app.vault.adapter.read(filePath);
-                const parsed = JSON.parse(content);
+                const parsed = JSON.parse(content) as { results?: unknown[] };
                 if (parsed && typeof parsed === 'object' && Array.isArray(parsed.results)) {
                     analysisData = parsed as VaultAnalysisData;
                     hasExistingData = analysisData.results.length > 0;
@@ -1229,31 +1225,26 @@ export class VaultSemanticAnalysisManager {
 
                 if (!hasGraphMetrics) {
                     const notice = new Notice('Your vault analysis exists but lacks graph metrics. Click to enhance it with centrality scores.', 0);
-                    const enhanceBtn = notice.noticeEl.createEl('button', {
-                        text: 'Enhance with Graph Metrics',
+                    const noticeContainer = (notice as { messageEl: HTMLElement }).messageEl;
+                    const enhanceBtn = noticeContainer.createEl('button', {
+                        text: 'Enhance with graph metrics',
                         cls: 'graph-enhance-btn'
                     });
-                    enhanceBtn.style.marginLeft = '10px';
-                    enhanceBtn.style.padding = '4px 8px';
-                    enhanceBtn.style.backgroundColor = 'var(--interactive-accent)';
-                    enhanceBtn.style.color = 'var(--text-on-accent)';
-                    enhanceBtn.style.border = 'none';
-                    enhanceBtn.style.borderRadius = '4px';
-                    enhanceBtn.style.cursor = 'pointer';
 
-                    enhanceBtn.onclick = async () => {
+                    enhanceBtn.onclick = () => {
                         notice.hide();
-                        const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
-                        try {
-                            await this.enhanceWithGraphMetrics();
-                            enhanceNotice.hide();
-                            new Notice('Vault analysis enhanced with graph metrics!');
-                            await this.viewVaultAnalysisResults();
-                        } catch (error) {
-                            enhanceNotice.hide();
-                            // console.error('Error enhancing with graph metrics:', error);
-                            new Notice(`Failed to enhance analysis: ${(error as Error).message}`);
-                        }
+                        void (async () => {
+                            const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
+                            try {
+                                await this.enhanceWithGraphMetrics();
+                                enhanceNotice.hide();
+                                new Notice('Vault analysis enhanced with graph metrics!');
+                                await this.viewVaultAnalysisResults();
+                            } catch (err) {
+                                enhanceNotice.hide();
+                                new Notice(`Failed to enhance analysis: ${err instanceof Error ? err.message : String(err)}`);
+                            }
+                        })();
                     };
 
                     setTimeout(() => notice.hide(), 8000);
@@ -1267,29 +1258,32 @@ export class VaultSemanticAnalysisManager {
 
 
     private isFileExcluded(file: TFile): boolean {
-        // Check folder exclusions
-        if (this.settings.excludeFolders && this.settings.excludeFolders.length > 0) {
-            for (const excludeFolder of this.settings.excludeFolders) {
-                if (excludeFolder && file.path.toLowerCase().includes(excludeFolder.toLowerCase())) {
+        const pathLower = file.path.toLowerCase();
+        const excludeFolders = this.settings.excludeFolders ?? [];
+        if (excludeFolders.length > 0) {
+            for (const folder of excludeFolders) {
+                if (typeof folder === 'string' && folder && pathLower.includes(folder.toLowerCase())) {
                     return true;
                 }
             }
         }
 
-        // Check tag exclusions
-        if (this.settings.excludeTags && this.settings.excludeTags.length > 0) {
+        const excludeTags = this.settings.excludeTags ?? [];
+        if (excludeTags.length > 0) {
             const fileCache = this.app.metadataCache.getFileCache(file);
             if (fileCache) {
-                // Check frontmatter tags
-                const frontmatterTags = fileCache.frontmatter?.tags || [];
-                // Check inline tags
-                const inlineTags = fileCache.tags?.map(tag => tag.tag.replace('#', '')) || [];
-                
-                const allTags = [...frontmatterTags, ...inlineTags];
-                
-                for (const excludeTag of this.settings.excludeTags) {
-                    if (excludeTag && allTags.some(tag => 
-                        tag.toLowerCase().includes(excludeTag.toLowerCase())
+                const rawTags: unknown = fileCache.frontmatter?.tags;
+                const frontmatterTags: string[] = Array.isArray(rawTags)
+                    ? (rawTags as string[]).map(t => (typeof t === 'string' ? t : String(t)))
+                    : typeof rawTags === 'string'
+                        ? [rawTags]
+                        : [];
+                const inlineTags = (fileCache.tags ?? []).map((tag: { tag: string }) => tag.tag.replace('#', ''));
+                const allTags: string[] = [...frontmatterTags, ...inlineTags];
+
+                for (const tag of excludeTags) {
+                    if (typeof tag === 'string' && tag && allTags.some(t =>
+                        t.toLowerCase().includes(tag.toLowerCase())
                     )) {
                         return true;
                     }
@@ -1329,11 +1323,14 @@ export class VaultSemanticAnalysisManager {
         await domainHelper.loadDomainTemplate();
         const ddcCodeToNameMap = domainHelper.getDomainCodeToNameMap();
 
-        const enhancedResults = sortedResults.map(result => {
+        /** Legacy format used knowledgeDomain (string); new format uses knowledgeDomains (string[]) */
+        type LegacyResult = VaultAnalysisResult & { knowledgeDomain?: string };
+        const enhancedResults = sortedResults.map((result): VaultAnalysisResult => {
             let domainCodes: string[] = [];
-            const oldResult = result as any;
-            if (oldResult.knowledgeDomain && typeof oldResult.knowledgeDomain === 'string') {
-                domainCodes = oldResult.knowledgeDomain.split(',')
+            const legacy = result as LegacyResult;
+            if (legacy.knowledgeDomain && typeof legacy.knowledgeDomain === 'string') {
+                domainCodes = legacy.knowledgeDomain
+                    .split(',')
                     .map((code: string) => code.trim())
                     .filter((code: string) => code.length > 0);
             } else if (result.knowledgeDomains && Array.isArray(result.knowledgeDomains)) {
@@ -1401,7 +1398,7 @@ export class VaultSemanticAnalysisManager {
             let existingData: VaultAnalysisData | null = null;
             try {
                 const content = await this.app.vault.adapter.read(this.getVaultAnalysisFilePath());
-                existingData = JSON.parse(content);
+                existingData = JSON.parse(content) as VaultAnalysisData;
             } catch {
                 existingData = null;
             }

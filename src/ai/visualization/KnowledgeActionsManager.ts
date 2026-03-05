@@ -1,4 +1,4 @@
-import { App, TFile, Notice, setIcon } from 'obsidian';
+import { App, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../../types/types';
 import type { VaultAnalysisResult } from '../MasterAnalysisManager';
 import { NoteResolver } from '../../utils/NoteResolver';
@@ -94,15 +94,18 @@ export class KnowledgeActionsManager {
             // Use the tab-specific analysis file instead of master-analysis.json
             const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/actions-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content);
-            
-            if (data?.recommendedActions) {
-                this.data = data.recommendedActions;
-                return this.data;
+            const data = JSON.parse(content) as unknown;
+
+            if (data && typeof data === 'object' && 'recommendedActions' in data) {
+                const actions = (data as { recommendedActions: KnowledgeActionsData }).recommendedActions;
+                if (actions && typeof actions === 'object') {
+                    this.data = actions;
+                    return this.data;
+                }
             }
             return null;
-        } catch (error) {
-            // console.warn('No cached knowledge actions data found:', error);
+        } catch {
+            // console.warn('No cached knowledge actions data found');
             return null;
         }
     }
@@ -128,7 +131,7 @@ export class KnowledgeActionsManager {
     private renderPlaceholder(): void {
         const placeholder = this.container.createEl('div', { cls: 'actions-placeholder' });
         const content = placeholder.createEl('div', { cls: 'placeholder-content' });
-        content.createEl('h3', { text: '🎯 Recommended Actions' });
+        content.createEl('h3', { text: '🎯 recommended actions' });
         content.createEl('p', { text: 'Generate vault analysis to see personalized action recommendations.' });
         const features = content.createEl('div', { cls: 'placeholder-features' });
         [{ icon: '🔧', text: 'Knowledge Maintenance' }, { icon: '🔗', text: 'Connection Opportunities' }, { icon: '🗺️', text: 'Learning Paths' }, { icon: '📁', text: 'Organization Tips' }].forEach(({ icon, text }) => {
@@ -154,7 +157,7 @@ export class KnowledgeActionsManager {
 
     private createActionsSummary(container: HTMLElement): void {
         const summaryContainer = container.createEl('div', { cls: 'actions-summary' });
-        summaryContainer.createEl('h3', { text: '📊 Action Summary' });
+        summaryContainer.createEl('h3', { text: '📊 action summary' });
         const stats = summaryContainer.createEl('div', { cls: 'summary-stats' });
         const totalActions = this.getTotalActionCount();
         const priorityBreakdown = this.getPriorityBreakdown();
@@ -172,7 +175,7 @@ export class KnowledgeActionsManager {
 
     private createMaintenanceSection(container: HTMLElement): void {
         const section = container.createEl('div', { cls: 'actions-section maintenance-section' });
-        section.createEl('h4', { text: '🔧 Knowledge Maintenance' });
+        section.createEl('h4', { text: '🔧 knowledge maintenance' });
         section.createEl('p', { cls: 'section-description', text: 'Notes that need review, updates, or improvements' });
         const list = section.createEl('div', { cls: 'actions-list' });
         this.data!.maintenance.slice(0, 10).forEach(action => {
@@ -184,8 +187,8 @@ export class KnowledgeActionsManager {
             item.createEl('div', { cls: 'action-reason', text: action.reason });
             item.createEl('div', { cls: 'action-content', text: action.action });
             const buttons = item.createEl('div', { cls: 'action-buttons' });
-            buttons.createEl('button', { cls: 'action-btn primary', text: '📝 Open Note' });
-            buttons.createEl('button', { cls: 'action-btn secondary', text: '✓ Mark Done' });
+            buttons.createEl('button', { cls: 'action-btn primary', text: '📝 open note' });
+            buttons.createEl('button', { cls: 'action-btn secondary', text: '✓ mark done' });
         });
         if (this.data!.maintenance.length > 10) {
             const showMore = section.createEl('div', { cls: 'show-more' });
@@ -196,7 +199,7 @@ export class KnowledgeActionsManager {
 
     private createConnectionsSection(container: HTMLElement): void {
         const section = container.createEl('div', { cls: 'actions-section connections-section' });
-        section.createEl('h4', { text: '🔗 Connection Opportunities' });
+        section.createEl('h4', { text: '🔗 connection opportunities' });
         section.createEl('p', { cls: 'section-description', text: 'Suggested links between your notes' });
         const list = section.createEl('div', { cls: 'connections-list' });
         this.data!.connections.slice(0, 8).forEach(connection => {
@@ -211,16 +214,16 @@ export class KnowledgeActionsManager {
             header.createEl('span', { cls: 'confidence-score', text: `${Math.round(connection.confidence * 100)}% confidence` });
             item.createEl('div', { cls: 'connection-reason', text: connection.reason });
             const buttons = item.createEl('div', { cls: 'connection-buttons' });
-            buttons.createEl('button', { cls: 'action-btn primary', text: '🔗 Create Link' });
-            buttons.createEl('button', { cls: 'action-btn secondary', text: '👁️ Preview' });
-            buttons.createEl('button', { cls: 'action-btn tertiary', text: '✗ Dismiss' });
+            buttons.createEl('button', { cls: 'action-btn primary', text: '🔗 create link' });
+            buttons.createEl('button', { cls: 'action-btn secondary', text: '👁️ preview' });
+            buttons.createEl('button', { cls: 'action-btn tertiary', text: '✗ dismiss' });
         });
         this.attachConnectionHandlers(section);
     }
 
     private createLearningPathsSection(container: HTMLElement): void {
         const section = container.createEl('div', { cls: 'actions-section learning-paths-section' });
-        section.createEl('h4', { text: '🗺️ Learning Paths' });
+        section.createEl('h4', { text: '🗺️ learning paths' });
         section.createEl('p', { cls: 'section-description', text: 'Recommended sequences for learning and exploration' });
         const list = section.createEl('div', { cls: 'learning-paths-list' });
         this.data!.learningPaths.forEach(path => {
@@ -237,8 +240,8 @@ export class KnowledgeActionsManager {
                 step.createEl('span', { cls: 'step-note', text: NoteResolver.resolveToTitle(this.app, noteId) });
             });
             const buttons = item.createEl('div', { cls: 'path-buttons' });
-            buttons.createEl('button', { cls: 'action-btn primary', text: '🚀 Start Path' });
-            buttons.createEl('button', { cls: 'action-btn secondary', text: '📌 Bookmark' });
+            buttons.createEl('button', { cls: 'action-btn primary', text: '🚀 start path' });
+            buttons.createEl('button', { cls: 'action-btn secondary', text: '📌 bookmark' });
         });
         this.attachLearningPathHandlers(section);
     }
@@ -246,7 +249,7 @@ export class KnowledgeActionsManager {
     private createOrganizationSection(container: HTMLElement): void {
         const section = container.createEl('div', { cls: 'actions-section organization-section' });
         const groupedSuggestions = this.groupOrganizationSuggestions();
-        section.createEl('h4', { text: '📁 Organization Suggestions' });
+        section.createEl('h4', { text: '📁 organization suggestions' });
         section.createEl('p', { cls: 'section-description', text: 'Improvements for your knowledge structure' });
         const tabs = section.createEl('div', { cls: 'organization-tabs' });
         const headers = tabs.createEl('div', { cls: 'tab-headers' });
@@ -280,9 +283,9 @@ export class KnowledgeActionsManager {
                 list.createEl('span', { cls: 'more-notes', text: `+${suggestion.affectedNotes.length - 3} more` });
             }
             const buttons = item.createEl('div', { cls: 'suggestion-buttons' });
-            buttons.createEl('button', { cls: 'action-btn primary', text: '✓ Apply' });
-            buttons.createEl('button', { cls: 'action-btn secondary', text: '👁️ Preview' });
-            buttons.createEl('button', { cls: 'action-btn tertiary', text: '✗ Dismiss' });
+            buttons.createEl('button', { cls: 'action-btn primary', text: '✓ apply' });
+            buttons.createEl('button', { cls: 'action-btn secondary', text: '👁️ preview' });
+            buttons.createEl('button', { cls: 'action-btn tertiary', text: '✗ dismiss' });
         });
     }
 
@@ -329,7 +332,7 @@ export class KnowledgeActionsManager {
                 const noteId = actionItem.dataset.noteId;
                 
                 if (target.textContent?.includes('Open Note')) {
-                    this.openNote(noteId || '');
+                    void this.openNote(noteId || '');
                 } else if (target.textContent?.includes('Mark Done')) {
                     this.dismissAction(actionItem);
                 }
@@ -401,8 +404,7 @@ export class KnowledgeActionsManager {
     }
 
     private dismissAction(actionItem: HTMLElement): void {
-        actionItem.style.opacity = '0.5';
-        actionItem.style.pointerEvents = 'none';
+        actionItem.addClass('actions-item-dismissed');
         // Could save dismissed actions to prevent them from reappearing
     }
 
@@ -417,8 +419,7 @@ export class KnowledgeActionsManager {
     }
 
     private dismissConnection(connectionItem: HTMLElement): void {
-        connectionItem.style.opacity = '0.5';
-        connectionItem.style.pointerEvents = 'none';
+        connectionItem.addClass('actions-item-dismissed');
     }
 
     private startLearningPath(pathItem: HTMLElement): void {
@@ -650,8 +651,8 @@ export class KnowledgeActionsManager {
                     return content + newSection;
                 });
                 written += conns.length;
-            } catch (error) {
-                // console.error(`Failed to write connections to ${sourceId}:`, error);
+            } catch {
+                // console.error(`Failed to write connections to ${sourceId}`);
                 failed += conns.length;
             }
         }

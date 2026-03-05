@@ -16,7 +16,7 @@ export interface NoteSummaryAnalysis {
  * **Key Words:** [List 3-6 most relevant keywords or key phrases, separated by commas]
  * **Key Points:** [One concise sentence that captures the main idea and key points of the note]
  */
-export function createNoteSummarySchema(): any {
+export function createNoteSummarySchema(): unknown {
     return {
         type: Type.OBJECT,
         properties: {

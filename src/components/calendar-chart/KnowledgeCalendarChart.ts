@@ -93,8 +93,8 @@ export class KnowledgeCalendarChart {
                     // Set value directly during processing to avoid extra iteration
                     dayData.value = dayData.wordCount;
                     
-                } catch (error) {
-                    // console.warn(`Could not read file ${file.path}:`, error);
+                } catch {
+                    // Could not read file - skip
                 }
             }));
         }));
@@ -140,8 +140,9 @@ export class KnowledgeCalendarChart {
         if (this.excludedTags && this.excludedTags.length > 0) {
             const fileCache = this.app.metadataCache.getFileCache(file);
             if (fileCache) {
-                const frontmatterTags = fileCache.frontmatter?.tags || [];
-                const inlineTags = fileCache.tags?.map(tag => tag.tag.replace('#', '')) || [];
+                const rawTags = fileCache.frontmatter?.tags as string | string[] | undefined;
+                const frontmatterTags: string[] = Array.isArray(rawTags) ? rawTags : (rawTags != null ? [String(rawTags)] : []);
+                const inlineTags: string[] = fileCache.tags?.map((tag: { tag: string }) => tag.tag.replace('#', '')) ?? [];
                 
                 const allTags = [...frontmatterTags, ...inlineTags];
                 
@@ -275,14 +276,16 @@ export class KnowledgeCalendarChart {
             dataMap.set(dateKey, d);
         });
         
-        const svg = d3.select(container)
+        // D3 Selection append omitted in @types/d3 when parent is HTMLElement
+        /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any -- D3 types omit append for HTMLElement parent */
+        type D3SvgLike = { append(n: string): D3SvgLike; attr(a: string, v?: unknown): D3SvgLike; style(a: string, v?: string): D3SvgLike };
+        const svg = (d3.select(container) as unknown as { append(n: string): D3SvgLike })
             .append('svg')
             .attr('width', containerWidth)
             .attr('height', height)
             .attr('class', 'calendar-chart')
             .style('font', '10px sans-serif');
-        
-        const g = svg.append('g')
+        const g = (svg as any).append('g')
             .attr('transform', `translate(${margin.left + calendarOffsetX}, ${margin.top})`);
         
         // Render each year
@@ -316,12 +319,12 @@ export class KnowledgeCalendarChart {
                     .append('text')
                     .attr('class', 'day-label')
                     .attr('x', -5)
-                    .attr('y', (d, i) => (i + 0.5) * (cellSize + 1))
+                    .attr('y', (_d: string, i: number) => (i + 0.5) * (cellSize + 1))
                     .attr('dy', '0.31em')
                     .attr('text-anchor', 'end')
                     .style('fill', 'var(--text-muted)')
                     .style('font-size', '9px')
-                    .text(d => d);
+                    .text((d: string) => d);
             }
             
             // Generate all dates for this year
@@ -361,9 +364,9 @@ export class KnowledgeCalendarChart {
                 .attr('class', 'day-cell')
                 .attr('width', cellSize)
                 .attr('height', cellSize)
-                .attr('x', d => getWeekNumber(d) * weekWidth)
-                .attr('y', d => getMondayFirstDay(d) * (cellSize + 1))
-                .attr('fill', d => {
+                .attr('x', (d: Date) => getWeekNumber(d) * weekWidth)
+                .attr('y', (d: Date) => getMondayFirstDay(d) * (cellSize + 1))
+                .attr('fill', (d: Date) => {
                     const dateKey = d.toISOString().split('T')[0];
                     const dayData = dataMap.get(dateKey);
                     // Use consistent empty cell color
@@ -372,7 +375,7 @@ export class KnowledgeCalendarChart {
                 .attr('rx', 2)
                 .attr('ry', 2)
                 .style('cursor', 'pointer')
-                .on('mouseover', (event, d) => {
+                .on('mouseover', (event: MouseEvent, d: Date) => {
                     const dateKey = d.toISOString().split('T')[0];
                     const dayData = dataMap.get(dateKey);
                     this.showTooltip(event, d, dayData);
@@ -420,6 +423,7 @@ export class KnowledgeCalendarChart {
                 }
             });
         });
+        /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any */
     }
 
     private getObsidianAccentColor(value: number, minValue: number, maxValue: number): string {

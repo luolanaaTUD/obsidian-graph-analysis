@@ -114,19 +114,22 @@ export class KnowledgeEvolutionManager {
             // The file structure is: { knowledgeEvolution: KnowledgeEvolutionData, ... }
             const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/evolution-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content);
+            const data = JSON.parse(content) as unknown;
             
-            if (data?.knowledgeEvolution) {
-                this.data = data.knowledgeEvolution;
-                return this.data;
+            if (data && typeof data === 'object' && 'knowledgeEvolution' in data) {
+                const evo = (data as { knowledgeEvolution: KnowledgeEvolutionData }).knowledgeEvolution;
+                if (evo && typeof evo === 'object') {
+                    this.data = evo;
+                    return this.data;
+                }
             }
             // Fallback: if the file structure is different, try direct access
-            if (data?.timeline && data?.topicPatterns && data?.focusShift) {
+            if (data && typeof data === 'object' && 'timeline' in data && 'topicPatterns' in data && 'focusShift' in data) {
                 this.data = data as KnowledgeEvolutionData;
                 return this.data;
             }
             return null;
-        } catch (error) {
+        } catch {
             // console.warn('No cached knowledge evolution data found:', error);
             return null;
         }
@@ -147,13 +150,13 @@ export class KnowledgeEvolutionManager {
         }
 
         // Create main layout with calendar and AI insights
-        this.createEvolutionLayout();
+        await this.createEvolutionLayout();
     }
 
     private renderPlaceholder(): void {
         const placeholder = this.container.createEl('div', { cls: 'evolution-placeholder' });
         const content = placeholder.createEl('div', { cls: 'placeholder-content' });
-        content.createEl('h3', { text: '📈 Knowledge Evolution Analysis' });
+        content.createEl('h3', { text: '📈 knowledge evolution analysis' });
         content.createEl('p', { text: 'Generate vault analysis to see your knowledge evolution insights.' });
         const features = content.createEl('div', { cls: 'placeholder-features' });
         const items = [
@@ -168,12 +171,12 @@ export class KnowledgeEvolutionManager {
         });
 
         // Still show the calendar even without AI insights
-        this.renderBasicCalendar();
+        void this.renderBasicCalendar();
     }
 
     private async renderBasicCalendar(): Promise<void> {
         const calendarSection = this.container.createEl('div', { cls: 'evolution-calendar-section' });
-        calendarSection.createEl('h3', { text: '📅 Knowledge Activity Calendar' });
+        calendarSection.createEl('h3', { text: '📅 knowledge activity calendar' });
         
         const calendarContainer = calendarSection.createEl('div', { cls: 'calendar-container' });
         
@@ -204,25 +207,25 @@ export class KnowledgeEvolutionManager {
     }
 
     private createInsightsOverview(container: HTMLElement): void {
-        container.createEl('h3', { text: '🧠 Knowledge Evolution Insights' });
+        container.createEl('h3', { text: '🧠 knowledge evolution insights' });
         const grid = container.createEl('div', { cls: 'evolution-insights-grid' });
         this.data!.insights.forEach(insight => {
             const card = grid.createEl('div', { cls: 'evolution-insight-card' });
             card.createEl('h4', { text: insight.title });
             const contentEl = card.createEl('p');
-            MarkdownRenderer.render(this.app, insight.content, contentEl, '', this.markdownComponent);
+            void MarkdownRenderer.render(this.app, insight.content, contentEl, '', this.markdownComponent);
             if (insight.keyPoints.length > 0) {
                 const ul = card.createEl('ul', { cls: 'insight-points' });
                 insight.keyPoints.forEach(point => {
                     const li = ul.createEl('li');
-                    MarkdownRenderer.render(this.app, point, li, '', this.markdownComponent);
+                    void MarkdownRenderer.render(this.app, point, li, '', this.markdownComponent);
                 });
             }
         });
     }
 
     private async createEnhancedCalendar(container: HTMLElement): Promise<void> {
-        container.createEl('h3', { text: '📅 Knowledge Activity Timeline' });
+        container.createEl('h3', { text: '📅 knowledge activity timeline' });
         
         // Add timeline phases overview above calendar
         this.createTimelinePhases(container);
@@ -247,7 +250,7 @@ export class KnowledgeEvolutionManager {
 
     private createTimelinePhases(container: HTMLElement): void {
         const phasesContainer = container.createEl('div', { cls: 'timeline-phases' });
-        phasesContainer.createEl('h4', { text: '📊 Knowledge Development Phases' });
+        phasesContainer.createEl('h4', { text: '📊 knowledge development phases' });
         const timeline = phasesContainer.createEl('div', { cls: 'phases-timeline' });
         this.data!.timeline.phases.forEach(phase => {
             const item = timeline.createEl('div', { cls: 'phase-item' });
@@ -269,7 +272,7 @@ export class KnowledgeEvolutionManager {
 
     private addVelocityOverlay(container: HTMLElement): void {
         const velocityContainer = container.createEl('div', { cls: 'velocity-overlay' });
-        velocityContainer.createEl('h4', { text: '⚡ Learning Velocity Trends' });
+        velocityContainer.createEl('h4', { text: '⚡ learning velocity trends' });
         const trends = velocityContainer.createEl('div', { cls: 'velocity-trends' });
         const trendData = [
             { label: 'Productivity', value: this.data!.timeline.trends.productivity },
@@ -336,7 +339,7 @@ export class KnowledgeEvolutionManager {
         const content = container.createEl('div', { cls: 'focus-shifts-content' });
         content.createEl('h4', { text: this.data!.focusShift.narrative.title });
         const narrativeEl = content.createEl('p');
-                MarkdownRenderer.render(this.app, this.data!.focusShift.narrative.content, narrativeEl, '', this.markdownComponent);
+                void MarkdownRenderer.render(this.app, this.data!.focusShift.narrative.content, narrativeEl, '', this.markdownComponent);
         const timeline = content.createEl('div', { cls: 'shifts-timeline' });
         this.data!.focusShift.shifts.forEach(shift => {
             const item = timeline.createEl('div', { cls: `shift-item ${shift.type}` });
@@ -360,15 +363,15 @@ export class KnowledgeEvolutionManager {
         const content = container.createEl('div', { cls: 'topic-patterns-content' });
         content.createEl('h4', { text: this.data!.topicPatterns.exploration.title });
         const explorationEl = content.createEl('p');
-        MarkdownRenderer.render(this.app, this.data!.topicPatterns.exploration.content, explorationEl, '', this.markdownComponent);
+        void MarkdownRenderer.render(this.app, this.data!.topicPatterns.exploration.content, explorationEl, '', this.markdownComponent);
         const patterns = content.createEl('div', { cls: 'patterns-analysis' });
         const strategyInfo = patterns.createEl('div', { cls: 'strategy-info' });
-        strategyInfo.createEl('h5', { text: 'Learning Strategy' });
+        strategyInfo.createEl('h5', { text: 'Learning strategy' });
         const details = strategyInfo.createEl('div', { cls: 'strategy-details' });
         details.createEl('span', { cls: 'strategy-style', text: `Style: ${this.data!.topicPatterns.strategy.style}` });
         details.createEl('span', { cls: 'strategy-consistency', text: `Consistency: ${this.data!.topicPatterns.strategy.consistency}` });
         const introTimeline = patterns.createEl('div', { cls: 'introduction-timeline' });
-        introTimeline.createEl('h5', { text: 'Topic Introduction Timeline' });
+        introTimeline.createEl('h5', { text: 'Topic introduction timeline' });
         const timelineContainer = introTimeline.createEl('div', { cls: 'introduction-timeline-items' });
         this.data!.topicPatterns.introductionTimeline.forEach(period => {
             const periodEl = timelineContainer.createEl('div', { cls: 'introduction-period' });

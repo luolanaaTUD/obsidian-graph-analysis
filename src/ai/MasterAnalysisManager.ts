@@ -1,17 +1,10 @@
-import { App, Notice, TFile } from 'obsidian';
+import { App, Notice } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { AIModelService } from '../services/AIModelService';
 import { SemanticAnalysisError, getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
 import { KnowledgeStructureData } from './visualization/KnowledgeStructureManager';
-import { 
-    KnowledgeEvolutionData,
-    TimelineAnalysis,
-    TopicPatternsAnalysis,
-    FocusShiftAnalysis,
-    EvolutionInsight
-} from './visualization/KnowledgeEvolutionManager';
+import { KnowledgeEvolutionData } from './visualization/KnowledgeEvolutionManager';
 import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
-import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
 import { KDECalculationService } from '../utils/KDECalculationService';
 import { NoteResolver } from '../utils/NoteResolver';
 import { AIContextPreparationService } from '../services/AIContextPreparationService';
@@ -85,6 +78,53 @@ export interface ActionsAnalysisData extends TabAnalysisData {
 
 // DDC Template interfaces - UPDATED for new structured ID system
 
+/** Raw knowledge network from AI (mutable during validation) */
+interface KnowledgeNetworkRaw {
+    bridges?: Array<{ topNotes?: Array<{ title?: string; path?: string }> }>;
+    foundations?: Array<{ topNotes?: Array<{ title?: string; path?: string }> }>;
+    authorities?: Array<{ topNotes?: Array<{ title?: string; path?: string }> }>;
+}
+
+/** Raw structured response for knowledge network */
+interface StructuredKnowledgeNetworkResponse {
+    knowledgeNetwork?: KnowledgeStructureData['knowledgeNetwork'];
+    knowledgeGaps?: string[];
+}
+
+/** Raw structured response for knowledge evolution */
+interface StructuredKnowledgeEvolutionResponse {
+    timeline?: KnowledgeEvolutionData['timeline'];
+    topicPatterns?: KnowledgeEvolutionData['topicPatterns'];
+    focusShift?: KnowledgeEvolutionData['focusShift'];
+    insights?: KnowledgeEvolutionData['insights'];
+}
+
+/** Raw maintenance action from AI */
+interface RawMaintenanceAction {
+    noteId?: string;
+    path?: string;
+    title?: string;
+    reason?: string;
+    priority?: string;
+    action?: string;
+}
+
+/** Raw connection suggestion from AI */
+interface RawConnectionSuggestion {
+    sourceId?: string;
+    targetId?: string;
+    reason?: string;
+    confidence?: number;
+}
+
+/** Raw structured response for recommended actions */
+interface StructuredActionsResponse {
+    maintenance?: RawMaintenanceAction[];
+    connections?: RawConnectionSuggestion[];
+    learningPaths?: KnowledgeActionsData['learningPaths'];
+    organization?: KnowledgeActionsData['organization'];
+}
+
 export class MasterAnalysisManager {
     private app: App;
     private aiService: AIModelService;
@@ -105,8 +145,8 @@ export class MasterAnalysisManager {
             } catch {
                 // Directory might already exist
             }
-        } catch (error) {
-            // console.error('Failed to create responses directory:', error);
+        } catch {
+            // Directory creation may fail if it already exists
         }
         this.responsesDirectoryEnsured = true;
     }
@@ -120,7 +160,7 @@ export class MasterAnalysisManager {
             // Look for the tab-specific analysis in the responses directory
             const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/${tabName}-analysis.json`;
             const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content);
+            const data = JSON.parse(content) as TabAnalysisData & { isOutdated?: boolean };
 
             // Check if cached analysis matches current vault state (use preloaded data to avoid re-read)
             const currentAnalysisData = preloadedVaultData !== undefined ? preloadedVaultData : await this.loadVaultAnalysisData();
@@ -132,9 +172,9 @@ export class MasterAnalysisManager {
             }
             
             return data;  // Always return cached data if it exists
-        } catch (error) {
+        } catch (err: unknown) {
             // Check if this is a file not found error (ENOENT)
-            if (error && typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'ENOENT') {
+            if (err && typeof err === 'object' && err !== null && 'code' in err && (err as { code?: string }).code === 'ENOENT') {
                 // console.log(`No cached ${tabName} analysis found yet. This is normal for first-time use.`);
             } else {
                 // Log other unexpected errors
@@ -155,8 +195,8 @@ export class MasterAnalysisManager {
         try {
             const filePath = this.getVaultAnalysisFilePath();
             const content = await this.app.vault.adapter.read(filePath);
-            return JSON.parse(content);
-        } catch (error) {
+            return JSON.parse(content) as VaultAnalysisData;
+        } catch {
             return null;
         }
     }
@@ -168,57 +208,59 @@ export class MasterAnalysisManager {
     /**
      * Validate that network node data contains real notes from the vault
      */
-    private validateNetworkNodeData(knowledgeNetwork: any, analysisData: VaultAnalysisData): void {
-        const vaultNotes = new Map(analysisData.results.map(note => [note.path, note]));
-        const vaultTitles = new Set(analysisData.results.map(note => note.title));
-        
-        const categories = ['bridges', 'foundations', 'authorities'];
+    private validateNetworkNodeData(knowledgeNetwork: KnowledgeNetworkRaw, analysisData: VaultAnalysisData): void {
+        const vaultNotes = new Map(analysisData.results.map(n => [n.path, n]));
+        const vaultTitles = new Set(analysisData.results.map(n => n.title));
+
+        const categories: (keyof KnowledgeNetworkRaw)[] = ['bridges', 'foundations', 'authorities'];
         let issuesFound = 0;
-        
-        categories.forEach(category => {
-            if (knowledgeNetwork[category] && Array.isArray(knowledgeNetwork[category])) {
-                knowledgeNetwork[category].forEach((domain: any, domainIndex: number) => {
-                    if (domain.topNotes && Array.isArray(domain.topNotes)) {
-                        domain.topNotes.forEach((note: any, noteIndex: number) => {
-                            // Check for dummy/example data
-                            if (note.title === 'Note Title' || 
-                                note.path === 'path/to/note.md' ||
-                                note.title?.includes('Example') ||
-                                note.title?.includes('Sample')) {
-                                // console.warn(`⚠️  Dummy note detected in ${category}[${domainIndex}].topNotes[${noteIndex}]: "${note.title}"`);
-                                issuesFound++;
-                                return;
-                            }
-                            
-                            // Validate note exists in vault
-                            if (!vaultNotes.has(note.path)) {
-                                // console.warn(`⚠️  Note path not found in vault: "${note.path}" (title: "${note.title}")`);
-                                
-                                // Try to find by title
-                                if (vaultTitles.has(note.title)) {
-                                    const matchingNote = analysisData.results.find(n => n.title === note.title);
-                                    if (matchingNote) {
-                                        // console.log(`✅ Found note by title, correcting path: "${note.path}" → "${matchingNote.path}"`);
-                                        note.path = matchingNote.path;
-                                    }
-                                } else {
-                                    // console.warn(`❌ Note title also not found in vault: "${note.title}"`);
-                                    issuesFound++;
-                                }
-                            } else {
-                                // Validate title matches path
-                                const vaultNote = vaultNotes.get(note.path);
-                                if (vaultNote && vaultNote.title !== note.title) {
-                                    // console.warn(`⚠️  Title mismatch for path "${note.path}": AI says "${note.title}", vault has "${vaultNote.title}"`);
-                                    // Correct the title
-                                    note.title = vaultNote.title;
-                                }
-                            }
-                        });
+
+        for (const category of categories) {
+            const categoryData = knowledgeNetwork[category];
+            if (!categoryData || !Array.isArray(categoryData)) continue;
+
+            for (let domainIndex = 0; domainIndex < categoryData.length; domainIndex++) {
+                const domain = categoryData[domainIndex];
+                const topNotes = domain?.topNotes;
+                if (!topNotes || !Array.isArray(topNotes)) continue;
+
+                for (let noteIndex = 0; noteIndex < topNotes.length; noteIndex++) {
+                    const note = topNotes[noteIndex] as { title?: string; path?: string };
+                    const noteTitle = note?.title ?? '';
+                    const notePath = note?.path ?? '';
+
+                    // Check for dummy/example data
+                    if (
+                        noteTitle === 'Note Title' ||
+                        notePath === 'path/to/note.md' ||
+                        noteTitle.includes('Example') ||
+                        noteTitle.includes('Sample')
+                    ) {
+                        issuesFound++;
+                        continue;
                     }
-                });
+
+                    // Validate note exists in vault
+                    if (!vaultNotes.has(notePath)) {
+                        // Try to find by title
+                        if (vaultTitles.has(noteTitle)) {
+                            const matchingNote = analysisData.results.find(n => n.title === noteTitle);
+                            if (matchingNote) {
+                                note.path = matchingNote.path;
+                            }
+                        } else {
+                            issuesFound++;
+                        }
+                    } else {
+                        // Validate title matches path
+                        const vaultNote = vaultNotes.get(notePath);
+                        if (vaultNote && vaultNote.title !== noteTitle) {
+                            note.title = vaultNote.title;
+                        }
+                    }
+                }
             }
-        });
+        }
         
         if (issuesFound > 0) {
             // console.warn(`🔍 Found ${issuesFound} note data issues. Check console for details.`);
@@ -285,7 +327,7 @@ ${formattedContext}`;
             const responseSchema = this.aiService.createKnowledgeNetworkSchema();
             
             // Use the new structured output method
-            const response = await this.aiService.generateStructuredAnalysis<any>(
+            const response = await this.aiService.generateStructuredAnalysis<unknown>(
                 prompt,
                 responseSchema,
                 8192, // maxOutputTokens
@@ -320,29 +362,26 @@ ${formattedContext}`;
     /**
      * NEW: Parse structured knowledge network response (replaces old parseKnowledgeStructure)
      */
-    private parseStructuredKnowledgeNetwork(structuredResponse: any, analysisData: VaultAnalysisData): KnowledgeStructureData {
+    private parseStructuredKnowledgeNetwork(structuredResponse: unknown, analysisData: VaultAnalysisData): KnowledgeStructureData {
         try {
-            // The response is already parsed JSON from structured output
-            const knowledgeNetwork = structuredResponse.knowledgeNetwork || {
+            const resp = structuredResponse as StructuredKnowledgeNetworkResponse;
+            const knowledgeNetwork = (resp.knowledgeNetwork ?? {
                 bridges: [],
                 foundations: [],
                 authorities: []
-            };
-            
+            }) as KnowledgeNetworkRaw;
+
             // Validate note data against vault analysis
             this.validateNetworkNodeData(knowledgeNetwork, analysisData);
-            
-            // Extract knowledge gaps
-            const knowledgeGaps = structuredResponse.knowledgeGaps || [];
-            
+
+            const knowledgeGaps = resp.knowledgeGaps ?? [];
+
             return {
-                knowledgeNetwork,
+                knowledgeNetwork: knowledgeNetwork as KnowledgeStructureData['knowledgeNetwork'],
                 gaps: knowledgeGaps
             };
-        } catch (error) {
-            // console.error('Error parsing structured knowledge network:', error);
-            // console.error('Structured response:', structuredResponse);
-            const errorMessage = error instanceof Error ? error.message : String(error);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
             throw new Error(`Failed to parse structured knowledge network: ${errorMessage}`);
         }
     }
@@ -360,8 +399,8 @@ ${formattedContext}`;
             const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/${tabName}-analysis.json`;
             await this.app.vault.adapter.write(filePath, JSON.stringify(data, null, 2));
             // console.log(`${tabName} analysis cached successfully in responses directory`);
-        } catch (error) {
-            // console.error(`Failed to cache ${tabName} analysis:`, error);
+        } catch {
+            // Cache write may fail; caller can retry
         }
     }
 
@@ -415,7 +454,7 @@ ${formattedContext}`;
             const responseSchema = this.aiService.createKnowledgeEvolutionSchema();
 
             // Use the structured output method
-            const response = await this.aiService.generateStructuredAnalysis<any>(
+            const response = await this.aiService.generateStructuredAnalysis<unknown>(
                 prompt,
                 responseSchema,
                 8192, // maxOutputTokens
@@ -450,28 +489,28 @@ ${formattedContext}`;
     /**
      * Parse structured knowledge evolution response
      */
-    private parseStructuredKnowledgeEvolution(structuredResponse: any, analysisData: VaultAnalysisData): KnowledgeEvolutionData {
+    private parseStructuredKnowledgeEvolution(structuredResponse: unknown, _analysisData: VaultAnalysisData): KnowledgeEvolutionData {
         try {
-            // The response is already parsed JSON from structured output
-            const timeline = structuredResponse.timeline || {
+            const resp = structuredResponse as StructuredKnowledgeEvolutionResponse;
+            const timeline = resp.timeline ?? {
                 narrative: { title: '', content: '', keyPoints: [] },
                 phases: [],
                 trends: { productivity: 'stable', diversity: 'stable', depth: 'stable' }
             };
 
-            const topicPatterns = structuredResponse.topicPatterns || {
+            const topicPatterns = resp.topicPatterns ?? {
                 exploration: { title: '', content: '', keyPoints: [] },
                 introductionTimeline: [],
                 strategy: { style: 'balanced', consistency: 'mixed' }
             };
 
-            const focusShift = structuredResponse.focusShift || {
+            const focusShift = resp.focusShift ?? {
                 narrative: { title: '', content: '', keyPoints: [] },
                 shifts: [],
                 patterns: { frequency: 'occasional', direction: 'expanding' }
             };
 
-            const insights = structuredResponse.insights || [];
+            const insights = resp.insights ?? [];
 
             return {
                 timeline,
@@ -479,10 +518,8 @@ ${formattedContext}`;
                 focusShift,
                 insights
             };
-        } catch (error) {
-            // console.error('Error parsing structured knowledge evolution:', error);
-            // console.error('Structured response:', structuredResponse);
-            const errorMessage = error instanceof Error ? error.message : String(error);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
             throw new Error(`Failed to parse structured knowledge evolution: ${errorMessage}`);
         }
     }
@@ -557,7 +594,7 @@ ${formattedContext}`;
             const responseSchema = this.aiService.createRecommendedActionsSchema();
 
             // Use the structured output method
-            const response = await this.aiService.generateStructuredAnalysis<any>(
+            const response = await this.aiService.generateStructuredAnalysis<unknown>(
                 prompt,
                 responseSchema,
                 8192, // maxOutputTokens
@@ -592,52 +629,54 @@ ${formattedContext}`;
     /**
      * Parse structured recommended actions response
      */
-    private parseStructuredRecommendedActions(structuredResponse: any, analysisData: VaultAnalysisData): KnowledgeActionsData {
+    private parseStructuredRecommendedActions(structuredResponse: unknown, _analysisData: VaultAnalysisData): KnowledgeActionsData {
         try {
-            // The response is already parsed JSON from structured output
-            const maintenance = structuredResponse.maintenance || [];
-            const connections = structuredResponse.connections || [];
-            const learningPaths = structuredResponse.learningPaths || [];
-            const organization = structuredResponse.organization || [];
+            const resp = structuredResponse as StructuredActionsResponse;
+            const maintenance = resp.maintenance ?? [];
+            const connections = resp.connections ?? [];
+            const learningPaths = resp.learningPaths ?? [];
+            const organization = resp.organization ?? [];
 
             // Validate and normalize paths using NoteResolver (single source of truth)
-            const validatedMaintenance = maintenance.map((action: any) => {
-                const noteId = NoteResolver.resolveToPath(
-                    this.app,
-                    action.noteId || action.path || action.title || ''
-                );
-                return {
-                    noteId,
-                    title: action.title || '',
-                    reason: action.reason || '',
-                    priority: (action.priority === 'high' || action.priority === 'medium' || action.priority === 'low')
-                        ? action.priority
-                        : ('medium' as 'high' | 'medium' | 'low'),
-                    action: action.action || ''
-                };
-            }).filter((action: any) => action.noteId);
+            const validatedMaintenance = maintenance
+                .map((action: RawMaintenanceAction) => {
+                    const noteId = NoteResolver.resolveToPath(
+                        this.app,
+                        action.noteId ?? action.path ?? action.title ?? ''
+                    );
+                    return {
+                        noteId,
+                        title: action.title ?? '',
+                        reason: action.reason ?? '',
+                        priority: (action.priority === 'high' || action.priority === 'medium' || action.priority === 'low')
+                            ? action.priority
+                            : ('medium' as 'high' | 'medium' | 'low'),
+                        action: action.action ?? ''
+                    };
+                })
+                .filter((a): a is typeof a & { noteId: string } => Boolean(a.noteId));
 
-            const validatedConnections = connections.map((conn: any) => {
-                const sourceId = NoteResolver.resolveToPath(this.app, conn.sourceId || '');
-                const targetId = NoteResolver.resolveToPath(this.app, conn.targetId || '');
-                return {
-                    sourceId,
-                    targetId,
-                    reason: conn.reason || '',
-                    confidence: Math.max(0, Math.min(1, conn.confidence || 0.5))
-                };
-            }).filter((conn: any) => conn.sourceId && conn.targetId && conn.sourceId !== conn.targetId);
+            const validatedConnections = connections
+                .map((conn: RawConnectionSuggestion) => {
+                    const sourceId = NoteResolver.resolveToPath(this.app, conn.sourceId ?? '');
+                    const targetId = NoteResolver.resolveToPath(this.app, conn.targetId ?? '');
+                    return {
+                        sourceId,
+                        targetId,
+                        reason: conn.reason ?? '',
+                        confidence: Math.max(0, Math.min(1, conn.confidence ?? 0.5))
+                    };
+                })
+                .filter(c => Boolean(c.sourceId && c.targetId && c.sourceId !== c.targetId));
 
             return {
                 maintenance: validatedMaintenance,
                 connections: validatedConnections,
-                learningPaths: learningPaths, // Keep as-is for now
-                organization: organization // Keep as-is for now
+                learningPaths,
+                organization
             };
-        } catch (error) {
-            // console.error('Error parsing structured recommended actions:', error);
-            // console.error('Structured response:', structuredResponse);
-            const errorMessage = error instanceof Error ? error.message : String(error);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
             throw new Error(`Failed to parse structured recommended actions: ${errorMessage}`);
         }
     }

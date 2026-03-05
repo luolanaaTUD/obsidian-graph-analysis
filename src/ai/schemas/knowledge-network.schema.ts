@@ -44,7 +44,7 @@ export interface KnowledgeNetworkAnalysis {
 /**
  * Schema for knowledge network analysis using Google Gemini structured output
  */
-export function createKnowledgeNetworkSchema(): any {
+export function createKnowledgeNetworkSchema(): unknown {
     return {
         type: Type.OBJECT,
         properties: {

@@ -34,13 +34,13 @@ export class AISummaryManager {
 
         // Add text label
         this.statusBarItem.createEl('span', {
-            text: 'AI Summary',
+            text: 'AI summary',
             cls: 'status-bar-item-text'
         });
 
         // Add click handler
         this.statusBarItem.addEventListener('click', () => {
-            this.generateAISummaryForCurrentNote();
+            void this.generateAISummaryForCurrentNote();
         });
 
         return this.statusBarItem;
@@ -49,7 +49,7 @@ export class AISummaryManager {
     public async generateAISummaryForCurrentNote(): Promise<void> {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile || activeFile.extension !== 'md') {
-            new Notice('No active markdown file to summarize');
+            new Notice('No active Markdown file to summarize');
             return;
         }
 
@@ -153,7 +153,7 @@ For the note, provide:
             }
 
             // Extract the result (single object, not array)
-            const analysis = response!.result;
+            const analysis = response.result;
             const wordCount = content.split(/\s+/).length;
 
             // Format the summary text for display
@@ -203,7 +203,12 @@ For the note, provide:
     }
 
     private displayAISummary(summary: string, originalFileName: string): void {
-        const { displayFormat, writeFormat } = JSON.parse(summary);
+        const parsed = JSON.parse(summary) as unknown;
+        if (!parsed || typeof parsed !== 'object' || !('displayFormat' in parsed) || !('writeFormat' in parsed)) {
+            new Notice('Invalid summary format');
+            return;
+        }
+        const { displayFormat, writeFormat } = parsed as { displayFormat: string; writeFormat: string };
         const modal = new AISummaryModal(this.app, displayFormat, writeFormat, originalFileName);
         modal.open();
     }
@@ -294,8 +299,8 @@ class AISummaryModal extends Modal {
 
             new Notice('Summary added to note');
             this.close();
-        } catch (error) {
-            // console.error('Failed to write summary to note:', error);
+        } catch {
+            // console.error('Failed to write summary to note');
             new Notice('Failed to write summary to note');
         }
     }
@@ -329,7 +334,7 @@ class AISummaryModal extends Modal {
                 });
             } else {
                 const p = summaryContainer.createEl('p', { cls: 'ai-summary-text' });
-                MarkdownRenderer.render(this.app, line, p, '', this.markdownComponent);
+                void MarkdownRenderer.render(this.app, line, p, '', this.markdownComponent);
             }
         });
         
@@ -338,10 +343,10 @@ class AISummaryModal extends Modal {
         });
         
         const writeButton = buttonContainer.createEl('button', { 
-            text: 'Add to Note',
+            text: 'Add to note',
             cls: 'mod-cta'
         });
-        writeButton.addEventListener('click', () => this.writeToNote());
+        writeButton.addEventListener('click', () => void this.writeToNote());
         
         const closeButton = buttonContainer.createEl('button', { 
             text: 'Close'

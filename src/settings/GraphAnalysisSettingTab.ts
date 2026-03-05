@@ -15,15 +15,15 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
         containerEl.empty();
 
         // Exclude Notes from Analysis: title + one rounded container (Exclude Folders | Exclude Tags | Statistics)
-        containerEl.createEl('h3', { text: 'Exclude Notes from Analysis', cls: 'graph-settings-section-title' });
+        new Setting(containerEl).setName("Exclude notes from analysis").setHeading();
         const exclusionContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 
         new Setting(exclusionContainer)
             .setClass('graph-settings-item')
-            .setName('Exclude Folders')
-            .setDesc('Use folder paths like "Archive", "Templates", "Private/Personal"')
+            .setName('Exclude folders')
+            .setDesc('Use folder paths like "archive", "templates", "private/personal"')
             .addText(text => text
-                .setPlaceholder('Archive,Templates,Private/Personal')
+                .setPlaceholder('Archive,templates,private/personal')
                 .setValue(this.plugin.settings.excludeFolders.join(','))
                 .onChange(async (value) => {
                     this.plugin.settings.excludeFolders = value.split(',').map(s => s.trim()).filter(s => s);
@@ -33,10 +33,10 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
 
         new Setting(exclusionContainer)
             .setClass('graph-settings-item')
-            .setName('Exclude Tags')
+            .setName('Exclude tags')
             .setDesc('Use tag names without # like "private", "draft", "archive"')
             .addText(text => text
-                .setPlaceholder('private,draft,archive')
+                .setPlaceholder('Private,draft,archive')
                 .setValue(this.plugin.settings.excludeTags.join(','))
                 .onChange(async (value) => {
                     this.plugin.settings.excludeTags = value.split(',').map(s => s.trim()).filter(s => s);
@@ -48,24 +48,26 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
         this.createExclusionStatsSection(exclusionContainer);
 
         // LLM Model Configuration: title + one rounded container
-        containerEl.createEl('h3', { text: 'LLM Model Configuration', cls: 'graph-settings-section-title' });
+        new Setting(containerEl).setName("Llm model configuration").setHeading();
         const apiContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 
         let apiKeyTextComponent: { inputEl: HTMLInputElement };
         new Setting(apiContainer)
             .setClass('graph-settings-item')
-            .setName('Gemini API Key')
-            .setDesc(createFragment((frag: DocumentFragment) => {
-                frag.appendText('Your Google Gemini API key. ');
-                const link = frag.createEl('a', {
-                    text: 'Get an API key',
-                    href: 'https://aistudio.google.com/apikey',
-                });
+            .setName('Gemini API key')
+            .setDesc((() => {
+                const frag = document.createDocumentFragment();
+                frag.append(document.createTextNode('Your Google Gemini API key. '));
+                const link = document.createElement('a');
+                link.textContent = 'Get an API key';
+                link.href = 'https://aistudio.google.com/apikey';
                 link.setAttribute('target', '_blank');
                 link.setAttribute('rel', 'noopener');
-            }))
+                frag.append(link);
+                return frag;
+            })())
             .addText(text => {
-                text.setPlaceholder('Enter your Gemini API key')
+                text.setPlaceholder('Enter your gemini API key')
                     .setValue(this.plugin.settings.geminiApiKey)
                     .onChange(async (value) => {
                         this.plugin.settings.geminiApiKey = value;
@@ -123,12 +125,12 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                 const btn = statsContainer.createEl('button', { text: 'Show excluded files', cls: 'mod-cta' });
                 btn.addEventListener('click', () => this.showExcludedFilesList());
             }
-        } catch (error) {
+        } catch {
             this.exclusionStatsEl.createDiv({ 
                 text: 'Error calculating exclusion statistics',
                 cls: 'stat-error'
             });
-            // console.error('Error calculating exclusion statistics:', error);
+            // console.error('Error calculating exclusion statistics');
         }
     }
 
@@ -154,7 +156,7 @@ class ExcludedFilesModal extends Modal {
         const { contentEl } = this;
         contentEl.empty();
 
-        contentEl.createEl('h2', { text: 'Excluded Files' });
+        contentEl.createEl('h2', { text: 'Excluded files' });
         
         if (this.excludedFiles.length === 0) {
             contentEl.createDiv({ text: 'No files are currently excluded.' });

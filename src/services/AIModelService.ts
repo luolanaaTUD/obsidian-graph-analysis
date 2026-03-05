@@ -92,7 +92,7 @@ export class AIModelService {
      */
     public async generateStructuredAnalysis<T>(
         prompt: string,
-        responseSchema: any,
+        responseSchema: unknown,
         maxOutputTokens: number = 8192*2,
         temperature: number = 0.3, // more accurate results with lower temperature
         topP: number = 0.72
@@ -194,7 +194,7 @@ export class AIModelService {
      */
     public async generateSemanticAnalysis<T>(
         prompt: string,
-        responseSchema: any,
+        responseSchema: unknown,
         maxOutputTokens: number = 8192,
         temperature: number = 0.3,
         topP: number = 0.72,
@@ -285,42 +285,42 @@ export class AIModelService {
     /**
      * Create response schema for knowledge network analysis
      */
-    public createKnowledgeNetworkSchema(): any {
+    public createKnowledgeNetworkSchema(): unknown {
         return createKnowledgeNetworkSchema();
     }
 
     /**
      * Create response schema for vault semantic analysis batch processing
      */
-    public createVaultSemanticAnalysisSchema(expectedResultCount: number): any {
+    public createVaultSemanticAnalysisSchema(expectedResultCount: number): unknown {
         return createVaultSemanticAnalysisSchema(expectedResultCount);
     }
 
     /**
      * Create response schema for individual note summary analysis
      */
-    public createNoteSummarySchema(): any {
+    public createNoteSummarySchema(): unknown {
         return createNoteSummarySchema();
     }
 
     /**
      * Create response schema for knowledge evolution analysis
      */
-    public createKnowledgeEvolutionSchema(): any {
+    public createKnowledgeEvolutionSchema(): unknown {
         return createKnowledgeEvolutionSchema();
     }
 
     /**
      * Create response schema for recommended actions analysis
      */
-    public createRecommendedActionsSchema(): any {
+    public createRecommendedActionsSchema(): unknown {
         return createRecommendedActionsSchema();
     }
 
     /**
      * Create response schema for domain classification with knowledge domain validation
      */
-    public createDomainClassificationSchema(availableSubdivisions: KnowledgeSubdivision[]): any {
+    public createDomainClassificationSchema(availableSubdivisions: KnowledgeSubdivision[]): unknown {
         return createDomainClassificationSchema(availableSubdivisions);
     }
 
