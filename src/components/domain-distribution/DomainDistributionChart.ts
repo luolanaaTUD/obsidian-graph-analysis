@@ -152,12 +152,12 @@ export class DomainDistributionChart {
         }
     }
     
-    public async render(): Promise<void> {
+    public render(): Promise<void> {
         this.container.empty();
         
         if (!this.data || !this.data.domainHierarchy || this.data.domainHierarchy.length === 0) {
             this.renderPlaceholder();
-            return;
+            return Promise.resolve();
         }
 
         // Create chart container with proper CSS class for responsive sizing
@@ -165,6 +165,7 @@ export class DomainDistributionChart {
 
         // Render sunburst chart
         this.renderSunburstChart(chartContainer);
+        return Promise.resolve();
     }
 
     private renderPlaceholder(): void {

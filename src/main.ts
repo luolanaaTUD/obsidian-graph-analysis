@@ -196,7 +196,7 @@ export default class GraphAnalysisPlugin extends Plugin {
         });
     }
 
-    private async initializeWasmModule() {
+    private initializeWasmModule(): void {
         if (this.wasmLoadingPromise) return;
 
         this.wasmLoadingPromise = (async () => {

@@ -34,7 +34,6 @@ interface ConnectionSubGraphOptions {
  * connection nodes and links. Users can delete nodes/links and then commit
  * the remaining suggestions to their vault via the "Add to Main Graph" button.
  */
-/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/unbound-method -- D3 Selection types; zoom.transform needs bind */
 export class ConnectionSubGraph {
     private app: App;
     private container: HTMLElement;
@@ -178,7 +177,7 @@ export class ConnectionSubGraph {
                 this.svgGroup.attr('transform', ev.transform.toString());
             });
         (this.svg as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>).call(this.zoomBehavior);
-        (this.svg as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>).call(this.zoomBehavior.transform, d3.zoomIdentity.scale(scale));
+        (this.svg as unknown as d3.Selection<SVGSVGElement, unknown, null, undefined>).call(this.zoomBehavior.transform.bind(this.zoomBehavior), d3.zoomIdentity.scale(scale));
 
         // Reset view - icon only, no button chrome (div avoids default button styling)
         const resetBtn = svgWrapper.createEl('div', { cls: 'subgraph-reset-view-btn' });
@@ -568,8 +567,8 @@ export class ConnectionSubGraph {
         // Rebind links
         const linksGroup = this.svgGroup.select('.subgraph-links');
         const linkKey = (d: SubGraphLink): string => {
-            const sid = typeof d.source === 'string' ? d.source : (d.source as SubGraphNode).id;
-            const tid = typeof d.target === 'string' ? d.target : (d.target as SubGraphNode).id;
+            const sid = typeof d.source === 'string' ? d.source : d.source.id;
+            const tid = typeof d.target === 'string' ? d.target : d.target.id;
             return `${sid}-${tid}`;
         };
         const linksData = (linksGroup as unknown as d3.Selection<SVGGElement, unknown, SVGGElement, unknown>).selectAll<SVGLineElement, SubGraphLink>('line').data(activeLinks, linkKey);
@@ -694,4 +693,3 @@ export class ConnectionSubGraph {
         }
     }
 }
-/* eslint-enable @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/unbound-method */
