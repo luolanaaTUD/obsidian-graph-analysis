@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method -- D3 zoom.transform requires .call with bound method */
 import { App, Notice, TFile, setIcon } from 'obsidian';
 import * as d3 from 'd3';
 import * as ss from 'simple-statistics';
@@ -1508,12 +1507,13 @@ export class GraphView {
             return;
         }
         
+        const zoomTransform = this.zoom.transform.bind(this.zoom);
         if (animate) {
             this.svg.transition()
                 .duration(this.ANIMATION.RECENTER_DURATION)
-                .call(this.zoom.transform, transform);
+                .call(zoomTransform, transform);
         } else {
-            this.svg.call(this.zoom.transform, transform);
+            this.svg.call(zoomTransform, transform);
         }
     }
     
@@ -2300,5 +2300,4 @@ export class GraphView {
             }
         });
     }
-}
-/* eslint-enable @typescript-eslint/unbound-method */ 
+} 

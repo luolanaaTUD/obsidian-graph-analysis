@@ -156,7 +156,7 @@ export class CentralityKDEChart {
             .tickValues(tickValues)
             .tickFormat(d => {
                 // Show simplified label (e.g., "0.00" instead of "0.00-0.01")
-                const range = String(d);
+                const range = typeof d === 'string' ? d : (typeof d === 'number' ? String(d) : '');
                 return range.split('-')[0] ?? range;
             });
 
@@ -183,7 +183,7 @@ export class CentralityKDEChart {
         // Add Y axis
         const yAxis = d3.axisLeft(yScale)
             .ticks(Math.min(10, maxCount))
-            .tickFormat(d => d.toString());
+            .tickFormat(d => (typeof d === 'number' ? String(d) : ''));
 
         const yAxisGroup = g.append('g')
             .call(yAxis);
