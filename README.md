@@ -2,7 +2,9 @@
 
 An [Obsidian](https://obsidian.md) plugin that turns your vault into a knowledge graph, then feeds those graph-theory metrics to AI — giving it structured, quantitative context instead of raw note content. The result: deeper insights into how your knowledge is organized, how it evolves, and what to do next.
 
-![demo](https://github.com/user-attachments/assets/5cee8e3b-36ac-4522-8a03-864227389e88)
+Open the plugin by clicking the plugin icon <img src="docs/images/waypoints-icon.svg" alt="network icon" width="20" height="20" style="vertical-align: middle" /> in the left ribbon.
+
+<video src="https://github.com/user-attachments/assets/5cee8e3b-36ac-4522-8a03-864227389e88" controls width="800" muted loop></video>
 
 
 ## Why Graph Theory + AI?
@@ -42,7 +44,7 @@ The graph renders your vault as a network — notes are nodes, links are edges. 
 - **Hover**: Highlights adjacent connections and shows centrality scores
 - **Drag**: Reposition nodes; the force layout updates in real time
 
-![Graph View](docs/images/graph-view.png)
+<img src="docs/images/graph-view.png" alt="Graph View" width="800" loading="lazy" />
 
 ## Vault Analysis
 
@@ -52,7 +54,7 @@ Open the **Vault Analysis** modal from the status bar or command palette. The pl
 
 The foundation layer. The AI processes each note alongside its graph metrics and produces:
 
-![Semantic Analysis](docs/images/semantic-analysis.png)
+<img src="docs/images/semantic-analysis.png" alt="Semantic Analysis" width="800" loading="lazy" />
 
 - **Summary** — One-sentence description of the note's core concept
 - **Keywords** — 3–6 key terms
@@ -64,7 +66,7 @@ Results are searchable, paginated, and update incrementally — only changed or 
 
 Reveals how your knowledge is organized by combining domain analysis with graph topology.
 
-![Knowledge Structure](docs/images/knowledge-structure.png)
+<img src="docs/images/knowledge-structure.png" alt="Knowledge Structure" width="800" loading="lazy" />
 
 - **Domain Distribution** — Sunburst chart of knowledge domains across your vault
 - **Network Analysis** — KDE centrality distributions plus AI-identified Knowledge Bridges (high betweenness), Foundations (high closeness), and Authorities (high eigenvector)
@@ -74,7 +76,7 @@ Reveals how your knowledge is organized by combining domain analysis with graph 
 
 Tracks how your vault grows and shifts over time.
 
-![Knowledge Evolution](docs/images/knowledge-evolution.png)
+<img src="docs/images/knowledge-evolution.png" alt="Knowledge Evolution" width="800" loading="lazy" />
 
 - **Development Timeline** — Calendar heatmap of note creation with AI-generated phases and narrative
 - **Topic Introduction Patterns** — When new topics and domains first appeared
@@ -84,7 +86,7 @@ Tracks how your vault grows and shifts over time.
 
 Turns analysis into concrete next steps.
 
-![Recommended Actions](docs/images/recommended-actions.png)
+<img src="docs/images/recommended-actions.png" alt="Recommended Actions" width="800" loading="lazy" />
 
 - **Network Metrics** — Scatter plots of Inbound vs Outbound links and Betweenness vs Eigenvector centrality
 - **Notes Needing Review** — Priority cards (high / medium / low) for hubs, bridges, and authorities that may be stale or under-connected
