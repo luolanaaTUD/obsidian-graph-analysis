@@ -93,16 +93,17 @@ export class KnowledgeEvolutionManager {
      * Default empty state implementation for when no callback is provided
      */
     private defaultCreateEmptyState(container: HTMLElement, message: string): void {
-        const emptyState = document.createElement('div');
+        const doc = container.ownerDocument;
+        const emptyState = doc.createElement('div');
         emptyState.className = 'network-empty-state';
         container.appendChild(emptyState);
 
-        const iconEl = document.createElement('div');
+        const iconEl = doc.createElement('div');
         iconEl.className = 'network-empty-state-icon';
         emptyState.appendChild(iconEl);
         setIcon(iconEl, 'bar-chart-2');
 
-        const textEl = document.createElement('p');
+        const textEl = doc.createElement('p');
         textEl.className = 'network-empty-state-text';
         textEl.textContent = message;
         emptyState.appendChild(textEl);

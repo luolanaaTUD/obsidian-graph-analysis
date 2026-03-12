@@ -392,7 +392,7 @@ export class ConnectivityScatterChart {
 
         const tooltip = this.container.createEl('div', { cls: 'scatter-tooltip' });
         tooltip.remove(); // Detach from container so we can append to body for positioning
-        document.body.appendChild(tooltip);
+        this.container.ownerDocument.body.appendChild(tooltip);
 
         tooltip.createEl('div', { text: data.title, cls: 'scatter-tooltip-title' });
 
@@ -444,7 +444,7 @@ export class ConnectivityScatterChart {
                     this.options.modal.close();
                 }
                 // Small delay to ensure modal closes before opening note
-                setTimeout(() => {
+                this.container.ownerDocument.defaultView!.setTimeout(() => {
                     void this.app.workspace.openLinkText(path, '', false);
                 }, 100);
             }

@@ -240,8 +240,8 @@ export class CentralityKDEChart {
 
     private showTooltip(event: MouseEvent, range: string, centralityType: string, count: number): void {
         this.hideTooltip();
-
-        const tooltip = document.createElement('div');
+        const doc = this.container.ownerDocument;
+        const tooltip = doc.createElement('div');
         tooltip.className = 'histogram-tooltip';
 
         const centralityName = centralityType.charAt(0).toUpperCase() + centralityType.slice(1);
@@ -252,7 +252,7 @@ export class CentralityKDEChart {
             cls: 'histogram-tooltip-count'
         });
 
-        document.body.appendChild(tooltip);
+        doc.body.appendChild(tooltip);
         this.tooltip = tooltip;
         this.updateTooltipPosition(event);
     }

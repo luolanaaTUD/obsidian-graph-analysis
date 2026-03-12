@@ -63,16 +63,17 @@ export class KnowledgeStructureManager {
      * Default empty state implementation for when no callback is provided
      */
     private defaultCreateEmptyState(container: HTMLElement, message: string): void {
-        const emptyState = document.createElement('div');
+        const doc = container.ownerDocument;
+        const emptyState = doc.createElement('div');
         emptyState.className = 'network-empty-state';
         container.appendChild(emptyState);
 
-        const iconEl = document.createElement('div');
+        const iconEl = doc.createElement('div');
         iconEl.className = 'network-empty-state-icon';
         emptyState.appendChild(iconEl);
         setIcon(iconEl, 'bar-chart-2');
 
-        const textEl = document.createElement('p');
+        const textEl = doc.createElement('p');
         textEl.className = 'network-empty-state-text';
         textEl.textContent = message;
         emptyState.appendChild(textEl);
@@ -462,15 +463,15 @@ export class KnowledgeStructureManager {
             }
         ];
 
-        const tabsContainer = document.createElement('div');
+        const tabsContainer = this.container.ownerDocument.createElement('div');
         tabsContainer.className = 'knowledge-network-tabs-container';
         section.appendChild(tabsContainer);
 
-        const tabBar = document.createElement('div');
+        const tabBar = this.container.ownerDocument.createElement('div');
         tabBar.className = 'knowledge-network-tab-bar';
         tabsContainer.appendChild(tabBar);
 
-        const contentContainer = document.createElement('div');
+        const contentContainer = this.container.ownerDocument.createElement('div');
         contentContainer.className = 'knowledge-network-tab-content';
         tabsContainer.appendChild(contentContainer);
 
@@ -487,7 +488,7 @@ export class KnowledgeStructureManager {
             tabBar.appendChild(tabButton);
             tabButtons.set(tab.id, tabButton);
 
-            const tabPanel = document.createElement('div');
+            const tabPanel = this.container.ownerDocument.createElement('div');
             tabPanel.className = `knowledge-network-tab-panel ${tab.id}${tab.id === activeTabId ? ' active' : ''}`;
             contentContainer.appendChild(tabPanel);
             tabPanels.set(tab.id, tabPanel);
@@ -506,7 +507,7 @@ export class KnowledgeStructureManager {
             if (!panel) return;
 
             if (tab.data.length > 0) {
-                const cardsContainer = document.createElement('div');
+                const cardsContainer = this.container.ownerDocument.createElement('div');
                 cardsContainer.className = 'knowledge-network-cards-container network-cards-container';
                 panel.appendChild(cardsContainer);
 
@@ -515,13 +516,13 @@ export class KnowledgeStructureManager {
                     this.createDomainCard(cardsContainer, tab.id, node);
                 });
             } else {
-                const emptyState = document.createElement('div');
+                const emptyState = this.container.ownerDocument.createElement('div');
                 emptyState.className = 'network-empty-state';
-                const iconEl = document.createElement('div');
+                const iconEl = this.container.ownerDocument.createElement('div');
                 iconEl.className = 'network-empty-state-icon';
                 setIcon(iconEl, tab.icon);
                 emptyState.appendChild(iconEl);
-                const textEl = document.createElement('p');
+                const textEl = this.container.ownerDocument.createElement('p');
                 textEl.className = 'network-empty-state-text';
                 textEl.textContent = `No ${tab.label.toLowerCase()} found.`;
                 emptyState.appendChild(textEl);
@@ -534,15 +535,15 @@ export class KnowledgeStructureManager {
      * Create a tab button element
      */
     private createTabButton(tab: { id: string; label: string; icon: string }, isActive: boolean): HTMLElement {
-        const tabButton = document.createElement('button');
+        const tabButton = this.container.ownerDocument.createElement('button');
         tabButton.className = `knowledge-network-tab ${isActive ? 'active' : ''}`;
         tabButton.setAttribute('data-tab-id', tab.id);
 
-        const iconEl = document.createElement('span');
+        const iconEl = this.container.ownerDocument.createElement('span');
         setIcon(iconEl, tab.icon);
         tabButton.appendChild(iconEl);
 
-        const labelEl = document.createElement('span');
+        const labelEl = this.container.ownerDocument.createElement('span');
         labelEl.textContent = tab.label;
         tabButton.appendChild(labelEl);
 
@@ -573,15 +574,15 @@ export class KnowledgeStructureManager {
      * Create a card for a specific network category
      */
     private createNetworkCard(parent: HTMLElement, type: string, title: string, description: string, nodes: NetworkNode[]): void {
-        const card = document.createElement('div');
+        const card = this.container.ownerDocument.createElement('div');
         card.className = 'network-card';
         parent.appendChild(card);
 
-        const header = document.createElement('div');
+        const header = this.container.ownerDocument.createElement('div');
         header.className = 'network-card-header';
         card.appendChild(header);
 
-        const iconEl = document.createElement('div');
+        const iconEl = this.container.ownerDocument.createElement('div');
         iconEl.className = 'network-card-icon';
         header.appendChild(iconEl);
         
@@ -594,45 +595,45 @@ export class KnowledgeStructureManager {
             setIcon(iconEl, 'orbit');
         }
         
-        const titleContainer = document.createElement('div');
+        const titleContainer = this.container.ownerDocument.createElement('div');
         titleContainer.className = 'network-card-title-container';
         header.appendChild(titleContainer);
 
-        const titleEl = document.createElement('h4');
+        const titleEl = this.container.ownerDocument.createElement('h4');
         titleEl.className = 'network-card-title';
         titleEl.textContent = title;
         titleContainer.appendChild(titleEl);
 
-        const metaContainer = document.createElement('div');
+        const metaContainer = this.container.ownerDocument.createElement('div');
         metaContainer.className = 'network-card-meta';
         titleContainer.appendChild(metaContainer);
 
-        const countEl = document.createElement('span');
+        const countEl = this.container.ownerDocument.createElement('span');
         countEl.className = 'network-card-count';
         countEl.textContent = `${nodes.length} domain${nodes.length !== 1 ? 's' : ''}`;
         metaContainer.appendChild(countEl);
 
-        const descEl = document.createElement('span');
+        const descEl = this.container.ownerDocument.createElement('span');
         descEl.className = 'network-card-description';
         descEl.textContent = description;
         metaContainer.appendChild(descEl);
 
-        const content = document.createElement('div');
+        const content = this.container.ownerDocument.createElement('div');
         content.className = 'network-card-content';
         card.appendChild(content);
 
         // Show top domains (take top 3)
         nodes.slice(0, 3).forEach((node) => {
-            const domainItem = document.createElement('div');
+            const domainItem = this.container.ownerDocument.createElement('div');
             domainItem.className = 'network-domain-item';
             content.appendChild(domainItem);
             
             // Domain header
-            const domainHeader = document.createElement('div');
+            const domainHeader = this.container.ownerDocument.createElement('div');
             domainHeader.className = 'network-domain-header';
             domainItem.appendChild(domainHeader);
             
-            const domainName = document.createElement('strong');
+            const domainName = this.container.ownerDocument.createElement('strong');
             domainName.className = 'network-domain-name';
             domainName.textContent = node.domain;
             domainHeader.appendChild(domainName);
@@ -640,43 +641,43 @@ export class KnowledgeStructureManager {
 
 
             // Domain explanation
-            const explanation = document.createElement('p');
+            const explanation = this.container.ownerDocument.createElement('p');
             explanation.className = 'network-domain-explanation';
             explanation.textContent = node.explanation;
             domainItem.appendChild(explanation);
 
             // Top notes section (restructured to match Connections/Insights pattern)
             if (node.topNotes && node.topNotes.length > 0) {
-                const notesSection = document.createElement('div');
+                const notesSection = this.container.ownerDocument.createElement('div');
                 notesSection.className = 'network-notes-section';
                 domainItem.appendChild(notesSection);
 
                 // Header inside container
-                const notesHeader = document.createElement('div');
+                const notesHeader = this.container.ownerDocument.createElement('div');
                 notesHeader.className = 'network-notes-header';
                 notesSection.appendChild(notesHeader);
 
                 // Add icon (similar style to Connections)
-                const notesIcon = document.createElement('span');
+                const notesIcon = this.container.ownerDocument.createElement('span');
                 notesHeader.appendChild(notesIcon);
                 setIcon(notesIcon, 'file-text');
 
-                const notesText = document.createElement('span');
+                const notesText = this.container.ownerDocument.createElement('span');
                 notesText.textContent = 'Top notes';
                 notesHeader.appendChild(notesText);
 
                 // Notes list inside container (no background/border since container provides it)
-                const notesList = document.createElement('ul');
+                const notesList = this.container.ownerDocument.createElement('ul');
                 notesList.className = 'network-notes-list';
                 notesSection.appendChild(notesList);
                 
                 node.topNotes.slice(0, 3).forEach((note) => {
-                    const noteItem = document.createElement('li');
+                    const noteItem = this.container.ownerDocument.createElement('li');
                     noteItem.className = 'network-note-item';
                     notesList.appendChild(noteItem);
                     
                     // Note link
-                    const noteLink = document.createElement('span');
+                    const noteLink = this.container.ownerDocument.createElement('span');
                     noteLink.className = 'network-note-link';
                     noteLink.textContent = note.title;
                     noteItem.appendChild(noteLink);
@@ -706,28 +707,28 @@ export class KnowledgeStructureManager {
 
             // Connections section (for bridges)
             if (node.connections && node.connections.length > 0) {
-                const connectionsSection = document.createElement('div');
+                const connectionsSection = this.container.ownerDocument.createElement('div');
                 connectionsSection.className = 'network-connections-section';
                 domainItem.appendChild(connectionsSection);
 
-                const connectionsHeader = document.createElement('div');
+                const connectionsHeader = this.container.ownerDocument.createElement('div');
                 connectionsHeader.className = 'network-connections-header';
                 connectionsSection.appendChild(connectionsHeader);
 
-                const connectionsIcon = document.createElement('span');
+                const connectionsIcon = this.container.ownerDocument.createElement('span');
                 connectionsHeader.appendChild(connectionsIcon);
                 setIcon(connectionsIcon, 'link');
 
-                const connectionsText = document.createElement('span');
+                const connectionsText = this.container.ownerDocument.createElement('span');
                 connectionsText.textContent = 'Connections';
                 connectionsHeader.appendChild(connectionsText);
 
-                const connectionsList = document.createElement('div');
+                const connectionsList = this.container.ownerDocument.createElement('div');
                 connectionsList.className = 'network-connections-list';
                 connectionsSection.appendChild(connectionsList);
 
                 node.connections.forEach((connection) => {
-                    const connectionItem = document.createElement('span');
+                    const connectionItem = this.container.ownerDocument.createElement('span');
                     connectionItem.className = 'network-connection-item';
                     connectionItem.textContent = connection;
                     connectionsList.appendChild(connectionItem);
@@ -736,28 +737,28 @@ export class KnowledgeStructureManager {
 
             // Coverage section (for foundations)
             if (node.coverage && node.coverage.length > 0) {
-                const coverageSection = document.createElement('div');
+                const coverageSection = this.container.ownerDocument.createElement('div');
                 coverageSection.className = 'network-coverage-section';
                 domainItem.appendChild(coverageSection);
 
-                const coverageHeader = document.createElement('div');
+                const coverageHeader = this.container.ownerDocument.createElement('div');
                 coverageHeader.className = 'network-coverage-header';
                 coverageSection.appendChild(coverageHeader);
 
-                const coverageIcon = document.createElement('span');
+                const coverageIcon = this.container.ownerDocument.createElement('span');
                 coverageHeader.appendChild(coverageIcon);
                 setIcon(coverageIcon, 'layers');
 
-                const coverageText = document.createElement('span');
+                const coverageText = this.container.ownerDocument.createElement('span');
                 coverageText.textContent = 'Coverage';
                 coverageHeader.appendChild(coverageText);
 
-                const coverageList = document.createElement('div');
+                const coverageList = this.container.ownerDocument.createElement('div');
                 coverageList.className = 'network-coverage-list';
                 coverageSection.appendChild(coverageList);
 
                 node.coverage.forEach((coverage) => {
-                    const coverageItem = document.createElement('span');
+                    const coverageItem = this.container.ownerDocument.createElement('span');
                     coverageItem.className = 'network-coverage-item';
                     coverageItem.textContent = coverage;
                     coverageList.appendChild(coverageItem);
@@ -766,28 +767,28 @@ export class KnowledgeStructureManager {
 
             // Influence section (for authorities)
             if (node.influence && node.influence.length > 0) {
-                const influenceSection = document.createElement('div');
+                const influenceSection = this.container.ownerDocument.createElement('div');
                 influenceSection.className = 'network-influence-section';
                 domainItem.appendChild(influenceSection);
 
-                const influenceHeader = document.createElement('div');
+                const influenceHeader = this.container.ownerDocument.createElement('div');
                 influenceHeader.className = 'network-influence-header';
                 influenceSection.appendChild(influenceHeader);
 
-                const influenceIcon = document.createElement('span');
+                const influenceIcon = this.container.ownerDocument.createElement('span');
                 influenceHeader.appendChild(influenceIcon);
                 setIcon(influenceIcon, 'zap');
 
-                const influenceText = document.createElement('span');
+                const influenceText = this.container.ownerDocument.createElement('span');
                 influenceText.textContent = 'Influence';
                 influenceHeader.appendChild(influenceText);
 
-                const influenceList = document.createElement('div');
+                const influenceList = this.container.ownerDocument.createElement('div');
                 influenceList.className = 'network-influence-list';
                 influenceSection.appendChild(influenceList);
 
                 node.influence.forEach((influence) => {
-                    const influenceItem = document.createElement('span');
+                    const influenceItem = this.container.ownerDocument.createElement('span');
                     influenceItem.className = 'network-influence-item';
                     influenceItem.textContent = influence;
                     influenceList.appendChild(influenceItem);
@@ -796,23 +797,23 @@ export class KnowledgeStructureManager {
 
             // Insights section
             if (node.insights) {
-                const insightsSection = document.createElement('div');
+                const insightsSection = this.container.ownerDocument.createElement('div');
                 insightsSection.className = 'network-insights-section';
                 domainItem.appendChild(insightsSection);
 
-                const insightsHeader = document.createElement('div');
+                const insightsHeader = this.container.ownerDocument.createElement('div');
                 insightsHeader.className = 'network-insights-header';
                 insightsSection.appendChild(insightsHeader);
 
-                const insightsIcon = document.createElement('span');
+                const insightsIcon = this.container.ownerDocument.createElement('span');
                 insightsHeader.appendChild(insightsIcon);
                 setIcon(insightsIcon, 'lightbulb');
 
-                const insightsText = document.createElement('span');
+                const insightsText = this.container.ownerDocument.createElement('span');
                 insightsText.textContent = 'Insights';
                 insightsHeader.appendChild(insightsText);
 
-                const insightsContent = document.createElement('p');
+                const insightsContent = this.container.ownerDocument.createElement('p');
                 insightsContent.className = 'network-insights-content';
                 insightsContent.textContent = node.insights;
                 insightsSection.appendChild(insightsContent);
@@ -866,68 +867,68 @@ export class KnowledgeStructureManager {
     private createDomainCard(parent: HTMLElement, type: string, node: NetworkNode): void {
         // Reuse the domain item rendering logic from createNetworkCard
         // Create a simplified card wrapper
-        const card = document.createElement('div');
+        const card = this.container.ownerDocument.createElement('div');
         card.className = 'network-card network-card-standalone';
         parent.appendChild(card);
 
         // Create a temporary container to reuse existing logic
-        const tempContainer = document.createElement('div');
+        const tempContainer = this.container.ownerDocument.createElement('div');
         card.appendChild(tempContainer);
 
         // Create a single-item array to reuse createNetworkCard logic
         // We'll extract just the domain item part
-        const content = document.createElement('div');
+        const content = this.container.ownerDocument.createElement('div');
         content.className = 'network-card-content network-card-content-padded';
         tempContainer.appendChild(content);
 
         // Domain header
-        const domainHeader = document.createElement('div');
+        const domainHeader = this.container.ownerDocument.createElement('div');
         domainHeader.className = 'network-domain-header';
         content.appendChild(domainHeader);
 
-        const domainName = document.createElement('strong');
+        const domainName = this.container.ownerDocument.createElement('strong');
         domainName.className = 'network-domain-name';
         domainName.textContent = node.domain;
         domainHeader.appendChild(domainName);
 
         // Domain explanation
-        const explanation = document.createElement('p');
+        const explanation = this.container.ownerDocument.createElement('p');
         explanation.className = 'network-domain-explanation';
         explanation.textContent = node.explanation;
         content.appendChild(explanation);
 
         // Top notes section (restructured to match Connections/Insights pattern)
         if (node.topNotes && node.topNotes.length > 0) {
-            const notesSection = document.createElement('div');
+            const notesSection = this.container.ownerDocument.createElement('div');
             notesSection.className = 'network-notes-section';
             content.appendChild(notesSection);
 
             // Header inside container
-            const notesHeader = document.createElement('div');
+            const notesHeader = this.container.ownerDocument.createElement('div');
             notesHeader.className = 'network-notes-header';
             notesSection.appendChild(notesHeader);
 
             // Add icon (similar style to Connections)
-            const notesIcon = document.createElement('span');
+            const notesIcon = this.container.ownerDocument.createElement('span');
             notesHeader.appendChild(notesIcon);
             setIcon(notesIcon, 'file-text');
 
-            const notesText = document.createElement('span');
+            const notesText = this.container.ownerDocument.createElement('span');
             notesText.textContent = 'Top notes';
             notesHeader.appendChild(notesText);
 
             // Notes list inside container (no background/border since container provides it)
-            const notesList = document.createElement('ul');
+            const notesList = this.container.ownerDocument.createElement('ul');
             notesList.className = 'network-notes-list';
             notesSection.appendChild(notesList);
 
             node.topNotes.slice(0, 3).forEach((note) => {
-                const noteItem = document.createElement('li');
+                const noteItem = this.container.ownerDocument.createElement('li');
                 noteItem.className = 'network-note-item';
                 notesList.appendChild(noteItem);
 
                 // Note link
-                const noteLink = document.createElement('span');
+                const noteLink = this.container.ownerDocument.createElement('span');
                 noteLink.className = 'network-note-link';
                 noteLink.textContent = note.title;
                 noteItem.appendChild(noteLink);
@@ -973,23 +974,23 @@ export class KnowledgeStructureManager {
 
         // Insights section
         if (node.insights) {
-            const insightsSection = document.createElement('div');
+            const insightsSection = this.container.ownerDocument.createElement('div');
             insightsSection.className = 'network-insights-section';
             container.appendChild(insightsSection);
 
-            const insightsHeader = document.createElement('div');
+            const insightsHeader = this.container.ownerDocument.createElement('div');
             insightsHeader.className = 'network-insights-header';
             insightsSection.appendChild(insightsHeader);
 
-            const insightsIcon = document.createElement('span');
+            const insightsIcon = this.container.ownerDocument.createElement('span');
             insightsHeader.appendChild(insightsIcon);
             setIcon(insightsIcon, 'lightbulb');
 
-            const insightsText = document.createElement('span');
+            const insightsText = this.container.ownerDocument.createElement('span');
             insightsText.textContent = 'Insights';
             insightsHeader.appendChild(insightsText);
 
-            const insightsContent = document.createElement('div');
+            const insightsContent = this.container.ownerDocument.createElement('div');
             insightsContent.className = 'network-insights-content';
             insightsContent.textContent = node.insights;
             insightsSection.appendChild(insightsContent);
@@ -997,28 +998,28 @@ export class KnowledgeStructureManager {
     }
 
     private addSection(container: HTMLElement, title: string, iconName: string, items: string[]): void {
-        const section = document.createElement('div');
+        const section = this.container.ownerDocument.createElement('div');
         section.className = 'network-connections-section';
         container.appendChild(section);
 
-        const header = document.createElement('div');
+        const header = this.container.ownerDocument.createElement('div');
         header.className = 'network-connections-header';
         section.appendChild(header);
 
-        const icon = document.createElement('span');
+        const icon = this.container.ownerDocument.createElement('span');
         header.appendChild(icon);
         setIcon(icon, iconName);
 
-        const text = document.createElement('span');
+        const text = this.container.ownerDocument.createElement('span');
         text.textContent = title;
         header.appendChild(text);
 
-        const list = document.createElement('div');
+        const list = this.container.ownerDocument.createElement('div');
         list.className = 'network-connections-list';
         section.appendChild(list);
 
         items.forEach((item) => {
-            const itemEl = document.createElement('span');
+            const itemEl = this.container.ownerDocument.createElement('span');
             itemEl.className = 'network-connection-item';
             itemEl.textContent = item;
             list.appendChild(itemEl);

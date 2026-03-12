@@ -132,7 +132,7 @@ export class MasterAnalysisManager {
 
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
-        this.aiService = new AIModelService(settings);
+        this.aiService = new AIModelService(app, settings);
     }
 
     // NEW: Ensure responses directory exists (cached per session)

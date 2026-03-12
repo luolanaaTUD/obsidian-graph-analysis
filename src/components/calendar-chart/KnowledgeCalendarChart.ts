@@ -450,8 +450,8 @@ export class KnowledgeCalendarChart {
 
     private showTooltip(event: MouseEvent, date: Date, dayData: CalendarData | undefined): void {
         this.hideTooltip();
-        
-        const tooltip = document.createElement('div');
+        const doc = this.container.ownerDocument;
+        const tooltip = doc.createElement('div');
         tooltip.className = 'calendar-tooltip';
         
         const dateStr = date.toLocaleDateString('en-US', { 
@@ -468,7 +468,7 @@ export class KnowledgeCalendarChart {
         stats.createEl('div', { text: `${wordCount.toLocaleString()} words written` });
         stats.createEl('div', { text: fileCount > 0 ? `${fileCount} file${fileCount !== 1 ? 's' : ''} modified` : 'No activity' });
         
-        document.body.appendChild(tooltip);
+        doc.body.appendChild(tooltip);
         
         const rect = tooltip.getBoundingClientRect();
         tooltip.style.left = (event.pageX - rect.width / 2) + 'px';
@@ -476,7 +476,7 @@ export class KnowledgeCalendarChart {
     }
 
     private hideTooltip(): void {
-        const tooltip = document.querySelector('.calendar-tooltip');
+        const tooltip = this.container.ownerDocument.querySelector('.calendar-tooltip');
         if (tooltip) {
             tooltip.remove();
         }

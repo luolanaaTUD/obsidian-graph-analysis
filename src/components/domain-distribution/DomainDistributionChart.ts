@@ -66,12 +66,13 @@ export class DomainDistributionChart {
 
         // Listen for theme or accent color changes and refresh chart
         // Use multiple methods to detect theme changes
+        const win = this.container.ownerDocument.defaultView!;
         this._themeChangeHandler = () => {
             // Debounce rapid theme changes and prevent unnecessary refreshes
             if (this._themeChangeTimeout) {
-                clearTimeout(this._themeChangeTimeout);
+                win.clearTimeout(this._themeChangeTimeout);
             }
-            this._themeChangeTimeout = setTimeout(() => {
+            this._themeChangeTimeout = win.setTimeout(() => {
                 // Only refresh if the chart is actually rendered
                 if (this.container.children.length > 0) {
                     void this.refresh();
@@ -80,7 +81,8 @@ export class DomainDistributionChart {
         };
 
         // Method 1: Listen for CSS changes on workspace
-        const workspace = document.querySelector('.workspace');
+        const doc = this.container.ownerDocument;
+        const workspace = doc.querySelector('.workspace');
         if (workspace) {
             workspace.addEventListener('css-change', this._themeChangeHandler);
         }
@@ -90,7 +92,7 @@ export class DomainDistributionChart {
             for (const mutation of mutations) {
                 if (mutation.type === 'attributes' && 
                     mutation.attributeName === 'class' &&
-                    mutation.target === document.body) {
+                    mutation.target === doc.body) {
                     const classList = (mutation.target as HTMLElement).className;
                     // Only trigger on actual theme changes
                     if (classList.includes('theme-') || classList.includes('color-scheme-')) {
@@ -100,7 +102,7 @@ export class DomainDistributionChart {
                 }
             }
         });
-        this._themeObserver.observe(document.body, {
+        this._themeObserver.observe(doc.body, {
             attributes: true,
             attributeFilter: ['class']
         });
@@ -110,7 +112,7 @@ export class DomainDistributionChart {
             for (const mutation of mutations) {
                 if (mutation.type === 'attributes' && 
                     mutation.attributeName === 'style' &&
-                    mutation.target === document.documentElement) {
+                    mutation.target === doc.documentElement) {
                     const style = (mutation.target as HTMLElement).getAttribute('style') || '';
                     // Only trigger on style changes that might affect accent colors
                     if (style.includes('--accent') || style.includes('--text-accent') || style.includes('--interactive-accent')) {
@@ -120,7 +122,7 @@ export class DomainDistributionChart {
                 }
             }
         });
-        this._documentObserver.observe(document.documentElement, {
+        this._documentObserver.observe(doc.documentElement, {
             attributes: true,
             attributeFilter: ['style']
         });
@@ -128,12 +130,12 @@ export class DomainDistributionChart {
 
     // Add a destructor to remove the event listener when the chart is destroyed
     private _themeChangeHandler?: () => void;
-    private _themeChangeTimeout?: ReturnType<typeof setTimeout>;
+    private _themeChangeTimeout?: number;
     private _themeObserver?: MutationObserver;
     private _documentObserver?: MutationObserver;
     public destroy(): void {
         // Clean up theme change listeners
-        const workspace = document.querySelector('.workspace');
+        const workspace = this.container.ownerDocument.querySelector('.workspace');
         if (workspace && this._themeChangeHandler) {
             workspace.removeEventListener('css-change', this._themeChangeHandler);
         }
@@ -148,7 +150,7 @@ export class DomainDistributionChart {
 
         // Clean up timeout
         if (this._themeChangeTimeout) {
-            clearTimeout(this._themeChangeTimeout);
+            this.container.ownerDocument.defaultView!.clearTimeout(this._themeChangeTimeout);
         }
     }
     
@@ -193,7 +195,7 @@ export class DomainDistributionChart {
 
         // Create container for chart (use DOM API for SVG to avoid D3 selection typing issues)
         // Container already has position:relative via .domain-chart-container CSS
-        const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        const svgEl = container.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
         container.appendChild(svgEl);
 
         // Prepare data - hierarchy is now pre-built by MasterAnalysisManager

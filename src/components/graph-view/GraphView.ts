@@ -133,6 +133,11 @@ export class GraphView {
         eigenvector: 'Plasma'
     };
 
+    /** Window from container's document (avoids global window for pop-out compatibility) */
+    private get win(): Window {
+        return this.container.ownerDocument.defaultView!;
+    }
+
     // Track gradient settings for each centrality type
     private gradientSettings: Record<typeof this.centralityTypes[number], {
         type: 'sequential' | 'diverging' | 'cyclical' | 'qualitative';
@@ -350,7 +355,7 @@ export class GraphView {
             .scaleExtent(this.calculateZoomLimits())
             .on('start', () => {
                 if (this._frameRequest) {
-                    window.cancelAnimationFrame(this._frameRequest);
+                    this.win.cancelAnimationFrame(this._frameRequest);
                     this._frameRequest = null;
                 }
                 if (this.simulation) {
@@ -371,7 +376,7 @@ export class GraphView {
                 
                 // Request a frame to update graph elements
                 if (!this._frameRequest) {
-                    this._frameRequest = window.requestAnimationFrame(() => {
+                    this._frameRequest = this.win.requestAnimationFrame(() => {
                         this.updateGraph();
                         this._frameRequest = null;
                     });
@@ -413,7 +418,7 @@ export class GraphView {
             .velocityDecay(0.4) // D3 default value
             .on('tick', () => {
                 if (!this._frameRequest) {
-                    this._frameRequest = window.requestAnimationFrame(() => {
+                    this._frameRequest = this.win.requestAnimationFrame(() => {
                         this.updateGraph();
                         this._frameRequest = null;
                     });
@@ -581,7 +586,7 @@ export class GraphView {
     private onNodeMouseOver(event: MouseEvent, d: SimulationGraphNode) {
         if (this.isDraggingNode) return;
         if (this._hideTooltipTimeout) {
-            window.clearTimeout(this._hideTooltipTimeout);
+            this.win.clearTimeout(this._hideTooltipTimeout);
             this._hideTooltipTimeout = null;
         }
         this.highlightedNodeId = d.id;
@@ -810,7 +815,7 @@ export class GraphView {
     }
 
     private getTooltipSetting(settingName: string): number {
-        const workspace = document.querySelector('.workspace');
+        const workspace = this.container.ownerDocument.querySelector('.workspace');
         if (!workspace) {
             // console.warn('Workspace element not found for tooltip settings');
             return 0;
@@ -1051,7 +1056,7 @@ export class GraphView {
 
                 if (!isMouseOver) {
                     // Reset highlights if mouse is not over the node
-                    setTimeout(() => {
+                    this.win.setTimeout(() => {
                         if (!this.isDraggingNode && this.highlightedNodeId === d.id) {
                             this.highlightNode(element as SVGCircleElement, false);
                             this.highlightConnections(d.id, false);
@@ -1108,7 +1113,7 @@ export class GraphView {
         if (this.highlightedNodeId !== node.id) return;
         
         // Show tooltip after a delay
-        this._tooltipTimeout = window.setTimeout(() => {
+        this._tooltipTimeout = this.win.setTimeout(() => {
             // Double-check that the node is still highlighted when the timeout fires
             if (this.highlightedNodeId === node.id) {
                 this.createTooltip(node, event);
@@ -1122,7 +1127,7 @@ export class GraphView {
      */
     private clearTooltipTimeout() {
         if (this._tooltipTimeout) {
-            window.clearTimeout(this._tooltipTimeout);
+            this.win.clearTimeout(this._tooltipTimeout);
             this._tooltipTimeout = null;
         }
     }
@@ -1571,18 +1576,18 @@ export class GraphView {
 
         // Remove document-level click listener to prevent memory leak
         if (this.documentClickHandler) {
-            document.removeEventListener('click', this.documentClickHandler);
+            this.container.ownerDocument.removeEventListener('click', this.documentClickHandler);
             this.documentClickHandler = null;
         }
 
         // Cancel any pending timers or animation frames
         if (this._frameRequest) {
-            window.cancelAnimationFrame(this._frameRequest);
+            this.win.cancelAnimationFrame(this._frameRequest);
             this._frameRequest = null;
         }
         
         if (this._tooltipTimeout) {
-            window.clearTimeout(this._tooltipTimeout);
+            this.win.clearTimeout(this._tooltipTimeout);
             this._tooltipTimeout = null;
         }
         
@@ -1689,11 +1694,11 @@ export class GraphView {
         // Clear any existing timeouts
         this.clearTooltipTimeout();
         if (this._hideTooltipTimeout) {
-            window.clearTimeout(this._hideTooltipTimeout);
+            this.win.clearTimeout(this._hideTooltipTimeout);
         }
 
         // Set new timeout for hiding
-        this._hideTooltipTimeout = window.setTimeout(() => {
+        this._hideTooltipTimeout = this.win.setTimeout(() => {
             // Only remove if mouse is not over tooltip
             const tooltip = this.currentTooltip;
             if (tooltip && !tooltip.matches(':hover')) {
@@ -1971,7 +1976,7 @@ export class GraphView {
         this.documentClickHandler = () => {
             dropdown.classList.remove('color-settings-dropdown-visible');
         };
-        document.addEventListener('click', this.documentClickHandler);
+        this.container.ownerDocument.addEventListener('click', this.documentClickHandler);
     }
 
     private toggleNodeLabels(enabled: boolean): void {
@@ -2201,7 +2206,7 @@ export class GraphView {
                 const highlightedNode = this.nodesSelection.filter(d => d.id === currentHighlightedNodeId).node();
                 if (highlightedNode) {
                     // Re-apply highlighting
-                    setTimeout(() => {
+                    this.win.setTimeout(() => {
                         this.highlightNode(highlightedNode, true);
                         this.highlightConnections(currentHighlightedNodeId, true);
                     }, this.ANIMATION.DURATION);

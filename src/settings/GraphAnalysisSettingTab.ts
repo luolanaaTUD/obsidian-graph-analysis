@@ -56,9 +56,10 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
             .setClass('graph-settings-item')
             .setName('Gemini API key')
             .setDesc((() => {
-                const frag = document.createDocumentFragment();
-                frag.append(document.createTextNode('Your Google Gemini API key. '));
-                const link = document.createElement('a');
+                const doc = this.containerEl.ownerDocument;
+                const frag = doc.createDocumentFragment();
+                frag.append(doc.createTextNode('Your Google Gemini API key. '));
+                const link = doc.createElement('a');
                 link.textContent = 'Get an API key';
                 link.href = 'https://aistudio.google.com/apikey';
                 link.setAttribute('target', '_blank');

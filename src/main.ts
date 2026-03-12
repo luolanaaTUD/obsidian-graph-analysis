@@ -306,9 +306,10 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.wasmLoadingPromise = null;
         
         // Ensure status bar is restored when plugin is unloaded
-        document.body.removeClass('graph-analysis-hide-status-bar');
-        document.body.classList.remove('graph-view-dragging');
-        document.body.classList.remove('graph-analysis-active');
+        const doc = this.app.workspace.containerEl.ownerDocument;
+        doc.body.removeClass('graph-analysis-hide-status-bar');
+        doc.body.classList.remove('graph-view-dragging');
+        doc.body.classList.remove('graph-analysis-active');
     }
 
     async analyzeCentrality(algorithm: 'degree' | 'eigenvector' | 'betweenness' | 'closeness') {

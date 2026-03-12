@@ -228,7 +228,7 @@ export class CentralityResultsView extends ItemView {
         
         // Update status bar visibility when closing centrality view
         // Check if any graph analysis views are still active
-        setTimeout(() => {
+        this.contentEl.ownerDocument.defaultView!.setTimeout(() => {
             this.updateStatusBarForGraphViews();
         }, 10);
         return Promise.resolve();
@@ -246,10 +246,11 @@ export class CentralityResultsView extends ItemView {
         const shouldHideStatusBar = activeViewType === CENTRALITY_RESULTS_VIEW_TYPE || 
                                    activeViewType === GRAPH_ANALYSIS_VIEW_TYPE;
         
+        const doc = this.contentEl.ownerDocument;
         if (shouldHideStatusBar) {
-            document.body.addClass('graph-analysis-hide-status-bar');
+            doc.body.addClass('graph-analysis-hide-status-bar');
         } else {
-            document.body.removeClass('graph-analysis-hide-status-bar');
+            doc.body.removeClass('graph-analysis-hide-status-bar');
         }
     }
 } 

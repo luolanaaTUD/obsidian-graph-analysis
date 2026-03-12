@@ -48,6 +48,11 @@ export class VaultSemanticAnalysisManager {
     private _analysisInProgress: 'semantic' | 'structure' | 'evolution' | 'actions' | null = null;
     private responsesDirectoryEnsured = false;
 
+    /** Window from app workspace (avoids global for pop-out compatibility) */
+    private get win(): Window {
+        return this.app.workspace.containerEl.ownerDocument.defaultView!;
+    }
+
     isAnalysisInProgress(): boolean {
         return this._analysisInProgress !== null;
     }
@@ -96,7 +101,7 @@ export class VaultSemanticAnalysisManager {
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         this.settings = settings;
-        this.aiService = new AIModelService(settings);
+        this.aiService = new AIModelService(app, settings);
         this.graphDataBuilder = new GraphDataBuilder(app);
         this.pluginService = new PluginService(app);
         this.masterAnalysisManager = new MasterAnalysisManager(app, settings);
@@ -717,7 +722,7 @@ export class VaultSemanticAnalysisManager {
 
                     // console.error(`Error processing batch ${batchIndex + 1}:`, batchError);
                     progressNotice.setMessage(`Retrying batch ${batchIndex + 1}/${totalBatches} with ${alternateModel}...`);
-                    await new Promise(resolve => setTimeout(resolve, 10000));
+                    await new Promise(resolve => this.win.setTimeout(resolve, 10000));
                     try {
                         batchResult = await this.analyzeBatch(batch, batchIndex, alternateModel);
                     } catch (retryError) {
@@ -735,7 +740,7 @@ export class VaultSemanticAnalysisManager {
 
                         if (retryErr.errorType === 'rate_limit') {
                             progressNotice.setMessage(`Rate limited, waiting 15s before retry...`);
-                            await new Promise(resolve => setTimeout(resolve, 15000));
+                            await new Promise(resolve => this.win.setTimeout(resolve, 15000));
                             try {
                                 batchResult = await this.analyzeBatch(batch, batchIndex);
                             } catch (thirdError) {
@@ -803,7 +808,7 @@ export class VaultSemanticAnalysisManager {
                         ? `Preparing batch ${batchIndex + 2}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed, ${unchangedCount} unchanged)`
                         : `Preparing batch ${batchIndex + 2}/${totalBatches}... (${processed}/${filesToProcess.length} completed, ${failed} failed)`;
                     progressNotice.setMessage(preparingNextBatchText);
-                    await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+                    await new Promise(resolve => this.win.setTimeout(resolve, delayBetweenBatches));
                 } else if (totalBatches === 1) {
                     // Single batch - no rate limiting needed
                     // console.log('Single batch processing completed - no rate limiting required');
@@ -1247,7 +1252,7 @@ export class VaultSemanticAnalysisManager {
                         })();
                     };
 
-                    setTimeout(() => notice.hide(), 8000);
+                    this.win.setTimeout(() => notice.hide(), 8000);
                 }
             }
         } catch (error) {

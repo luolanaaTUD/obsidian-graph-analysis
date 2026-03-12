@@ -15,7 +15,7 @@ export class AISummaryManager {
     constructor(app: App, settings: GraphAnalysisSettings) {
         this.app = app;
         this.settings = settings;
-        this.aiService = new AIModelService(settings);
+        this.aiService = new AIModelService(app, settings);
     }
 
     public createStatusBarButton(statusBarContainer: HTMLElement): HTMLElement {

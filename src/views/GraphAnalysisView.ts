@@ -49,7 +49,7 @@ export class GraphAnalysisView extends ItemView {
             // Only reload if switching FROM inactive TO active (not on initial load)
             if (isNowActive && this.hasInitialized && !this.wasActive) {
                 // Reload graph data when switching back to the view to ensure it's up to date
-                setTimeout(() => {
+                this.contentEl.ownerDocument.defaultView!.setTimeout(() => {
                     void (async () => {
                         await this.reloadGraphData();
                         await this.centerGraphSafely();
@@ -57,7 +57,7 @@ export class GraphAnalysisView extends ItemView {
                 }, 100); // Small delay to ensure the view is fully rendered
             } else if (isNowActive) {
                 // Already active or first time - just center the graph
-                setTimeout(() => {
+                this.contentEl.ownerDocument.defaultView!.setTimeout(() => {
                     void this.centerGraphSafely();
                 }, 100);
             }
@@ -110,7 +110,7 @@ export class GraphAnalysisView extends ItemView {
 
         // Register event listener for view activation/deactivation
         // Use a small delay to avoid immediate trigger on registration
-        setTimeout(() => {
+        this.contentEl.ownerDocument.defaultView!.setTimeout(() => {
             this.registerEvent(
                 this.app.workspace.on('active-leaf-change', this.activeLeafChangeHandler)
             );
@@ -126,7 +126,7 @@ export class GraphAnalysisView extends ItemView {
             }
             this.lastKnownWidth = rect.width;
             this.lastKnownHeight = rect.height;
-            setTimeout(() => {
+            this.contentEl.ownerDocument.defaultView!.setTimeout(() => {
                 void this.centerGraphSafely();
             }, 50);
         }
@@ -157,7 +157,7 @@ export class GraphAnalysisView extends ItemView {
         this.contentEl.empty();
         
         // Update status bar visibility after a brief delay to allow workspace state to stabilize
-        setTimeout(() => {
+        this.contentEl.ownerDocument.defaultView!.setTimeout(() => {
             this.updateStatusBarVisibility();
         }, 10);
         
@@ -166,12 +166,12 @@ export class GraphAnalysisView extends ItemView {
     
     private hideStatusBar(): void {
         // Add class to body to hide status bar
-        document.body.addClass('graph-analysis-hide-status-bar');
+        this.contentEl.ownerDocument.body.addClass('graph-analysis-hide-status-bar');
     }
     
     private showStatusBar(): void {
         // Remove class from body to show status bar
-        document.body.removeClass('graph-analysis-hide-status-bar');
+        this.contentEl.ownerDocument.body.removeClass('graph-analysis-hide-status-bar');
     }
     
     /**
@@ -200,7 +200,7 @@ export class GraphAnalysisView extends ItemView {
      */
     private updateStatusBarVisibility(): void {
         const shouldShow = this.shouldShowStatusBar();
-        const currentlyHidden = document.body.hasClass('graph-analysis-hide-status-bar');
+        const currentlyHidden = this.contentEl.ownerDocument.body.hasClass('graph-analysis-hide-status-bar');
         
         // Only make changes if the state needs to change (avoids unnecessary DOM manipulation)
         if (shouldShow && currentlyHidden) {
@@ -236,7 +236,7 @@ export class GraphAnalysisView extends ItemView {
             const isActive = this.app.workspace.getActiveViewOfType(GraphAnalysisView) === this;
             if (!isActive) return Promise.resolve();
             graphView.refreshGraphView();
-            setTimeout(() => {
+            this.contentEl.ownerDocument.defaultView!.setTimeout(() => {
                 try {
                     graphView.restartSimulationGently();
                 } catch {

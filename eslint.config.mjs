@@ -1,5 +1,5 @@
+import tsparser from "@typescript-eslint/parser";
 import { defineConfig } from "eslint/config";
-import tseslint from "typescript-eslint";
 import obsidianmd from "eslint-plugin-obsidianmd";
 
 export default defineConfig([
@@ -8,16 +8,8 @@ export default defineConfig([
   {
     files: ["**/*.ts"],
     languageOptions: {
-      parser: tseslint.parser,
+      parser: tsparser,
       parserOptions: { project: "./tsconfig.json" },
-      globals: {
-        document: "readonly",
-        window: "readonly",
-        setTimeout: "readonly",
-        clearTimeout: "readonly",
-        getComputedStyle: "readonly",
-        performance: "readonly",
-      },
     },
     rules: {
       "obsidianmd/ui/sentence-case": ["warn", { allowAutoFix: true }],

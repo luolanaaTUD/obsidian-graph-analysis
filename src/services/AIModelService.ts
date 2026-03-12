@@ -30,7 +30,13 @@ export { SemanticAnalysisError };
 export const SEMANTIC_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'] as const;
 
 export class AIModelService {
+    private app: { workspace: { containerEl: HTMLElement } };
     private settings: GraphAnalysisSettings;
+
+    /** Window from app workspace (avoids global for pop-out compatibility) */
+    private get win(): Window {
+        return this.app.workspace.containerEl.ownerDocument.defaultView!;
+    }
     // Gemini 3 Flash: RPM 5 -> 12s between requests
     private readonly ADVANCED_RATE_LIMIT_DELAY = 12000;
     private readonly MODEL_NAME = 'gemini-3-flash-preview';
@@ -46,7 +52,8 @@ export class AIModelService {
 
     private genAI: GoogleGenAI | null = null;
 
-    constructor(settings: GraphAnalysisSettings) {
+    constructor(app: { workspace: { containerEl: HTMLElement } }, settings: GraphAnalysisSettings) {
+        this.app = app;
         this.settings = settings;
         this.initializeGenAI();
     }
@@ -170,7 +177,7 @@ export class AIModelService {
             }
             if (errorType === 'rate_limit') {
                 // console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${this.ADVANCED_RATE_LIMIT_DELAY / 1000} seconds...`);
-                await new Promise(resolve => setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
+                await new Promise(resolve => this.win.setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
                 return this.generateStructuredAnalysis(prompt, responseSchema, maxOutputTokens, temperature, topP);
             }
 
@@ -332,7 +339,7 @@ export class AIModelService {
      * Rate limiting helper - wait between requests (uses Gemini 3 Flash rate: 12s)
      */
     public async waitForRateLimit(): Promise<void> {
-        await new Promise(resolve => setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
+        await new Promise(resolve => this.win.setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
     }
 
     /**
