@@ -139,8 +139,38 @@ export class GraphView {
         return this.container.ownerDocument.defaultView!;
     }
 
+    private isDarkTheme(): boolean {
+        return this.container?.ownerDocument?.body?.classList?.contains('theme-dark') ?? true;
+    }
+
+    private applyThemeDefaultPalettes(): void {
+        const defaults = this.isDarkTheme() ? GraphView.DEFAULT_PALETTES_DARK : GraphView.DEFAULT_PALETTES_LIGHT;
+        this.centralityTypes.forEach(type => {
+            this.selectedPalettes[type] = defaults[type];
+        });
+    }
+
+    // Theme change listener state (for cleanup in onunload)
+    private _themeChangeHandler?: () => void;
+    private _themeChangeTimeout?: number;
+    private _themeObserver?: MutationObserver;
+
     /** Default number of steps for centrality gradient palettes (used when type is unspecified) */
     private static readonly DEFAULT_GRADIENT_STEPS = 12;
+
+    /** Default palettes for light theme (darker colors for light background) */
+    private static readonly DEFAULT_PALETTES_LIGHT: Record<'betweenness' | 'closeness' | 'eigenvector', string> = {
+        betweenness: 'Viridis',
+        closeness: 'Plasma',
+        eigenvector: 'Plasma'
+    };
+
+    /** Default palettes for dark theme (brighter colors for dark background) */
+    private static readonly DEFAULT_PALETTES_DARK: Record<'betweenness' | 'closeness' | 'eigenvector', string> = {
+        betweenness: 'Cool',
+        closeness: 'Warm',
+        eigenvector: 'Warm'
+    };
 
     // Track gradient settings for each centrality type
     private gradientSettings: Record<typeof this.centralityTypes[number], {
@@ -188,11 +218,17 @@ export class GraphView {
         // Initialize visibility state
         this.isVisible = true; // Assume visible when first loaded
         
+        // Apply theme-aware default palettes before building UI
+        this.applyThemeDefaultPalettes();
+        
         // Initialize D3 components (includes SVG setup, force simulation, and zoom behavior)
         this.initializeD3();
         
         // Create control panel
         this.createControlPanel();
+        
+        // Listen for theme changes to re-apply defaults for node visibility
+        this.setupThemeChangeListener();
         
         // Setup visibility detection
         this.setupVisibilityObserver();
@@ -1528,6 +1564,61 @@ export class GraphView {
         // Start observing the container
         this.visibilityObserver.observe(this.container);
     }
+
+    private setupThemeChangeListener(): void {
+        const doc = this.container.ownerDocument;
+        const win = doc.defaultView!;
+
+        this._themeChangeHandler = () => {
+            if (this._themeChangeTimeout) {
+                win.clearTimeout(this._themeChangeTimeout);
+            }
+            this._themeChangeTimeout = win.setTimeout(() => {
+                this.applyThemeDefaultPalettes();
+                this.refreshGradientPreviewsOnThemeChange();
+                this.centralityTypes.forEach(type => {
+                    if (this.centralityState[type]) {
+                        void this.calculateAndDisplayCentrality(type);
+                    }
+                });
+            }, 150);
+        };
+
+        this._themeObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type === 'attributes' &&
+                    mutation.attributeName === 'class' &&
+                    mutation.target === doc.body) {
+                    const classList = (mutation.target as HTMLElement).className;
+                    if (classList.includes('theme-') || classList.includes('color-scheme-')) {
+                        this._themeChangeHandler?.();
+                    }
+                    break;
+                }
+            }
+        });
+        this._themeObserver.observe(doc.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    }
+
+    private refreshGradientPreviewsOnThemeChange(): void {
+        const sections = this.container.querySelectorAll('.gradient-section');
+        this.centralityTypes.forEach((type, i) => {
+            const section = sections[i];
+            const preview = section?.querySelector('.gradient-preview');
+            if (preview instanceof HTMLElement) {
+                this.updateGradientPreview(preview, this.selectedPalettes[type], type);
+            }
+            const optionsContainer = section?.querySelector('.gradient-options');
+            if (optionsContainer) {
+                optionsContainer.querySelectorAll('.gradient-option').forEach(opt => {
+                    opt.classList.toggle('selected', (opt as HTMLElement).dataset.paletteName === this.selectedPalettes[type]);
+                });
+            }
+        });
+    }
     
     private showLoadingIndicator() {
         this.loadingIndicator = this.container.createDiv({ cls: 'graph-loading-indicator' });
@@ -1560,6 +1651,16 @@ export class GraphView {
         if (this._tooltipTimeout) {
             this.win.clearTimeout(this._tooltipTimeout);
             this._tooltipTimeout = null;
+        }
+
+        // Clean up theme change listener
+        if (this._themeObserver) {
+            this._themeObserver.disconnect();
+            this._themeObserver = undefined;
+        }
+        if (this._themeChangeTimeout) {
+            this.win.clearTimeout(this._themeChangeTimeout);
+            this._themeChangeTimeout = undefined;
         }
         
         // Clean up UI elements
@@ -1808,6 +1909,7 @@ export class GraphView {
                         const option = optionsContainer.createDiv({
                             cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
                         });
+                        option.dataset.paletteName = palette.name;
 
                         // Create gradient preview with colors
                         this.updateGradientPreview(option, palette.name, type);
@@ -1892,6 +1994,7 @@ export class GraphView {
                     const option = optionsContainer.createDiv({
                         cls: `gradient-option ${this.selectedPalettes[type] === palette.name ? 'selected' : ''}`
                     });
+                    option.dataset.paletteName = palette.name;
 
                     // Create gradient preview with colors
                     this.updateGradientPreview(option, palette.name, type);

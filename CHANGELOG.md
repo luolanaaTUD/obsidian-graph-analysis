@@ -15,10 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Single model for semantic analysis** — Removed dual-model logic (gemini-2.5-flash-lite + gemini-2.5-flash) that alternated between models for quota limits. All semantic analysis now uses a single model
-- **Bridge/Foundation/Authority section** — Fixed `this.container` not being set when `renderNetworkAnalysis` is called directly from VaultAnalysisModals (fix branch)
 - **Network card UI** — Added 20px padding between outer card and main content in Bridge/Foundation/Authority domain cards
-- **GraphView** — Use `this.win` for `clearTimeout`, `getComputedStyle`, and `performance` (Obsidian pop-out compatibility, ESLint no-undef fix)
-- **README** — Updated Technical Details to reflect Gemini 3.1 Flash Lite with 250K RPD
+
 
 ### Fixed
 
