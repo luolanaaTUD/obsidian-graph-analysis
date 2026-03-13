@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0]
 
 ### Added
 
@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Single model for semantic analysis** — Removed dual-model logic (gemini-2.5-flash-lite + gemini-2.5-flash) that alternated between models for quota limits. All semantic analysis now uses a single model
 - **Network card UI** — Added 20px padding between outer card and main content in Bridge/Foundation/Authority domain cards
+- **Theme-aware centrality palettes** — Default color palettes for betweenness, closeness, and eigenvector now switch automatically between light theme (BuGn, Warm, PuRd) and dark theme (Viridis, Plasma, Viridis) for better node visibility
+- **Centrality gradient defaults** — Increased default steps from 6 to 12; palettes re-apply when switching themes
 
 
 ### Fixed
