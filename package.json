@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:submission": "eslint . --quiet && eslint manifest.json --quiet",
+    "check-i18n": "node scripts/check-i18n-keys.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "version": "node scripts/version-bump.mjs && git add manifest.json versions.json",
     "release": "npm version patch",

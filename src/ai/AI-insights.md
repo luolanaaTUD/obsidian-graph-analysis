@@ -2,6 +2,17 @@
 
 This document outlines both the user-facing insights and technical implementation strategy for AI-powered vault analysis.
 
+### Current codebase (as of 2026 refactor)
+
+| Tab | UI location | AI / data |
+|-----|-------------|-----------|
+| Semantic | `VaultAnalysisModals` | `VaultSemanticAnalysisManager` → `vault-analysis.json` |
+| Structure | `KnowledgeStructureManager` | `MasterAnalysisManager` → per-tab cache (`structure`) |
+| Evolution | `VaultAnalysisModals` | `MasterAnalysisManager` → per-tab cache (`evolution`); types in `knowledge-evolution.types.ts` |
+| Actions | `VaultAnalysisModals` | `MasterAnalysisManager` → per-tab cache (`actions`); helpers in `KnowledgeActionsManager` |
+
+**Removed:** `AISummaryManager`, `domain-classification.schema.ts`, and the unused `KnowledgeEvolutionManager` UI class (evolution rendering lives in the modal). `KnowledgeActionsManager` retains only static helpers (`computeReviewCandidates`, `writeConnectionsToNotes`).
+
 ---
 
 ## Knowledge Structure Analysis
@@ -68,19 +79,17 @@ _Visualizations_: [Zoomable Sunburst](https://observablehq.com/@d3/zoomable-sunb
    - Shows vault analysis results with search/filtering
    - Displays summaries, keywords, knowledge domains per note
 
-2. **Knowledge Structure Tab** 🔄 (Needs implementation) 
-   - **Knowledge Structure Analysis**: Domain distribution, topic hierarchies, clusters, gaps
-   - **Knowledge Network Analysis**: Centrality-based insights (bridges, foundations, authorities)
-   - **Visualizations**: Sunburst charts, chord diagrams, network views
+2. **Knowledge Structure Tab** ✅
+   - Domain distribution, network analysis (bridges / foundations / authorities), gap analysis
+   - Rendered by `KnowledgeStructureManager.ts`
 
-3. **Knowledge Evolution Tab** 🔄 (Partially implemented)
-   - Calendar view ✅ (Already working)
-   - AI-powered evolution insights 🔄 (Needs master analysis integration)
+3. **Knowledge Evolution Tab** ✅
+   - Calendar + AI sections (timeline, topic patterns, focus shifts) in `VaultAnalysisModals.ts`
+   - Cached evolution payload typed in `knowledge-evolution.types.ts`
 
-4. **Recommended Actions Tab** 🔄 (Needs implementation)
-   - Maintenance recommendations
-   - Connection opportunities  
-   - Learning path suggestions
+4. **Recommended Actions Tab** ✅
+   - Scatter chart, review cards, connection subgraph in `VaultAnalysisModals.ts`
+   - Link writing and review scoring via `KnowledgeActionsManager` (static helpers)
 
 ### Enhanced Three-Stage Architecture
 
@@ -285,17 +294,25 @@ interface MasterAnalysisData {
 
 ```
 src/ai/
-├── README.md                                  // Updated architecture docs
-├── AI-insights.md                            // This file - development plan
-├── VaultSemanticAnalysisManager.ts          // Enhanced with graph metrics (existing)
-├── MasterAnalysisManager.ts                 // New: Single AI call for advanced insights
-├── AISummaryManager.ts                       // Existing: Individual notes
-├── index.ts                                  // Main AI module entry point
-└── visualization/                            // New: Visualization managers
-    ├── managers.ts                           // Export file for visualization managers (renamed from index.ts)
-    ├── KnowledgeStructureManager.ts         // Parses master-analysis + creates Structure tab UI
-    ├── KnowledgeEvolutionManager.ts         // Parses master-analysis + creates Evolution tab UI  
-    └── KnowledgeActionsManager.ts           // Parses master-analysis + creates Actions tab UI
+├── README.md
+├── AI-insights.md
+├── VaultSemanticAnalysisManager.ts    // Vault-wide semantic batch analysis + cache
+├── MasterAnalysisManager.ts           // Per-tab AI: structure, evolution, actions
+├── KnowledgeDomainHelper.ts
+├── promptLanguage.ts                  // AI response + UI language prompts
+├── knowledge-domains.json
+├── schemas/
+│   ├── vault-semantic-analysis.schema.ts
+│   ├── knowledge-network.schema.ts
+│   ├── knowledge-evolution.schema.ts
+│   └── recommended-actions.schema.ts
+└── visualization/
+    ├── KnowledgeStructureManager.ts   // Structure tab UI
+    ├── knowledge-evolution.types.ts     // Evolution cache / parsing types
+    ├── knowledge-actions.types.ts       // Actions cache / parsing types
+    └── KnowledgeActionsManager.ts       // Static helpers (review score, write links)
+
+src/views/VaultAnalysisModals.ts       // Evolution + Actions tab UI
 ```
 
 ### Cache Files Structure
@@ -304,8 +321,6 @@ src/ai/
 .obsidian/plugins/obsidian-graph-analysis/
 ├── vault-analysis.json           // Stage 1: Semantic analysis + graph metrics
 ├── master-analysis.json          // Stage 2: Single AI call comprehensive insights
-└── individual-summaries/         // Existing: Individual note summaries
-    └── [note-id].json
 ```
 
 ### Improved Three-Stage Architecture
@@ -355,37 +370,39 @@ src/ai/
   - Top knowledge authorities (eigenvector centrality)
   - Network insights and recommendations
 
-#### Knowledge Evolution Tab (Tab 3) - `KnowledgeEvolutionManager.ts`
-**Data Source**: `master-analysis.json` → `knowledgeEvolution` section + existing calendar component
-**Responsibilities**:
-- Parse evolution insights and timeline data from master analysis
-- Interface with existing `KnowledgeCalendarChart` component
-- Create timeline visualizations and learning velocity charts
-- Generate focus shift and topic introduction displays
-- Handle temporal navigation and period filtering
+#### Knowledge Evolution Tab (Tab 3) - `VaultAnalysisModals.ts` + `knowledge-evolution.types.ts`
+**Data Source**: Per-tab cache (`evolution`) via `MasterAnalysisManager` / `PluginDataStore`
+**Responsibilities** (`VaultAnalysisModals`):
+- Load cached `KnowledgeEvolutionData` and render sectioned layout
+- Embed `KnowledgeCalendarChart` in the timeline section
+- Show timeline phases, topic introduction patterns, focus shifts, and narrative conclusions
+
+**Types** (`knowledge-evolution.types.ts`):
+- `KnowledgeEvolutionData`, `TimelineAnalysis`, `TopicPatternsAnalysis`, `FocusShiftAnalysis`, `EvolutionInsight`
 
 **UI Components**:
-- **Existing**: Calendar view (via `KnowledgeCalendarChart.ts`)
-- **New AI-Enhanced**: Evolution insights display
-  - Knowledge development timeline
-  - Topic introduction patterns
-  - Focus shift analysis with visual flow diagrams
-  - Learning velocity metrics and trend charts
+- Knowledge development timeline (with calendar)
+- Topic introduction patterns
+- Focus shift analysis
 
-#### Recommended Actions Tab (Tab 4) - `KnowledgeActionsManager.ts`
-**Data Source**: `master-analysis.json` → `recommendedActions` section  
-**Responsibilities**:
-- Parse actionable recommendations from master analysis
-- Create prioritized action lists with context
-- Generate interactive link suggestion interfaces
-- Build learning path visualizations and note organization tools
-- Handle action item interactions (dismiss, complete, reschedule)
+#### Recommended Actions Tab (Tab 4) - `VaultAnalysisModals.ts` + `KnowledgeActionsManager.ts`
+**Data Source**: Per-tab cache (`actions`) via `MasterAnalysisManager` / `PluginDataStore`
+**UI** (`VaultAnalysisModals`):
+- Connectivity scatter chart and connection subgraph
+- Review cards grid for maintenance candidates
+- Display of AI connection suggestions
+
+**Helpers** (`KnowledgeActionsManager.ts` — static only):
+- `computeReviewCandidates()` — hybrid rule + AI urgency scoring
+- `writeConnectionsToNotes()` — append Related Notes wikilinks
+
+**Types** (`knowledge-actions.types.ts`):
+- `KnowledgeActionsData`, `ConnectionSuggestion`, `ReviewCandidate`, etc.
 
 **UI Components**:
-- **Knowledge Maintenance**: Notes needing review/updates
-- **Connection Opportunities**: Suggested links between notes
-- **Learning Paths**: Recommended learning sequences
-- **Organization Suggestions**: Tag and structure improvements
+- Notes needing review (scored cards)
+- Suggested connections (subgraph + write-back)
+- Learning paths / organization (from cache when present)
 
 ### Benefits of This Revised Architecture
 
@@ -401,10 +418,7 @@ src/ai/
 ### Implementation Notes
 
 #### Calendar Integration Strategy
-The existing `KnowledgeCalendarChart.ts` component is already well-architected and can be reused by `KnowledgeEvolutionManager.ts` without modification. The evolution manager will:
-- Use the calendar for temporal data visualization
-- Add AI insights as complementary displays above/below the calendar
-- Provide enhanced tooltips with AI-generated context
+`VaultAnalysisModals` embeds `KnowledgeCalendarChart.ts` in the evolution timeline section and renders AI narrative blocks above/below the calendar from cached `KnowledgeEvolutionData`.
 
 #### Migration Path
 1. **Phase 1**: Create `MasterAnalysisManager.ts` and test single AI call
@@ -423,8 +437,8 @@ The existing `KnowledgeCalendarChart.ts` component is already well-architected a
 1. **Create the visualization folder structure**
 2. **Implement `MasterAnalysisManager.ts` with comprehensive AI prompt**
 3. **Build `KnowledgeStructureManager.ts` first (simpler visualizations)**
-4. **Integrate calendar with `KnowledgeEvolutionManager.ts`** 
-5. **Develop `KnowledgeActionsManager.ts` with interactive components**
+4. ~~Integrate calendar with evolution manager~~ ✅ Done in `VaultAnalysisModals`
+5. ~~Develop `KnowledgeActionsManager` tab UI~~ ✅ UI in modal; manager is helpers-only
 6. **Add comprehensive error handling and fallbacks**
 
 ### Cache Invalidation Strategy
@@ -459,56 +473,65 @@ We have successfully implemented the improved architecture with clear separation
 #### ✅ Completed Components
 
 **Core AI Managers:**
-- ✅ `MasterAnalysisManager.ts` - Single comprehensive AI call for all advanced insights
-- ✅ `VaultSemanticAnalysisManager.ts` - Enhanced with graph metrics (existing)
-- ✅ `AISummaryManager.ts` - Individual note summaries (existing)
+- ✅ `MasterAnalysisManager.ts` — Per-tab structured AI (structure, evolution, actions)
+- ✅ `VaultSemanticAnalysisManager.ts` — Vault semantic batch + graph metrics
+- ✅ `promptLanguage.ts` — Plugin AI/UI language settings in prompts
 
-**Visualization Managers (New - Separated Concerns):**
-- ✅ `KnowledgeStructureManager.ts` - Parses master-analysis + creates Structure tab UI
-- ✅ `KnowledgeEvolutionManager.ts` - Parses master-analysis + integrates with calendar UI
-- ✅ `KnowledgeActionsManager.ts` - Parses master-analysis + creates Actions tab UI
+**Visualization & UI:**
+- ✅ `KnowledgeStructureManager.ts` — Structure tab UI
+- ✅ `VaultAnalysisModals.ts` — Evolution + Actions tab UI (calendar, sections, charts)
+- ✅ `knowledge-evolution.types.ts` / `knowledge-actions.types.ts` — Shared types
+- ✅ `KnowledgeActionsManager.ts` — Static helpers only (no tab renderer)
 
-**Organization & Compatibility:**
-- ✅ Legacy files removed (folder no longer needed)
-- ✅ `visualization/managers.ts` for easy imports (renamed from index.ts for clarity)
-- ✅ `ai/index.ts` for unified AI module exports
+**Removed:**
+- ❌ `AISummaryManager.ts` (per-note summary modal; use Obsidian AI instead)
+- ❌ `KnowledgeEvolutionManager.ts` (unused UI class; logic moved to modal)
+- ❌ `domain-classification.schema.ts` (superseded by `vault-semantic-analysis.schema.ts`)
 
-#### 🎯 Recent Progress (Latest)
+**Organization & compatibility:**
+- ✅ Types split into `knowledge-evolution.types.ts` and `knowledge-actions.types.ts`
+- ✅ No barrel `src/ai/index.ts` — managers import paths directly
+- ✅ i18n via `src/i18n/` (`uiLanguage`, `aiResponseLanguage`, `promptLanguage.ts`)
 
-**File Structure Optimization (Just Completed):**
-- ✅ **Renamed**: `src/ai/visualization/index.ts` → `src/ai/visualization/managers.ts`
-- ✅ **Updated Import**: Changed `export * from './visualization';` to `export * from './visualization/managers';` in `src/ai/index.ts`
-- ✅ **Eliminated Confusion**: No more multiple `index.ts` files - clearer purpose with `managers.ts`
-- ✅ **Verified Build**: Project builds successfully with new structure
-- ✅ **Benefits Achieved**: 
-  - Clear distinction between main AI module entry point (`src/ai/index.ts`) and visualization exports (`src/ai/visualization/managers.ts`)
-  - More descriptive file naming that indicates purpose
-  - Easier navigation and understanding of codebase structure
+#### 🎯 Recent progress (2026 refactor)
+
+- ✅ **Removed** unused `KnowledgeEvolutionManager` UI class; evolution sections live in `VaultAnalysisModals`
+- ✅ **Trimmed** `KnowledgeActionsManager` to static helpers; actions tab UI in `VaultAnalysisModals`
+- ✅ **Removed** `AISummaryManager` and per-note summary schema (Obsidian AI covers that use case)
+- ✅ **Removed** unused `domain-classification.schema.ts`
 
 #### 🏗️ Architecture Benefits Achieved
 
 ✅ **Perfect Separation of Concerns**: AI logic completely isolated from visualization  
 ✅ **Single AI Call Efficiency**: MasterAnalysisManager handles one comprehensive call  
-✅ **Reusable Calendar Integration**: KnowledgeEvolutionManager cleanly uses existing calendar  
+✅ **Reusable Calendar Integration**: Evolution tab embeds `KnowledgeCalendarChart` in the modal  
 ✅ **Sophisticated UI Capability**: Each visualization manager can develop complex features independently  
-✅ **Easy Maintenance**: Each tab has its own focused manager  
+✅ **Easy Maintenance**: Structure has a dedicated manager; evolution/actions share modal UI with typed caches  
 ✅ **Clean Testing**: Visualization logic can be tested with mock data  
 ✅ **Modular Development**: Teams can work on different tabs simultaneously  
 
 ### 📁 Final File Structure (Implemented)
 ```
 src/ai/
-├── README.md                                  // Updated architecture docs
-├── AI-insights.md                            // This file - development plan
-├── VaultSemanticAnalysisManager.ts          // Enhanced with graph metrics (existing)
-├── MasterAnalysisManager.ts                 // New: Single AI call for advanced insights
-├── AISummaryManager.ts                       // Existing: Individual notes
-├── index.ts                                  // Main AI module entry point
-└── visualization/                            // New: Visualization managers
-    ├── managers.ts                           // Export file for visualization managers (renamed from index.ts)
-    ├── KnowledgeStructureManager.ts         // Parses master-analysis + creates Structure tab UI
-    ├── KnowledgeEvolutionManager.ts         // Parses master-analysis + creates Evolution tab UI  
-    └── KnowledgeActionsManager.ts           // Parses master-analysis + creates Actions tab UI
+├── README.md
+├── AI-insights.md
+├── VaultSemanticAnalysisManager.ts    // Vault-wide semantic batch analysis + cache
+├── MasterAnalysisManager.ts           // Per-tab AI: structure, evolution, actions
+├── KnowledgeDomainHelper.ts
+├── promptLanguage.ts                  // AI response + UI language prompts
+├── knowledge-domains.json
+├── schemas/
+│   ├── vault-semantic-analysis.schema.ts
+│   ├── knowledge-network.schema.ts
+│   ├── knowledge-evolution.schema.ts
+│   └── recommended-actions.schema.ts
+└── visualization/
+    ├── KnowledgeStructureManager.ts   // Structure tab UI
+    ├── knowledge-evolution.types.ts     // Evolution cache / parsing types
+    ├── knowledge-actions.types.ts       // Actions cache / parsing types
+    └── KnowledgeActionsManager.ts       // Static helpers (review score, write links)
+
+src/views/VaultAnalysisModals.ts       // Evolution + Actions tab UI
 ```
 
 ### Cache Files Structure
@@ -517,8 +540,6 @@ src/ai/
 .obsidian/plugins/obsidian-graph-analysis/
 ├── vault-analysis.json           // Stage 1: Semantic analysis + graph metrics
 ├── master-analysis.json          // Stage 2: Single AI call comprehensive insights
-└── individual-summaries/         // Existing: Individual note summaries
-    └── [note-id].json
 ```
 
 ### Improved Three-Stage Architecture
@@ -568,37 +589,39 @@ src/ai/
   - Top knowledge authorities (eigenvector centrality)
   - Network insights and recommendations
 
-#### Knowledge Evolution Tab (Tab 3) - `KnowledgeEvolutionManager.ts`
-**Data Source**: `master-analysis.json` → `knowledgeEvolution` section + existing calendar component
-**Responsibilities**:
-- Parse evolution insights and timeline data from master analysis
-- Interface with existing `KnowledgeCalendarChart` component
-- Create timeline visualizations and learning velocity charts
-- Generate focus shift and topic introduction displays
-- Handle temporal navigation and period filtering
+#### Knowledge Evolution Tab (Tab 3) - `VaultAnalysisModals.ts` + `knowledge-evolution.types.ts`
+**Data Source**: Per-tab cache (`evolution`) via `MasterAnalysisManager` / `PluginDataStore`
+**Responsibilities** (`VaultAnalysisModals`):
+- Load cached `KnowledgeEvolutionData` and render sectioned layout
+- Embed `KnowledgeCalendarChart` in the timeline section
+- Show timeline phases, topic introduction patterns, focus shifts, and narrative conclusions
+
+**Types** (`knowledge-evolution.types.ts`):
+- `KnowledgeEvolutionData`, `TimelineAnalysis`, `TopicPatternsAnalysis`, `FocusShiftAnalysis`, `EvolutionInsight`
 
 **UI Components**:
-- **Existing**: Calendar view (via `KnowledgeCalendarChart.ts`)
-- **New AI-Enhanced**: Evolution insights display
-  - Knowledge development timeline
-  - Topic introduction patterns
-  - Focus shift analysis with visual flow diagrams
-  - Learning velocity metrics and trend charts
+- Knowledge development timeline (with calendar)
+- Topic introduction patterns
+- Focus shift analysis
 
-#### Recommended Actions Tab (Tab 4) - `KnowledgeActionsManager.ts`
-**Data Source**: `master-analysis.json` → `recommendedActions` section  
-**Responsibilities**:
-- Parse actionable recommendations from master analysis
-- Create prioritized action lists with context
-- Generate interactive link suggestion interfaces
-- Build learning path visualizations and note organization tools
-- Handle action item interactions (dismiss, complete, reschedule)
+#### Recommended Actions Tab (Tab 4) - `VaultAnalysisModals.ts` + `KnowledgeActionsManager.ts`
+**Data Source**: Per-tab cache (`actions`) via `MasterAnalysisManager` / `PluginDataStore`
+**UI** (`VaultAnalysisModals`):
+- Connectivity scatter chart and connection subgraph
+- Review cards grid for maintenance candidates
+- Display of AI connection suggestions
+
+**Helpers** (`KnowledgeActionsManager.ts` — static only):
+- `computeReviewCandidates()` — hybrid rule + AI urgency scoring
+- `writeConnectionsToNotes()` — append Related Notes wikilinks
+
+**Types** (`knowledge-actions.types.ts`):
+- `KnowledgeActionsData`, `ConnectionSuggestion`, `ReviewCandidate`, etc.
 
 **UI Components**:
-- **Knowledge Maintenance**: Notes needing review/updates
-- **Connection Opportunities**: Suggested links between notes
-- **Learning Paths**: Recommended learning sequences
-- **Organization Suggestions**: Tag and structure improvements
+- Notes needing review (scored cards)
+- Suggested connections (subgraph + write-back)
+- Learning paths / organization (from cache when present)
 
 ### Benefits of This Revised Architecture
 
@@ -614,10 +637,7 @@ src/ai/
 ### Implementation Notes
 
 #### Calendar Integration Strategy
-The existing `KnowledgeCalendarChart.ts` component is already well-architected and can be reused by `KnowledgeEvolutionManager.ts` without modification. The evolution manager will:
-- Use the calendar for temporal data visualization
-- Add AI insights as complementary displays above/below the calendar
-- Provide enhanced tooltips with AI-generated context
+`VaultAnalysisModals` embeds `KnowledgeCalendarChart.ts` in the evolution timeline section and renders AI narrative blocks above/below the calendar from cached `KnowledgeEvolutionData`.
 
 #### Migration Path
 1. **Phase 1**: Create `MasterAnalysisManager.ts` and test single AI call
@@ -636,8 +656,8 @@ The existing `KnowledgeCalendarChart.ts` component is already well-architected a
 1. **Create the visualization folder structure**
 2. **Implement `MasterAnalysisManager.ts` with comprehensive AI prompt**
 3. **Build `KnowledgeStructureManager.ts` first (simpler visualizations)**
-4. **Integrate calendar with `KnowledgeEvolutionManager.ts`** 
-5. **Develop `KnowledgeActionsManager.ts` with interactive components**
+4. ~~Integrate calendar with evolution manager~~ ✅ Done in `VaultAnalysisModals`
+5. ~~Develop `KnowledgeActionsManager` tab UI~~ ✅ UI in modal; manager is helpers-only
 6. **Add comprehensive error handling and fallbacks**
 
 ### Cache Invalidation Strategy
@@ -800,37 +820,31 @@ This implementation provides a solid foundation for the enhanced AI insights sys
 
 ---
 
-## 🎯 Recent Development Updates
+## 🎯 Recent development updates
 
-### File Structure Optimization (Latest - Just Completed)
+### Visualization layout refactor (2026)
 
-**Problem Solved**: Multiple `index.ts` files were causing confusion in the codebase navigation.
+**Problem solved:** Duplicate / dead UI classes (`KnowledgeEvolutionManager`) and a bloated `KnowledgeActionsManager` that mixed rendering with helpers.
 
-**Changes Made**:
-- ✅ **Renamed**: `src/ai/visualization/index.ts` → `src/ai/visualization/managers.ts`
-- ✅ **Updated Import**: Modified `src/ai/index.ts` to use `export * from './visualization/managers';`
-- ✅ **Verified Build**: Confirmed project builds successfully with new structure
+**Changes made:**
+- Evolution and Actions tab rendering consolidated in `VaultAnalysisModals.ts`
+- Shared types moved to `knowledge-evolution.types.ts` and `knowledge-actions.types.ts`
+- `KnowledgeActionsManager` kept only `computeReviewCandidates` and `writeConnectionsToNotes`
 
-**Benefits Achieved**:
-- **Clearer File Purposes**: Now have distinct roles:
-  - `src/ai/index.ts` - Main AI module entry point
-  - `src/ai/visualization/managers.ts` - Visualization manager exports
-- **Better Navigation**: Developers can easily distinguish between files
-- **Improved Maintainability**: More descriptive naming convention
-- **Reduced Confusion**: No more ambiguity about which `index.ts` serves what purpose
-
-**Current Optimized Structure**:
+**Current structure** (see also [Current codebase](#current-codebase-as-of-2026-refactor) at top):
 ```
 src/ai/
-├── index.ts                     // Main AI module entry point  
-├── MasterAnalysisManager.ts     // Single comprehensive AI call
-├── VaultSemanticAnalysisManager.ts // Enhanced with graph metrics
-├── AISummaryManager.ts          // Individual note summaries
+├── MasterAnalysisManager.ts
+├── VaultSemanticAnalysisManager.ts
+├── promptLanguage.ts
+├── schemas/ …
 └── visualization/
-    ├── managers.ts              // Export file (renamed from index.ts)
     ├── KnowledgeStructureManager.ts
-    ├── KnowledgeEvolutionManager.ts
-    └── KnowledgeActionsManager.ts
+    ├── knowledge-evolution.types.ts
+    ├── knowledge-actions.types.ts
+    └── KnowledgeActionsManager.ts   // static helpers
+
+src/views/VaultAnalysisModals.ts     // Evolution + Actions tabs
 ```
 
 This optimization ensures the codebase maintains clear file purposes and eliminates potential developer confusion while preserving all existing functionality.
@@ -917,8 +931,8 @@ graph TD
     G --> H
     
     H --> I[KnowledgeStructureManager<br/>Tab 2 UI]
-    H --> J[KnowledgeEvolutionManager<br/>Tab 3 UI]  
-    H --> K[KnowledgeActionsManager<br/>Tab 4 UI]
+    H --> J[VaultAnalysisModals<br/>Tab 3 Evolution]
+    H --> K[VaultAnalysisModals<br/>Tab 4 Actions]
     
     C --> F
     

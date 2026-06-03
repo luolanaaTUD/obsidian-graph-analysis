@@ -11,6 +11,7 @@ import { CentralityKDEChart } from '../../components/kde-chart/CentralityKDEChar
 import { VaultAnalysisData, VaultAnalysisResult, StructureAnalysisData } from '../MasterAnalysisManager';
 import { PluginDataStore } from '../../utils/PluginDataStore';
 import type { KnowledgeDomain } from '../KnowledgeDomainHelper';
+import { t } from '../../i18n';
 
 
 export interface NetworkNode {
@@ -126,7 +127,7 @@ export class KnowledgeStructureManager {
         });
 
         section.createEl('h3', {
-            text: 'Knowledge domain distribution',
+            text: t('structure.domainDistribution'),
             cls: 'vault-analysis-section-title'
         });
 
@@ -317,7 +318,7 @@ export class KnowledgeStructureManager {
             });
 
             section.createEl('h3', {
-                text: 'Knowledge network analysis',
+                text: t('structure.networkAnalysis'),
                 cls: 'vault-analysis-section-title'
             });
 
@@ -375,7 +376,7 @@ export class KnowledgeStructureManager {
             const iconEl = titleContainer.createEl('div', { cls: 'kde-chart-icon' });
             setIcon(iconEl, 'bar-chart-2');
             titleContainer.createEl('h4', {
-                text: 'Centrality score distributions',
+                text: t('structure.centralityDistributions'),
                 cls: 'kde-chart-title'
             });
             
@@ -839,7 +840,7 @@ export class KnowledgeStructureManager {
         });
 
         section.createEl('h3', {
-            text: 'Knowledge gap analysis',
+            text: t('structure.gapAnalysis'),
             cls: 'vault-analysis-section-title'
         });
 
@@ -853,7 +854,7 @@ export class KnowledgeStructureManager {
             });
             const iconEl = titleEl.createEl('span', { cls: 'ai-insights-icon' });
             setIcon(iconEl, 'target');
-            titleEl.createEl('span', { text: 'Identified knowledge gaps' });
+            titleEl.createEl('span', { text: t('structure.identifiedGaps') });
 
             const gapsList = gapsContainer.createEl('ul', { 
                 cls: 'gaps-list' 

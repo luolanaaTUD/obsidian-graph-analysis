@@ -3,6 +3,7 @@ import * as d3 from 'd3';
 import type { ActionsAnalysisData } from '../../ai/MasterAnalysisManager';
 import { ConnectionSuggestion, KnowledgeActionsManager } from '../../ai/visualization/KnowledgeActionsManager';
 import { NoteResolver } from '../../utils/NoteResolver';
+import { t, tp } from '../../i18n';
 
 interface SubGraphNode extends d3.SimulationNodeDatum {
     id: string;
@@ -449,7 +450,7 @@ export class ConnectionSubGraph {
             void (async () => {
             const remaining = this.getRemainingConnections();
             if (remaining.length === 0) {
-                new Notice('No connections remaining to add.');
+                new Notice(t('notices.noConnectionsRemaining'));
                 return;
             }
 
@@ -463,10 +464,20 @@ export class ConnectionSubGraph {
                 );
 
                 if (result.written > 0) {
-                    new Notice(`Successfully added ${result.written} connection${result.written > 1 ? 's' : ''} to your notes.`);
+                    new Notice(tp(
+                        result.written,
+                        'notices.connectionsWritten',
+                        'notices.connectionsWritten_other',
+                        { count: result.written }
+                    ));
                 }
                 if (result.failed > 0) {
-                    new Notice(`Failed to write ${result.failed} connection${result.failed > 1 ? 's' : ''}.`);
+                    new Notice(tp(
+                        result.failed,
+                        'notices.connectionsWriteFailed',
+                        'notices.connectionsWriteFailed_other',
+                        { count: result.failed }
+                    ));
                 }
 
                 // Disable button and persist status to cache
@@ -480,7 +491,7 @@ export class ConnectionSubGraph {
                     await saveCacheFn(actionsAnalysisData);
                 }
             } catch {
-                new Notice('Failed to write connections. Check console for details.');
+                new Notice(t('notices.connectionsWriteError'));
                 button.disabled = false;
                 button.textContent = 'Add to main graph';
             }

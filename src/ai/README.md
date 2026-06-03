@@ -4,16 +4,9 @@ This folder contains the AI-powered analysis managers for the Obsidian Graph Ana
 
 ## Architecture Overview
 
-The AI analysis system is organized into three main responsibilities:
+The AI analysis system is organized into main responsibilities:
 
-### 1. AISummaryManager.ts
-**Responsibility**: Generate AI summaries for individual notes
-- Provides AI-powered summaries for the currently active note
-- Extracts keywords and identifies knowledge domains for single notes
-- Integrates with the status bar for easy access
-- Uses Google Gemini API for content analysis
-
-### 2. VaultSemanticAnalysisManager.ts (formerly VaultAnalysisManager.ts)
+### 1. VaultSemanticAnalysisManager.ts (formerly VaultAnalysisManager.ts)
 **Responsibility**: Generate semantic analysis for the entire vault
 - Analyzes all notes in the vault (excluding specified folders/tags)
 - Extracts summaries, keywords, and knowledge domains for each note
@@ -21,7 +14,7 @@ The AI analysis system is organized into three main responsibilities:
 - Caches results in `vault-analysis.json`
 - Provides the foundation data for other AI analysis types
 
-### 3. KnowledgeEvolutionAnalysisManager.ts
+### 2. KnowledgeEvolutionAnalysisManager.ts
 **Responsibility**: Analyze knowledge evolution and learning patterns
 - Takes cached vault semantic data as input
 - Generates AI insights about knowledge development timeline
@@ -29,7 +22,7 @@ The AI analysis system is organized into three main responsibilities:
 - Tracks learning velocity and productivity trends
 - Caches results in `knowledge-evolution.json`
 
-### 4. KnowledgeStructureAnalysisManager.ts
+### 3. KnowledgeStructureAnalysisManager.ts
 **Responsibility**: Analyze knowledge structure and relationships (placeholder)
 - Will analyze semantic relationships between notes
 - Identifies knowledge clusters and connection strengths
@@ -40,8 +33,6 @@ The AI analysis system is organized into three main responsibilities:
 ## Data Flow
 
 ```
-Individual Notes → AISummaryManager → Single Note Analysis
-     ↓
 All Vault Notes → VaultSemanticAnalysisManager → vault-analysis.json
      ↓
 Cached Semantic Data → KnowledgeEvolutionAnalysisManager → knowledge-evolution.json
@@ -63,8 +54,7 @@ The managers are instantiated and used by the main plugin and UI components:
 
 ```typescript
 // Create managers
-const aiSummaryManager = new AISummaryManager(app, settings);
-const vaultSemanticManager = new VaultSemanticAnalysisManager(app, settings);
+const vaultSemanticManager = new VaultSemanticAnalysisManager(app, settings, dataStore);
 const knowledgeEvolutionManager = new KnowledgeEvolutionAnalysisManager(app, settings);
 
 // Use in UI components
@@ -83,4 +73,4 @@ const modal = new VaultAnalysisModal(
 All major interfaces and types are defined in the respective manager files:
 - `TokenUsage`, `VaultAnalysisResult`, `VaultAnalysisData` in `KnowledgeEvolutionAnalysisManager.ts`
 - Evolution-specific interfaces: `TimelineAnalysis`, `TopicPatternsAnalysis`, `FocusShiftAnalysis`, `LearningVelocityAnalysis`
-- Structure-specific interfaces: `KnowledgeCluster`, `ConnectionStrength`, `KnowledgeGap`, `TopicHierarchy` 
+- Structure-specific interfaces: `KnowledgeCluster`, `ConnectionStrength`, `KnowledgeGap`, `TopicHierarchy`

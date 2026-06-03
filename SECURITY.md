@@ -42,7 +42,7 @@ No analytics or telemetry endpoints are used.
 
 ### Transitive dependencies (`@google/genai`)
 
-Production installs pin patched versions via `package.json` `overrides` and `npm audit` (for example `protobufjs` ≥ 7.6.2, `ws` ≥ 8.21.0, `brace-expansion` ≥ 2.1.1). CI runs `npm run audit:prod` on every push.
+Production installs pin patched versions via `package.json` `overrides` and `npm audit` (for example `protobufjs` ≥ 7.6.2, `ws` ≥ 8.21.0, `brace-expansion` ≥ 2.1.1). Run `npm run audit:prod` locally before tagging a release.
 
 | Dependency | Role in SDK | Plugin exposure | Mitigation |
 | --- | --- | --- | --- |

@@ -4,11 +4,11 @@ import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
 import { CentralityResultsView, CENTRALITY_RESULTS_VIEW_TYPE } from './views/CentralityResultsView';
 import { GraphAnalysisSettingTab } from './settings/GraphAnalysisSettingTab';
-import { AISummaryManager } from './ai/AISummaryManager';
 import { VaultSemanticAnalysisManager } from './ai/VaultSemanticAnalysisManager';
 import { ExclusionUtils } from './utils/ExclusionUtils';
 import { VaultScope } from './utils/VaultScope';
 import { PluginDataStore } from './utils/PluginDataStore';
+import { configureI18n, t } from './i18n';
 
 // Import our styles 
 import './styles/styles.css';
@@ -29,7 +29,6 @@ export default class GraphAnalysisPlugin extends Plugin {
     settings!: GraphAnalysisSettings;
     wasmInitialized: boolean = false;
     graphView: GraphView | null = null;
-    aiSummaryManager: AISummaryManager | null = null;
     vaultAnalysisManager: VaultSemanticAnalysisManager | null = null;
     dataStore: PluginDataStore | null = null;
     exclusionUtils: ExclusionUtils | null = null;
@@ -101,13 +100,9 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add command to show exclusion statistics
         this.addCommand({
             id: 'show-exclusion-stats',
-            name: 'Show exclusion statistics',
+            name: t('commands.showExclusionStats'),
             callback: () => this.showExclusionStats()
         });
-
-        // Initialize AI Summary Manager and add status bar button
-        this.aiSummaryManager = new AISummaryManager(this.app, this.settings);
-        this.aiSummaryManager.createStatusBarButton(this.addStatusBarItem());
 
         this.dataStore = new PluginDataStore(this);
         await this.dataStore.migrateLegacyCacheFromVaultFiles(this.app);
@@ -115,31 +110,15 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Initialize Vault Analysis Manager (no status bar button - now in graph view)
         this.vaultAnalysisManager = new VaultSemanticAnalysisManager(this.app, this.settings, this.dataStore);
 
-        // Add command for AI summary
-        this.addCommand({
-            id: 'generate-ai-summary',
-            name: 'Generate AI summary for current note',
-            checkCallback: (checking: boolean) => {
-                const activeFile = this.app.workspace.getActiveFile();
-                if (activeFile && activeFile.extension === 'md') {
-                    if (!checking) {
-                        void this.aiSummaryManager?.generateAISummaryForCurrentNote();
-                    }
-                    return true;
-                }
-                return false;
-            }
-        });
-
         // Add command for vault analysis
         this.addCommand({
             id: 'generate-vault-analysis',
-            name: 'Generate AI analysis for entire vault',
+            name: t('commands.generateVaultAnalysis'),
             callback: () => {
                 if (this.vaultAnalysisManager) {
                     void this.vaultAnalysisManager.generateVaultAnalysis();
                 } else {
-                    new Notice('Vault analysis manager not initialized');
+                    new Notice(t('notices.vaultAnalysisNotInitialized'));
                 }
             }
         });
@@ -147,18 +126,18 @@ export default class GraphAnalysisPlugin extends Plugin {
         // Add command to view vault analysis results
         this.addCommand({
             id: 'view-vault-analysis',
-            name: 'View vault analysis results',
+            name: t('commands.viewVaultAnalysis'),
             callback: () => {
                 if (this.vaultAnalysisManager) {
                     void this.vaultAnalysisManager.viewVaultAnalysisResults();
                 } else {
-                    new Notice('Vault analysis manager not initialized');
+                    new Notice(t('notices.vaultAnalysisNotInitialized'));
                 }
             }
         });
 
         // Add a ribbon icon to show the graph view
-        this.addRibbonIcon('waypoints', 'Graph analysis view', () => {
+        this.addRibbonIcon('waypoints', t('ribbon.graphView'), () => {
             void (async () => {
                 const existing = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
                 if (existing.length > 0) {
@@ -179,14 +158,12 @@ export default class GraphAnalysisPlugin extends Plugin {
     async loadSettings() {
         const data = await this.loadData() as Partial<GraphAnalysisSettings> | null;
         this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
+        configureI18n(this.settings.uiLanguage);
     }
 
     async saveSettings() {
         await this.saveData(this.settings);
-        // Update AI Summary Manager settings
-        if (this.aiSummaryManager) {
-            this.aiSummaryManager.updateSettings(this.settings);
-        }
+        configureI18n(this.settings.uiLanguage);
         // Update Vault Analysis Manager settings
         if (this.vaultAnalysisManager) {
             this.vaultAnalysisManager.updateSettings(this.settings);
@@ -212,7 +189,7 @@ export default class GraphAnalysisPlugin extends Plugin {
 
         this.wasmLoadingPromise = (async () => {
             try {
-                this.wasmLoadingNotice = new Notice('Initializing graph analysis...', 0);
+                this.wasmLoadingNotice = new Notice(t('notices.wasmInitializing'), 0);
 
                 const wasmBinary = this.getWasmBinary();
 
@@ -239,7 +216,7 @@ export default class GraphAnalysisPlugin extends Plugin {
                     this.wasmLoadingNotice = null;
                 }
                 
-                new Notice('Failed to initialize Graph Analysis WASM module: ' + (error as Error).message);
+                new Notice(t('notices.wasmInitFailed', { message: (error as Error).message }));
                 this.wasmLoadingPromise = null;
             }
         })();
@@ -291,12 +268,6 @@ export default class GraphAnalysisPlugin extends Plugin {
             this.wasmLoadingNotice = null;
         }
         
-        // Clean up AI Summary Manager
-        if (this.aiSummaryManager) {
-            this.aiSummaryManager.destroy();
-            this.aiSummaryManager = null;
-        }
-        
         // Clean up Vault Analysis Manager
         if (this.vaultAnalysisManager) {
             this.vaultAnalysisManager.destroy();
@@ -341,7 +312,10 @@ export default class GraphAnalysisPlugin extends Plugin {
             this.displayResults(results, `${algorithm.charAt(0).toUpperCase() + algorithm.slice(1)} Centrality`);
         } catch (error) {
             // console.error(`Failed to analyze ${algorithm} centrality:`, error);
-            new Notice(`Failed to analyze ${algorithm} centrality: ${(error as Error).message}`);
+            new Notice(t('notices.analyzeCentralityFailed', {
+                algorithm,
+                message: (error as Error).message
+            }));
         }
     }
 
@@ -558,16 +532,16 @@ export default class GraphAnalysisPlugin extends Plugin {
 
     showExclusionStats() {
         if (!this.exclusionUtils) {
-            new Notice('Exclusion utils not initialized');
+            new Notice(t('notices.exclusionUtilsNotInitialized'));
             return;
         }
 
         try {
             const allFiles = this.vaultScope?.getAllMarkdownFiles() ?? this.app.vault.getMarkdownFiles();
             const stats = this.exclusionUtils.getExclusionStats(allFiles);
-            new Notice(`Check console for detailed exclusion statistics. ${stats.totalExcluded} files excluded.`);
+            new Notice(t('notices.exclusionStatsConsole', { count: stats.totalExcluded }));
         } catch {
-            new Notice('Error getting exclusion statistics');
+            new Notice(t('notices.exclusionStatsError'));
         }
     }
 

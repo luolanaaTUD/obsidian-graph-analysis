@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
 import { Node } from '../types/types';
 import { GRAPH_ANALYSIS_VIEW_TYPE } from './GraphAnalysisView';
+import { t } from '../i18n';
 
 export const CENTRALITY_RESULTS_VIEW_TYPE = 'centrality-results-view';
 
@@ -20,7 +21,7 @@ export class CentralityResultsView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Centrality analysis';
+        return t('centralityView.title', { algorithm: 'Centrality' });
     }
 
     getIcon(): string {
@@ -54,7 +55,7 @@ export class CentralityResultsView extends ItemView {
 
         // Create header
         const header = container.createEl('div', { cls: 'centrality-results-header' });
-        header.createEl('h2', { text: `${this.algorithm} Analysis` });
+        header.createEl('h2', { text: t('centralityView.title', { algorithm: this.algorithm }) });
 
         // Create results list container
         const resultsSection = container.createEl('div', { cls: 'centrality-results-section' });

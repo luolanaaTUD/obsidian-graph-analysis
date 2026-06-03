@@ -8,12 +8,17 @@ import {
 } from './MasterAnalysisManager';
 import { AIModelService, SemanticAnalysisError } from '../services/AIModelService';
 import { getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
+import { t } from '../i18n';
 import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
 import { cleanupNoteContent } from '../utils/NoteContentUtils';
 import { PluginDataStore } from '../utils/PluginDataStore';
 import type { FailedBatchEntry, FailedBatchesData } from '../types/plugin-cache-data';
+import {
+    buildContextSampleFromNoteContents,
+    buildLanguagePromptSection
+} from './promptLanguage';
 
 export class VaultSemanticAnalysisManager {
     private app: App;
@@ -99,28 +104,30 @@ export class VaultSemanticAnalysisManager {
         // Add title
         tooltipEl.createDiv({ 
             cls: 'tooltip-title',
-            text: 'Vault Analysis'
+            text: t('vaultAnalysis.buttonTitle')
         });
         
         // Add description
         const description = tooltipEl.createDiv({ cls: 'tooltip-description' });
-        description.setText('AI-powered analysis of your entire vault to extract summaries, keywords, knowledge domains, and graph centrality metrics. Shift+click to force refresh graph metrics.');
+        description.setText(t('vaultAnalysis.buttonDesc'));
         
         // Add click handler for vault analysis - directly open results modal
         button.addEventListener('click', (event: MouseEvent) => {
             if (event.shiftKey) {
                 void (async () => {
                     try {
-                        const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
+                        const enhanceNotice = new Notice(t('notices.enhancingWithMetrics'), 0);
                         const enhanced = await this.enhanceWithGraphMetrics();
                         enhanceNotice.hide();
                         if (enhanced) {
-                            new Notice('✅ Vault analysis enhanced with graph metrics!');
+                            new Notice(t('notices.enhancedWithMetrics'));
                         } else {
-                            new Notice('ℹ️ no existing vault analysis found. Generate analysis first.');
+                            new Notice(t('notices.noAnalysisForEnhance'));
                         }
                     } catch (err) {
-                        new Notice(`❌ Failed to enhance: ${err instanceof Error ? err.message : String(err)}`);
+                        new Notice(t('notices.enhanceFailed', {
+                            message: err instanceof Error ? err.message : String(err)
+                        }));
                     }
                 })();
             } else {
@@ -451,7 +458,7 @@ export class VaultSemanticAnalysisManager {
         try {
             // Check if Gemini API key is configured
             if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
-                new Notice('Please configure your Gemini API key in settings to use vault analysis.');
+                new Notice(t('notices.configureApiKey'));
                 return false;
             }
 
@@ -462,7 +469,7 @@ export class VaultSemanticAnalysisManager {
             const includedFiles = this.getIncludedMarkdownFiles();
             
             if (includedFiles.length === 0) {
-                new Notice('No files found for analysis after applying exclusion rules.');
+                new Notice(t('notices.noFilesAfterExclusion'));
                 return false;
             }
 
@@ -510,7 +517,7 @@ export class VaultSemanticAnalysisManager {
             }
 
             if (filesToProcess.length === 0) {
-                new Notice(`✅ All files are up to date. No changes detected. (${unchangedCount} files unchanged)`);
+                new Notice(t('notices.allFilesUpToDate', { count: unchangedCount }));
                 return false;
             }
 
@@ -518,12 +525,18 @@ export class VaultSemanticAnalysisManager {
             // ~4 batches per minute based on rate limits and processing
             const batchCount = Math.ceil(filesToProcess.length / this.MAX_NOTES_PER_BATCH);
             const estimatedMins = Math.max(1, Math.ceil(batchCount / 4));
-            let initialMessage: string;
-            if (isIncrementalUpdate) {
-                initialMessage = `Updating analysis: ${changedCount} changed, ${newCount} new, ${unchangedCount} unchanged files (processing ${filesToProcess.length} files). Est. ~${estimatedMins} min`;
-            } else {
-                initialMessage = `Starting vault analysis for ${filesToProcess.length} files. Est. ~${estimatedMins} min`;
-            }
+            const initialMessage = isIncrementalUpdate
+                ? t('notices.vaultAnalysisUpdating', {
+                    changed: changedCount,
+                    new: newCount,
+                    unchanged: unchangedCount,
+                    processing: filesToProcess.length,
+                    minutes: estimatedMins
+                })
+                : t('notices.vaultAnalysisStarting', {
+                    count: filesToProcess.length,
+                    minutes: estimatedMins
+                });
             const progressNotice = new Notice(initialMessage, 0);
             
             const results: VaultAnalysisResult[] = [];
@@ -531,7 +544,7 @@ export class VaultSemanticAnalysisManager {
             let failed = 0;
 
             // Prepare file data first to get char counts
-            progressNotice.setMessage('Preparing files for analysis...');
+            progressNotice.setMessage(t('notices.preparingFiles'));
             const fileDataList: Array<{
                 file: TFile;
                 content: string;
@@ -743,7 +756,7 @@ export class VaultSemanticAnalysisManager {
             }
 
             // Calculate graph metrics and enhance results
-            const enhanceNotice = new Notice('Calculating graph metrics...', 0);
+            const enhanceNotice = new Notice(t('notices.calculatingGraphMetrics'), 0);
             const graphMetrics = await this.calculateGraphMetrics();
             
             // Enhance results with graph metrics (for all files, including unchanged ones)
@@ -781,21 +794,31 @@ export class VaultSemanticAnalysisManager {
                 const retryTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
                 const retryTimeStr = retryTime.toLocaleString();
                 const remainingCount = filesToProcess.length - successCount;
-                completionMessage = `Saved partial results (${successCount}/${filesToProcess.length} files). `
-                    + `Free tier limit: ~500 notes per day. `
-                    + `You can continue analyzing the remaining ${remainingCount} notes after ${retryTimeStr} by running the analysis again.`;
+                completionMessage = t('notices.vaultCompleteQuota', {
+                    success: successCount,
+                    total: filesToProcess.length,
+                    remaining: remainingCount,
+                    retryTime: retryTimeStr
+                });
             } else if (isIncrementalUpdate) {
-                if (failed === 0) {
-                    completionMessage = `✅ Analysis updated successfully! Processed ${successCount} changed/new files (${changedCount} changed, ${newCount} new), kept ${unchangedCount} unchanged, removed ${deletedFilePaths.length} deleted.`;
-                } else {
-                    completionMessage = `⚠️ Analysis update completed with some issues. Processed ${successCount} files successfully, ${failed} failed, kept ${unchangedCount} unchanged, removed ${deletedFilePaths.length} deleted.`;
-                }
+                completionMessage = failed === 0
+                    ? t('notices.vaultCompleteIncrementalOk', {
+                        success: successCount,
+                        changed: changedCount,
+                        new: newCount,
+                        unchanged: unchangedCount,
+                        deleted: deletedFilePaths.length
+                    })
+                    : t('notices.vaultCompleteIncrementalWarn', {
+                        success: successCount,
+                        failed,
+                        unchanged: unchangedCount,
+                        deleted: deletedFilePaths.length
+                    });
             } else {
-                if (failed === 0) {
-                    completionMessage = `✅ Vault analysis with graph metrics completed successfully! Processed ${successCount} files. Results saved to plugin data folder`;
-                } else {
-                    completionMessage = `⚠️ Vault analysis with graph metrics completed with some issues. Processed ${successCount} files successfully, ${failed} failed. Results saved to plugin data folder`;
-                }
+                completionMessage = failed === 0
+                    ? t('notices.vaultCompleteFullOk', { success: successCount })
+                    : t('notices.vaultCompleteFullWarn', { success: successCount, failed });
             }
 
             new Notice(completionMessage);
@@ -806,7 +829,7 @@ export class VaultSemanticAnalysisManager {
         } catch (error) {
             // console.error('Failed to generate vault analysis:', error);
             const err = error instanceof Error ? error : new Error(String(error));
-            new Notice(`❌ Failed to generate vault analysis: ${getUserFriendlyMessage(err)}`);
+            new Notice(t('notices.vaultAnalysisFailed', { message: getUserFriendlyMessage(err) }));
             return false;
         } finally {
             this.clearAnalysisInProgress();
@@ -1097,25 +1120,27 @@ export class VaultSemanticAnalysisManager {
                 );
 
                 if (!hasGraphMetrics) {
-                    const notice = new Notice('Your vault analysis exists but lacks graph metrics. Click to enhance it with centrality scores.', 0);
+                    const notice = new Notice(t('notices.enhanceMetricsPrompt'), 0);
                     const noticeContainer = (notice as { messageEl: HTMLElement }).messageEl;
                     const enhanceBtn = noticeContainer.createEl('button', {
-                        text: 'Enhance with graph metrics',
+                        text: t('notices.enhanceMetricsButton'),
                         cls: 'graph-enhance-btn'
                     });
 
                     enhanceBtn.onclick = () => {
                         notice.hide();
                         void (async () => {
-                            const enhanceNotice = new Notice('Enhancing vault analysis with graph metrics...', 0);
+                            const enhanceNotice = new Notice(t('notices.enhancingWithMetrics'), 0);
                             try {
                                 await this.enhanceWithGraphMetrics();
                                 enhanceNotice.hide();
-                                new Notice('Vault analysis enhanced with graph metrics!');
+                                new Notice(t('notices.enhancedWithMetrics'));
                                 await this.viewVaultAnalysisResults();
                             } catch (err) {
                                 enhanceNotice.hide();
-                                new Notice(`Failed to enhance analysis: ${err instanceof Error ? err.message : String(err)}`);
+                                new Notice(t('notices.enhanceAnalysisFailed', {
+                                    message: err instanceof Error ? err.message : String(err)
+                                }));
                             }
                         })();
                     };
@@ -1125,7 +1150,7 @@ export class VaultSemanticAnalysisManager {
             }
         } catch (error) {
             // console.error('Failed to load vault analysis results:', error);
-            new Notice(error instanceof Error ? error.message : 'Failed to load vault analysis results');
+            new Notice(error instanceof Error ? error.message : t('notices.loadVaultAnalysisFailed'));
         }
     }
 
@@ -1137,6 +1162,7 @@ export class VaultSemanticAnalysisManager {
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;
         this.aiService.updateSettings(settings);
+        this.masterAnalysisManager.updateSettings(settings);
     }
 
     public destroy(): void {
@@ -1341,13 +1367,15 @@ For each note, provide:
 2. **Keywords**: 3-6 key terms or phrases (comma-separated)
 3. **Knowledge Domain**: Knowledge domain subdivision codes that best match the content (comma-separated)
 
-## Language Rule (Critical)
-Each batch contains multiple notes that may use different languages. For each note, the summary and keywords MUST use the same language as that note's content. A Chinese note gets a Chinese response; an English note gets an English response. Match each note's language independently—do not assume all notes in a batch share the same language.
-
 ## Notes to Analyze:`;
 
+        const contextSample = buildContextSampleFromNoteContents(
+            meaningfulFiles.map(data => ({ content: data.content }))
+        );
+        const languageSection = buildLanguagePromptSection(this.settings, contextSample);
+
         // Build the complete prompt by combining all components
-        let fullPrompt = `${systemPrompt}\n\n${contextPrompt}\n\n${instructionPrompt}\n\n`;
+        let fullPrompt = `${systemPrompt}\n\n${contextPrompt}\n\n${instructionPrompt}\n\n${languageSection}\n\n`;
         
         // Add each meaningful file to the prompt
         meaningfulFiles.forEach((data, index) => {

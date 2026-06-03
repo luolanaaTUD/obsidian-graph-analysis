@@ -22,7 +22,6 @@ This plugin takes a different approach. It first computes real graph metrics —
 - **Suggested Connections** — AI-identified links you can add to your vault in one click
 - **Priority Review Cards** — Surface hubs, bridges, and authorities that need attention
 - **Exclusion Rules** — Filter out folders and tags; the graph refreshes automatically
-- **AI Note Summaries** — Quick per-note summaries via Google Gemini from the status bar
 
 ## Installation
 
@@ -92,12 +91,6 @@ Turns analysis into concrete next steps.
 - **Notes Needing Review** — Priority cards (high / medium / low) for hubs, bridges, and authorities that may be stale or under-connected
 - **Suggested Connections** — An interactive sub-graph of notes the AI recommends linking. Remove unwanted suggestions, then click **Add to Main Graph** to write `[[links]]` directly into your notes
 
-## AI Note Summary
-
-For a quick summary of the current note, click **AI Summary** in the status bar. Requires a Gemini API key.
-
-**Getting a Gemini API key:** Visit [Google AI Studio](https://aistudio.google.com/), sign in, create an API key, and paste it into plugin settings under "LLM Model Configuration".
-
 ## Settings
 
 Under Obsidian settings → **Knowledge Graph Analysis**:
@@ -106,7 +99,7 @@ Under Obsidian settings → **Knowledge Graph Analysis**:
 |---|---|
 | **Exclude Folders** | Comma-separated paths (e.g. `Archive, daily-notes`). Real-time stats show excluded vs included counts. |
 | **Exclude Tags** | Comma-separated tags without `#` (e.g. `private, draft`). |
-| **Gemini API Key** | Required for AI analysis and summaries. |
+| **Gemini API Key** | Required for vault AI analysis. Visit [Google AI Studio](https://aistudio.google.com/) to create a key, then paste it under "LLM Model Configuration". |
 | **Visualization** | Graph appearance options in the graph view settings panel. |
 
 ## Technical Details
@@ -140,7 +133,7 @@ To install into a vault, copy `dist/` contents into `.obsidian/plugins/knowledge
 This project uses [eslint-plugin-obsidianmd](https://github.com/obsidianmd/eslint-plugin). Before submitting to the community plugin directory:
 
 ```bash
-npm run lint:submission   # errors only (CI uses this)
+npm run lint:submission   # errors only (recommended before release)
 npm run lint              # full report including UI sentence-case warnings
 npm run lint:fix          # auto-fix where supported
 ```

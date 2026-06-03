@@ -13,6 +13,7 @@ import { PluginService } from '../../services/PluginService';
 import { VaultSemanticAnalysisManager } from '../../ai/VaultSemanticAnalysisManager';
 import { PluginDataStore } from '../../utils/PluginDataStore';
 import { CENTRALITY_RESULTS_VIEW_TYPE } from '../../views/CentralityResultsView';
+import { t } from '../../i18n';
 import {
     KEPLER_COLOR_PALETTES,
     colorPaletteToColorRange,
@@ -245,7 +246,7 @@ export class GraphView {
             await this.loadVaultData();
         } catch (error) {
             // console.error('Error loading vault data:', error);
-            new Notice(`Error loading graph data: ${(error as Error).message}`);
+            new Notice(t('notices.graphLoadError', { message: (error as Error).message }));
         } finally {
             this.hideLoadingIndicator();
         }
@@ -710,21 +711,21 @@ export class GraphView {
                 
                 // Show creation and modification times
                 const createdField = metadataContainer.createDiv({ cls: 'metadata-field' });
-                createdField.createSpan({ text: 'Created: ', cls: 'metadata-label' });
+                createdField.createSpan({ text: t('graph.tooltip.created'), cls: 'metadata-label' });
                 createdField.createSpan({ 
                     text: new Date(file.stat.ctime).toLocaleString(),
                     cls: 'metadata-value' 
                 });
                 
                 const modifiedField = metadataContainer.createDiv({ cls: 'metadata-field' });
-                modifiedField.createSpan({ text: 'Modified: ', cls: 'metadata-label' });
+                modifiedField.createSpan({ text: t('graph.tooltip.modified'), cls: 'metadata-label' });
                 modifiedField.createSpan({ 
                     text: new Date(file.stat.mtime).toLocaleString(),
                     cls: 'metadata-value' 
                 });
                 
                 const sizeField = metadataContainer.createDiv({ cls: 'metadata-field' });
-                sizeField.createSpan({ text: 'Size: ', cls: 'metadata-label' });
+                sizeField.createSpan({ text: t('graph.tooltip.size'), cls: 'metadata-label' });
                 sizeField.createSpan({ 
                     text: `${(file.stat.size / 1024).toFixed(2)} KB`,
                     cls: 'metadata-value' 
@@ -733,7 +734,7 @@ export class GraphView {
                 // Show tags if available
                 if (metadata && metadata.tags && metadata.tags.length > 0) {
                     const tagsField = metadataContainer.createDiv({ cls: 'metadata-field' });
-                    tagsField.createSpan({ text: 'Tags: ', cls: 'metadata-label' });
+                    tagsField.createSpan({ text: t('graph.tooltip.tags'), cls: 'metadata-label' });
                     const tagsContainer = tagsField.createSpan({ cls: 'metadata-value metadata-tags' });
                     
                     metadata.tags.forEach((tag) => {
@@ -787,7 +788,7 @@ export class GraphView {
                 // Create a button to open the note
                 const actionHint = metadataContainer.createDiv({ cls: 'action-hint' });
                 const openNoteBtn = actionHint.createEl('button', {
-                    text: 'Open note',
+                    text: t('graph.tooltip.openNote'),
                     cls: 'open-note-button',
                 });
                 
@@ -806,7 +807,7 @@ export class GraphView {
                 // Note preview section
                 const previewSection = tooltip.createDiv({ cls: 'note-preview-section' });
                 previewSection.createEl('div', {
-                    text: 'Note preview',
+                    text: t('graph.tooltip.notePreview'),
                     cls: 'preview-section-title'
                 });
                 
@@ -820,14 +821,14 @@ export class GraphView {
                     previewContent.setText(previewText);
                 }).catch(() => {
                     if (this.currentTooltip !== tooltip) return;
-                    previewContent.setText('Unable to load note preview.');
+                    previewContent.setText(t('graph.tooltip.previewFailed'));
                     previewContent.classList.add('metadata-error-text');
                 });
             } else {
                 // If file doesn't exist, show an error message
                 const noteInfo = metadataContainer.createDiv({ cls: 'metadata-error' });
                 noteInfo.createSpan({ 
-                    text: 'Note not found in vault. It may have been renamed or deleted.',
+                    text: t('graph.tooltip.noteNotFound'),
                     cls: 'metadata-error-text'
                 });
             }
@@ -835,7 +836,7 @@ export class GraphView {
             // No path information
             const errorInfo = metadataContainer.createDiv({ cls: 'metadata-error' });
             errorInfo.createSpan({ 
-                text: 'No file path associated with this node.',
+                text: t('graph.tooltip.noFilePath'),
                 cls: 'metadata-error-text'
             });
         }
@@ -1438,7 +1439,9 @@ export class GraphView {
             this.showLoadingIndicator();
             await this.loadVaultData();
         } catch (err) {
-            new Notice(`Error reloading graph data: ${err instanceof Error ? err.message : String(err)}`);
+            new Notice(t('notices.graphReloadError', {
+                message: err instanceof Error ? err.message : String(err)
+            }));
         } finally {
             this.hideLoadingIndicator();
         }
@@ -1625,7 +1628,7 @@ export class GraphView {
     
     private showLoadingIndicator() {
         this.loadingIndicator = this.container.createDiv({ cls: 'graph-loading-indicator' });
-        this.loadingIndicator.setText('Loading graph data...');
+        this.loadingIndicator.setText(t('graph.loading'));
         return this.loadingIndicator;
     }
     
@@ -1809,10 +1812,10 @@ export class GraphView {
 
         // Display toggles section
         const displaySection = dropdown.createDiv({ cls: 'graph-settings-display-section' });
-        displaySection.createDiv({ cls: 'graph-settings-section-title', text: 'Display' });
+        displaySection.createDiv({ cls: 'graph-settings-section-title', text: t('graph.display') });
 
         const labelsRow = displaySection.createDiv({ cls: 'graph-settings-toggle-row' });
-        labelsRow.createDiv({ cls: 'graph-settings-toggle-label', text: 'Labels' });
+        labelsRow.createDiv({ cls: 'graph-settings-toggle-label', text: t('graph.labels') });
         const labelsTrack = labelsRow.createDiv({ cls: 'graph-settings-toggle-switch' });
         const labelsToggle = labelsTrack.createDiv({ cls: `toggle-track ${this.showNodeLabels ? 'active' : ''}` });
         labelsToggle.createDiv({ cls: 'toggle-handle' });
@@ -1823,7 +1826,7 @@ export class GraphView {
         });
 
         const arrowsRow = displaySection.createDiv({ cls: 'graph-settings-toggle-row' });
-        arrowsRow.createDiv({ cls: 'graph-settings-toggle-label', text: 'Arrows' });
+        arrowsRow.createDiv({ cls: 'graph-settings-toggle-label', text: t('graph.arrows') });
         const arrowsTrack = arrowsRow.createDiv({ cls: 'graph-settings-toggle-switch' });
         const arrowsToggle = arrowsTrack.createDiv({ cls: `toggle-track ${this.showArrows ? 'active' : ''}` });
         arrowsToggle.createDiv({ cls: 'toggle-handle' });
@@ -1855,7 +1858,7 @@ export class GraphView {
 
             // Type selector
             const typeRow = controls.createDiv({ cls: 'gradient-control-row' });
-            typeRow.createDiv({ cls: 'gradient-control-label', text: 'Type' });
+            typeRow.createDiv({ cls: 'gradient-control-label', text: t('graph.type') });
             const typeSelect = typeRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
             ['sequential', 'diverging', 'cyclical', 'qualitative'].forEach(t => {
                 const option = typeSelect.createEl('option', { value: t, text: t });
@@ -1866,7 +1869,7 @@ export class GraphView {
 
             // Distribution selector
             const distributionRow = controls.createDiv({ cls: 'gradient-control-row' });
-            distributionRow.createDiv({ cls: 'gradient-control-label', text: 'Scale' });
+            distributionRow.createDiv({ cls: 'gradient-control-label', text: t('graph.scale') });
             const distributionSelect = distributionRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
             ['linear', 'quantize', 'jenks'].forEach(d => {
                 const option = distributionSelect.createEl('option', { value: d, text: d });
@@ -1940,7 +1943,7 @@ export class GraphView {
 
             // Steps input
             const stepsRow = controls.createDiv({ cls: 'gradient-control-row' });
-            stepsRow.createDiv({ cls: 'gradient-control-label', text: 'Steps' });
+            stepsRow.createDiv({ cls: 'gradient-control-label', text: t('graph.steps') });
             const stepsSelect = stepsRow.createDiv({ cls: 'gradient-control-input' }).createEl('select');
             // Add options from 2 to 20
             for (let i = 2; i <= 20; i++) {
@@ -1961,17 +1964,17 @@ export class GraphView {
 
             // Reversed button
             const reversedRow = controls.createDiv({ cls: 'gradient-control-row' });
-            reversedRow.createDiv({ cls: 'gradient-control-label', text: 'Reverse' });
+            reversedRow.createDiv({ cls: 'gradient-control-label', text: t('graph.reverse') });
             const reversedButton = reversedRow.createDiv({ cls: 'gradient-control-input' })
                 .createEl('button', { 
                     cls: `gradient-control-button ${this.gradientSettings[type].reversed ? 'active' : ''}`,
-                    text: this.gradientSettings[type].reversed ? 'on' : 'off'
+                    text: this.gradientSettings[type].reversed ? t('graph.on') : t('graph.off')
                 });
             reversedButton.addEventListener('click', (e) => {
                 e.stopPropagation(); // Prevent event from bubbling up
                 this.gradientSettings[type].reversed = !this.gradientSettings[type].reversed;
                 reversedButton.classList.toggle('active', this.gradientSettings[type].reversed);
-                reversedButton.setText(this.gradientSettings[type].reversed ? 'on' : 'off');
+                reversedButton.setText(this.gradientSettings[type].reversed ? t('graph.on') : t('graph.off'));
                 this.updateGradientPreview(preview, this.selectedPalettes[type], type);
                 if (this.centralityState[type]) {
                     void this.calculateAndDisplayCentrality(type);
@@ -2105,20 +2108,22 @@ export class GraphView {
         // Add title (capitalize first letter and add "Centrality")
         tooltipEl.createDiv({ 
             cls: 'tooltip-title',
-            text: `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`
+            text: t('graph.centralityTitle', {
+                type: type.charAt(0).toUpperCase() + type.slice(1)
+            })
         });
         
         // Add description based on centrality type
         const description = tooltipEl.createDiv({ cls: 'tooltip-description' });
         switch (type) {
             case 'betweenness':
-                description.setText('Measures how often a node acts as a bridge along the shortest path between two other nodes. Higher values indicate more important bridge nodes.');
+                description.setText(t('graph.betweennessDesc'));
                 break;
             case 'closeness':
-                description.setText('Measures how close a node is to all other nodes in the network. Higher values indicate nodes that can quickly reach or communicate with other nodes.');
+                description.setText(t('graph.closenessDesc'));
                 break;
             case 'eigenvector':
-                description.setText('Measures node importance based on the importance of its neighbors. Higher values indicate nodes connected to other important nodes.');
+                description.setText(t('graph.eigenvectorDesc'));
                 break;
         }
         
@@ -2294,7 +2299,10 @@ export class GraphView {
             pluginInstance.displayResults(results, `${type.charAt(0).toUpperCase() + type.slice(1)} Centrality`);
             return Promise.resolve();
         } catch (err) {
-            new Notice(`Failed to calculate ${type} centrality: ${err instanceof Error ? err.message : String(err)}`);
+            new Notice(t('notices.centralityFailed', {
+                type,
+                message: err instanceof Error ? err.message : String(err)
+            }));
             return Promise.resolve();
         }
     }

@@ -1,5 +1,8 @@
 import { App, PluginSettingTab, Setting, Modal } from 'obsidian';
 import GraphAnalysisPlugin from '../main';
+import { t } from '../i18n';
+import type { AiResponseLanguage, UiLanguage } from '../types/types';
+import { configureI18n } from '../i18n';
 
 export class GraphAnalysisSettingTab extends PluginSettingTab {
     plugin: GraphAnalysisPlugin;
@@ -15,16 +18,15 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
         containerEl.empty();
         containerEl.addClass('graph-analysis-settings');
 
-        // Exclude Notes from Analysis: title + one rounded container (Exclude Folders | Exclude Tags | Statistics)
-        new Setting(containerEl).setName("Exclude notes from analysis").setHeading();
+        new Setting(containerEl).setName(t('settings.excludeHeading')).setHeading();
         const exclusionContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 
         new Setting(exclusionContainer)
             .setClass('graph-settings-item')
-            .setName('Exclude folders')
-            .setDesc('Use folder paths like "archive", "templates", "private/personal"')
+            .setName(t('settings.excludeFolders.name'))
+            .setDesc(t('settings.excludeFolders.desc'))
             .addText(text => text
-                .setPlaceholder('Archive,templates,private/personal')
+                .setPlaceholder(t('settings.excludeFolders.placeholder'))
                 .setValue(this.plugin.settings.excludeFolders.join(','))
                 .onChange(async (value) => {
                     this.plugin.settings.excludeFolders = value.split(',').map(s => s.trim()).filter(s => s);
@@ -34,10 +36,10 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
 
         new Setting(exclusionContainer)
             .setClass('graph-settings-item')
-            .setName('Exclude tags')
-            .setDesc('Use tag names without # like "private", "draft", "archive"')
+            .setName(t('settings.excludeTags.name'))
+            .setDesc(t('settings.excludeTags.desc'))
             .addText(text => text
-                .setPlaceholder('Private,draft,archive')
+                .setPlaceholder(t('settings.excludeTags.placeholder'))
                 .setValue(this.plugin.settings.excludeTags.join(','))
                 .onChange(async (value) => {
                     this.plugin.settings.excludeTags = value.split(',').map(s => s.trim()).filter(s => s);
@@ -45,23 +47,21 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                     this.updateExclusionStats();
                 }));
 
-        // Exclusion statistics (inline under Exclude Notes from Analysis)
         this.createExclusionStatsSection(exclusionContainer);
 
-        // LLM Model Configuration: title + one rounded container
-        new Setting(containerEl).setName("LLM model configuration").setHeading();
+        new Setting(containerEl).setName(t('settings.llmHeading')).setHeading();
         const apiContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 
         let apiKeyTextComponent: { inputEl: HTMLInputElement };
         new Setting(apiContainer)
             .setClass('graph-settings-item')
-            .setName('Gemini API key')
+            .setName(t('settings.geminiApiKey.name'))
             .setDesc((() => {
                 const doc = this.containerEl.ownerDocument;
                 const frag = doc.createDocumentFragment();
-                frag.append(doc.createTextNode('Your Google Gemini API key. '));
+                frag.append(doc.createTextNode(t('settings.geminiApiKey.descPrefix')));
                 const link = doc.createElement('a');
-                link.textContent = 'Get an API key';
+                link.textContent = t('settings.geminiApiKey.getKeyLink');
                 link.href = 'https://aistudio.google.com/apikey';
                 link.setAttribute('target', '_blank');
                 link.setAttribute('rel', 'noopener');
@@ -69,7 +69,7 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                 return frag;
             })())
             .addText(text => {
-                text.setPlaceholder('Enter your Gemini API key')
+                text.setPlaceholder(t('settings.geminiApiKey.placeholder'))
                     .setValue(this.plugin.settings.geminiApiKey)
                     .onChange(async (value) => {
                         this.plugin.settings.geminiApiKey = value;
@@ -81,15 +81,54 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
             })
             .addExtraButton(btn => {
                 btn.setIcon('eye')
-                    .setTooltip('Show API key')
+                    .setTooltip(t('settings.geminiApiKey.showTooltip'))
                     .onClick(() => {
                         const input = apiKeyTextComponent.inputEl;
                         const isVisible = input.type === 'text';
                         input.type = isVisible ? 'password' : 'text';
                         btn.setIcon(isVisible ? 'eye' : 'eye-off');
-                        btn.setTooltip(isVisible ? 'Show API key' : 'Hide API key');
+                        btn.setTooltip(isVisible ? t('settings.geminiApiKey.showTooltip') : t('settings.geminiApiKey.hideTooltip'));
                     });
                 return btn;
+            });
+
+        new Setting(containerEl).setName(t('settings.languageHeading')).setHeading();
+        const languageContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
+
+        new Setting(languageContainer)
+            .setClass('graph-settings-item')
+            .setName(t('settings.uiLanguage.name'))
+            .setDesc(t('settings.uiLanguage.desc'))
+            .addDropdown(dropdown => {
+                dropdown
+                    .addOption('auto', t('settings.uiLanguage.obsidian'))
+                    .addOption('en', t('settings.uiLanguage.en'))
+                    .addOption('zh-Hans', t('settings.uiLanguage.zhHans'))
+                    .setValue(this.plugin.settings.uiLanguage)
+                    .onChange(async (value) => {
+                        this.plugin.settings.uiLanguage = value as UiLanguage;
+                        configureI18n(this.plugin.settings.uiLanguage);
+                        await this.plugin.saveSettings();
+                        this.display();
+                    });
+                return dropdown;
+            });
+
+        new Setting(languageContainer)
+            .setClass('graph-settings-item')
+            .setName(t('settings.aiResponseLanguage.name'))
+            .setDesc(t('settings.aiResponseLanguage.desc'))
+            .addDropdown(dropdown => {
+                dropdown
+                    .addOption('auto', t('settings.aiResponseLanguage.auto'))
+                    .addOption('en', t('settings.aiResponseLanguage.en'))
+                    .addOption('zh-Hans', t('settings.aiResponseLanguage.zhHans'))
+                    .setValue(this.plugin.settings.aiResponseLanguage)
+                    .onChange(async (value) => {
+                        this.plugin.settings.aiResponseLanguage = value as AiResponseLanguage;
+                        await this.plugin.saveSettings();
+                    });
+                return dropdown;
             });
     }
 
@@ -111,28 +150,40 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
 
             const statsText = statsContainer.createDiv({ cls: 'stats-text' });
             const excludedParts: string[] = [];
-            if (stats.excludedByFolder > 0) excludedParts.push(`${stats.excludedByFolder} by folder`);
-            if (stats.excludedByTag > 0) excludedParts.push(`${stats.excludedByTag} by tag`);
+            if (stats.excludedByFolder > 0) {
+                excludedParts.push(t('settings.stats.excludedByFolder', { count: stats.excludedByFolder }));
+            }
+            if (stats.excludedByTag > 0) {
+                excludedParts.push(t('settings.stats.excludedByTag', { count: stats.excludedByTag }));
+            }
             const excludedBreakdown = excludedParts.length > 0 ? ` (${excludedParts.join(', ')})` : '';
             statsText.createDiv({
-                text: `Excluded notes: ${stats.totalExcluded}${excludedBreakdown}`,
+                text: t('settings.stats.excludedTotal', {
+                    total: stats.totalExcluded,
+                    breakdown: excludedBreakdown
+                }),
                 cls: 'stat-item excluded-total'
             });
             statsText.createDiv({
-                text: `Notes included in analysis: ${stats.includedFiles}/${stats.totalFiles}`,
+                text: t('settings.stats.includedTotal', {
+                    included: stats.includedFiles,
+                    total: stats.totalFiles
+                }),
                 cls: 'stat-item included-total'
             });
 
             if (stats.totalExcluded > 0) {
-                const btn = statsContainer.createEl('button', { text: 'Show excluded files', cls: 'mod-cta' });
+                const btn = statsContainer.createEl('button', {
+                    text: t('settings.stats.showExcluded'),
+                    cls: 'mod-cta'
+                });
                 btn.addEventListener('click', () => this.showExcludedFilesList());
             }
         } catch {
-            this.exclusionStatsEl.createDiv({ 
-                text: 'Error calculating exclusion statistics',
+            this.exclusionStatsEl.createDiv({
+                text: t('settings.stats.error'),
                 cls: 'stat-error'
             });
-            // console.error('Error calculating exclusion statistics');
         }
     }
 
@@ -140,7 +191,7 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
         if (!this.plugin.exclusionUtils) return;
 
         const excludedFiles = this.plugin.exclusionUtils.getExcludedFiles();
-        
+
         const modal = new ExcludedFilesModal(this.app, excludedFiles);
         modal.open();
     }
@@ -158,15 +209,15 @@ class ExcludedFilesModal extends Modal {
         const { contentEl } = this;
         contentEl.empty();
 
-        contentEl.createEl('h2', { text: 'Excluded files' });
-        
+        contentEl.createEl('h2', { text: t('settings.excludedModal.title') });
+
         if (this.excludedFiles.length === 0) {
-            contentEl.createDiv({ text: 'No files are currently excluded.' });
+            contentEl.createDiv({ text: t('settings.excludedModal.empty') });
             return;
         }
 
         const fileList = contentEl.createDiv({ cls: 'excluded-files-list' });
-        
+
         this.excludedFiles.forEach(filePath => {
             const fileItem = fileList.createDiv({ cls: 'excluded-file-item' });
             fileItem.createSpan({ text: filePath });

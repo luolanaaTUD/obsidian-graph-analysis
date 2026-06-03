@@ -2,8 +2,6 @@ import { GoogleGenAI } from '@google/genai';
 import { GraphAnalysisSettings } from '../types/types';
 import { createKnowledgeNetworkSchema } from '../ai/schemas/knowledge-network.schema';
 import { createVaultSemanticAnalysisSchema } from '../ai/schemas/vault-semantic-analysis.schema';
-import { createNoteSummarySchema } from '../ai/schemas/note-summary.schema';
-import { createDomainClassificationSchema, KnowledgeSubdivision } from '../ai/schemas/domain-classification.schema';
 import { createKnowledgeEvolutionSchema } from '../ai/schemas/knowledge-evolution.schema';
 import { createRecommendedActionsSchema } from '../ai/schemas/recommended-actions.schema';
 import {
@@ -27,7 +25,7 @@ export type { SemanticErrorType };
 export { SemanticAnalysisError };
 
 // export const SEMANTIC_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'] as const;
-/** Semantic models for vault analysis and AI summary (gemini-3.1-flash-lite has 250K RPD) */
+/** Semantic models for vault analysis (gemini-3.1-flash-lite has 250K RPD) */
 // export const SEMANTIC_MODELS = ['gemini-3.1-flash-lite-preview'] as const;
 
 export class AIModelService {
@@ -196,7 +194,7 @@ export class AIModelService {
     }
 
     /**
-     * Semantic analysis using Gemini 2.5 Flash Lite for vault batch and AI summary.
+     * Semantic analysis using Gemini for vault batch processing.
      * Uses native structured output (responseMimeType + responseSchema).
      * @param modelOverride When set, use this model instead of SEMANTIC_MODEL_NAME
      */
@@ -213,8 +211,7 @@ export class AIModelService {
         }
 
         const model = modelOverride ?? this.SEMANTIC_MODEL_NAME;
-        const languageInstruction = '\n\nIMPORTANT: Your output language MUST match the language of each input note. If a note is written in Chinese, respond in Chinese; if in English, respond in English; and so on for any other language.';
-        const fullPrompt = prompt + languageInstruction;
+        // Caller must append buildLanguagePromptSection() from promptLanguage.ts.
 
         // console.log(`Sending semantic analysis request to ${model} (max tokens: ${maxOutputTokens})...`);
         // console.log(`SEMANTIC PROMPT (${fullPrompt.length} chars):`);
@@ -223,7 +220,7 @@ export class AIModelService {
         try {
             const response = await this.genAI.models.generateContent({
                 model,
-                contents: fullPrompt,
+                contents: prompt,
                 config: {
                     responseMimeType: 'application/json',
                     responseSchema,
@@ -305,13 +302,6 @@ export class AIModelService {
     }
 
     /**
-     * Create response schema for individual note summary analysis
-     */
-    public createNoteSummarySchema(): unknown {
-        return createNoteSummarySchema();
-    }
-
-    /**
      * Create response schema for knowledge evolution analysis
      */
     public createKnowledgeEvolutionSchema(): unknown {
@@ -324,17 +314,6 @@ export class AIModelService {
     public createRecommendedActionsSchema(): unknown {
         return createRecommendedActionsSchema();
     }
-
-    /**
-     * Create response schema for domain classification with knowledge domain validation
-     */
-    public createDomainClassificationSchema(availableSubdivisions: KnowledgeSubdivision[]): unknown {
-        return createDomainClassificationSchema(availableSubdivisions);
-    }
-
-
-
-
 
     /**
      * Rate limiting helper - wait between requests (uses Gemini 3 Flash rate: 12s)

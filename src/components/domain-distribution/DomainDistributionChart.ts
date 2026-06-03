@@ -1,6 +1,7 @@
-import { App } from 'obsidian';
+import { App, setIcon } from 'obsidian';
 import { GraphAnalysisSettings, HierarchicalDomain, DomainConnection } from '../../types/types';
 import * as d3 from 'd3';
+import { t } from '../../i18n';
 
 export interface DomainData {
     domain: string;
@@ -173,9 +174,10 @@ export class DomainDistributionChart {
     private renderPlaceholder(): void {
         const placeholder = this.container.createEl('div', { cls: 'domain-chart-placeholder' });
         const content = placeholder.createEl('div', { cls: 'placeholder-content' });
-        content.createEl('div', { cls: 'placeholder-icon', text: '📊' });
-        content.createEl('div', { cls: 'placeholder-title', text: 'No domain hierarchy available' });
-        content.createEl('div', { cls: 'placeholder-text', text: 'Please generate vault analysis with knowledge domain classification to see domain distribution.' });
+        const iconEl = content.createEl('div', { cls: 'placeholder-icon' });
+        setIcon(iconEl, 'pie-chart');
+        content.createEl('div', { cls: 'placeholder-title', text: t('domainChart.noHierarchy') });
+        content.createEl('div', { cls: 'placeholder-text', text: t('domainChart.generateFirst') });
     }
 
     private renderSunburstChart(container: HTMLElement = this.container): void {
@@ -505,7 +507,7 @@ export class DomainDistributionChart {
                     .attr('dy', lineHeight)
                     .style('font-size', Math.max(centerRadius * 0.10, 7) + 'px')
                     .style('fill', 'var(--text-muted)')
-                    .text('notes');
+                    .text(t('domainChart.notes'));
                 currentLine++;
 
                 textContainer.append('tspan')
@@ -523,7 +525,7 @@ export class DomainDistributionChart {
                         .attr('dy', lineHeight)
                         .style('font-size', Math.max(centerRadius * 0.09, 7) + 'px')
                         .style('fill', 'var(--text-muted)')
-                        .text(`Centrality: ${data.data.avgCentrality.toFixed(3)}`);
+                        .text(t('domainChart.centrality', { value: data.data.avgCentrality.toFixed(3) }));
                     currentLine++;
                 }
 
@@ -541,7 +543,7 @@ export class DomainDistributionChart {
                     .style('font-size', Math.max(centerRadius * 0.14, 11) + 'px')
                     .style('font-weight', '600')
                     .style('fill', 'var(--text-accent)')
-                    .text('Knowledge Domains');
+                    .text(t('domainChart.knowledgeDomains'));
 
                 if (totalDomainSections > 0) {
                     textContainer.append('tspan')
@@ -563,7 +565,7 @@ export class DomainDistributionChart {
                         .attr('dy', '1.2em')
                         .style('font-size', Math.max(centerRadius * 0.12, 9) + 'px')
                         .style('fill', 'var(--text-muted)')
-                        .text('subdivisions');
+                        .text(t('domainChart.subdivisions'));
 
                     textContainer.append('tspan')
                         .attr('x', 0)
@@ -576,14 +578,14 @@ export class DomainDistributionChart {
                         .attr('dy', '1.2em')
                         .style('font-size', Math.max(centerRadius * 0.10, 7) + 'px')
                         .style('fill', 'var(--text-muted)')
-                        .text(`${layerCount} layers`);
+                        .text(t('domainChart.layers', { count: layerCount }));
 
                     textContainer.append('tspan')
                         .attr('x', 0)
                         .attr('dy', '1.2em')
                         .style('font-size', Math.max(centerRadius * 0.08, 6) + 'px')
                         .style('fill', 'var(--text-faint)')
-                        .text('hover to explore');
+                        .text(t('domainChart.hoverExplore'));
                 }
 
                 textContainer.attr('y', '-2.5em');

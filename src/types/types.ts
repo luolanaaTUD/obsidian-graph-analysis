@@ -15,16 +15,24 @@ export interface IGraphAnalysisPlugin {
 }
 
 // Plugin Settings
+export type PluginLanguageOption = 'auto' | 'en' | 'zh-Hans';
+export type AiResponseLanguage = PluginLanguageOption;
+export type UiLanguage = PluginLanguageOption;
+
 export interface GraphAnalysisSettings {
     excludeFolders: string[];
     excludeTags: string[];
     geminiApiKey: string;
+    aiResponseLanguage: AiResponseLanguage;
+    uiLanguage: UiLanguage;
 }
 
 export const DEFAULT_SETTINGS: GraphAnalysisSettings = {
     excludeFolders: [],
     excludeTags: [],
-    geminiApiKey: ''
+    geminiApiKey: '',
+    aiResponseLanguage: 'auto',
+    uiLanguage: 'auto'
 };
 
 // Vault Note (matches Rust VaultNote)

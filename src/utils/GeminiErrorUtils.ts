@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 /**
  * Shared utilities for Gemini API error classification and user-facing messages.
  * Used by semantic analysis, structured analysis, and all callers for consistency.
@@ -47,9 +49,9 @@ export function getUserFriendlyMessage(error: Error): string {
     if (error instanceof SemanticAnalysisError) {
         switch (error.errorType) {
             case 'quota_exhausted':
-                return 'Free-tier daily limit reached. Retry tomorrow.';
+                return t('errors.quotaExhausted');
             case 'rate_limit':
-                return 'API rate limit exceeded. Please try again later.';
+                return t('errors.rateLimit');
             default:
                 return error.message;
         }

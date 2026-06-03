@@ -9,11 +9,10 @@
  * 5. Tooltips & Popups
  * 6. Centrality Features
  * 7. Color Settings Panel
- * 8. AI Summary Components
- * 9. Graph Analysis View Status Bar Control
- * 10. Vault Analysis Components
- * 11. Calendar Chart Components
- * 12. Knowledge Evolution Analysis Components
+ * 8. Graph Analysis View Status Bar Control
+ * 9. Vault Analysis Components
+ * 10. Calendar Chart Components
+ * 11. Knowledge Evolution Analysis Components
  *----------------------------------------*/
 
 /* 1. Variables & Imports
@@ -1294,77 +1293,6 @@ body.graph-view-dragging .graph-view-svg {
   color: var(--text-on-accent);
 }
 
-/* 8. AI Summary Components
-/*----------------------------------------*/
-/* Status bar button - using Obsidian's built-in status-bar-item class */
-.status-bar-item.plugin-graph-analysis-ai-summary {
-  display: flex;
-  align-items: center;
-  gap: var(--size-2-2);
-  cursor: pointer;
-  padding: var(--size-2-1) var(--size-2-3);
-  border-radius: var(--radius-s);
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.status-bar-item.plugin-graph-analysis-ai-summary:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
-.status-bar-item.plugin-graph-analysis-ai-summary .status-bar-item-icon {
-  display: flex;
-  align-items: center;
-}
-
-.status-bar-item.plugin-graph-analysis-ai-summary .status-bar-item-icon svg {
-  transition: color 0.2s ease;
-}
-
-.status-bar-item.plugin-graph-analysis-ai-summary:hover .status-bar-item-icon svg {
-  color: var(--text-normal);
-}
-
-.status-bar-item.plugin-graph-analysis-ai-summary .status-bar-item-text {
-  font-weight: var(--font-medium);
-  transition: color 0.2s ease;
-}
-
-/* AI Summary Modal - using Obsidian's built-in modal classes */
-.ai-summary-content {
-  padding: 16px 0;
-  line-height: 1.6;
-  max-height: 400px;
-  overflow-y: auto;
-  color: var(--text-normal);
-}
-
-.ai-summary-header {
-  color: var(--text-accent);
-  font-size: var(--font-ui-medium);
-  font-weight: var(--font-semibold);
-  margin: 16px 0 8px 0;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.ai-summary-header:first-child {
-  margin-top: 0;
-}
-
-.ai-summary-text {
-  margin: 8px 0;
-  color: var(--text-normal);
-  font-size: var(--font-ui-small);
-}
-
-.ai-summary-metadata {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  font-style: italic;
-  margin: 12px 0 4px 0;
-}
-
 .modal-button-container {
   display: flex;
   gap: 8px;
@@ -1863,9 +1791,41 @@ body.graph-analysis-hide-status-bar .workspace .status-bar {
 .knowledge-network-tab-bar {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 16px;
     align-self: flex-start;
     margin-bottom: 12px;
+}
+
+/* Recommended Actions scatter chart: reset Obsidian <button> chrome (matches structure network tabs) */
+.scatter-chart-wrapper .knowledge-network-tab,
+.scatter-chart-wrapper .knowledge-network-tab:hover,
+.scatter-chart-wrapper .knowledge-network-tab:focus,
+.scatter-chart-wrapper .knowledge-network-tab:focus-visible,
+.scatter-chart-wrapper .knowledge-network-tab:active,
+.scatter-chart-wrapper .knowledge-network-tab.active {
+    border: none;
+    outline: none;
+    box-shadow: none;
+    -webkit-box-shadow: none;
+    -moz-box-shadow: none;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    min-height: 0;
+    height: auto;
+    overflow: visible;
+    white-space: nowrap;
+    line-height: 1.4;
+    padding: 4px 0;
+    flex-shrink: 0;
+}
+
+.scatter-chart-wrapper .knowledge-network-tab > span {
+    flex-shrink: 0;
 }
 
 .vault-analysis-section--network-cards .knowledge-network-tab,
@@ -2743,9 +2703,18 @@ body.graph-analysis-hide-status-bar .workspace .status-bar {
 }
 
 .ai-insights-loading::before {
-  content: '🧠';
-  font-size: 20px;
-  animation: pulse 2s infinite;
+  content: '';
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--background-modifier-border);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  animation: ai-insights-spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ai-insights-spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes pulse {

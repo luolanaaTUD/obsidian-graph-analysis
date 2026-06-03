@@ -2,9 +2,14 @@ import { App, Notice } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { AIModelService } from '../services/AIModelService';
 import { SemanticAnalysisError, getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
+import { t } from '../i18n';
+import {
+    buildContextSampleFromVaultRows,
+    buildLanguagePromptSection
+} from './promptLanguage';
 import { KnowledgeStructureData } from './visualization/KnowledgeStructureManager';
-import { KnowledgeEvolutionData } from './visualization/KnowledgeEvolutionManager';
-import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
+import { KnowledgeEvolutionData } from './visualization/knowledge-evolution.types';
+import type { KnowledgeActionsData } from './visualization/knowledge-actions.types';
 import { KDECalculationService } from '../utils/KDECalculationService';
 import { NoteResolver } from '../utils/NoteResolver';
 import { AIContextPreparationService } from '../services/AIContextPreparationService';
@@ -130,9 +135,11 @@ export class MasterAnalysisManager {
     private app: App;
     private aiService: AIModelService;
     private dataStore: PluginDataStore;
+    private settings: GraphAnalysisSettings;
 
     constructor(app: App, settings: GraphAnalysisSettings, dataStore: PluginDataStore) {
         this.app = app;
+        this.settings = settings;
         this.aiService = new AIModelService(app, settings);
         this.dataStore = dataStore;
     }
@@ -234,7 +241,19 @@ export class MasterAnalysisManager {
     }
 
     public updateSettings(settings: GraphAnalysisSettings): void {
+        this.settings = settings;
         this.aiService.updateSettings(settings);
+    }
+
+    private promptWithLanguage(
+        system: string,
+        context: string,
+        instruction: string,
+        analysisData: VaultAnalysisData
+    ): string {
+        const sample = buildContextSampleFromVaultRows(analysisData.results);
+        const languageSection = buildLanguagePromptSection(this.settings, sample);
+        return `${system}\n\n${context}\n\n${instruction}\n\n${languageSection}`;
     }
 
  
@@ -283,9 +302,8 @@ ${formattedContext}`;
 4. Use only domains explicitly present in the vault data - do not invent domains
 5. Treat domains as independent entities (multiple domains from one note are separate)`;
 
-            // Combine system, context, and instruction
-            const prompt = `${system}\n\n${context}\n\n${instruction}`;
-            
+            const prompt = this.promptWithLanguage(system, context, instruction, analysisData);
+
             // Get the response schema for knowledge network analysis
             const responseSchema = this.aiService.createKnowledgeNetworkSchema();
             
@@ -404,8 +422,7 @@ ${formattedContext}`;
 5. Use only domains and data explicitly present in the vault data - do not invent domains or metrics
 6. Provide insights that are specific, actionable, and grounded in the actual data`;
 
-            // Combine system, context, and instruction
-            const prompt = `${system}\n\n${context}\n\n${instruction}`;
+            const prompt = this.promptWithLanguage(system, context, instruction, analysisData);
 
             // Get the response schema for knowledge evolution analysis
             const responseSchema = this.aiService.createKnowledgeEvolutionSchema();
@@ -544,8 +561,7 @@ ${formattedContext}`;
 5. Provide specific, actionable recommendations grounded in the connectivity and centrality patterns.
 6. For learningPaths and organization, return empty arrays (to be implemented in future).`;
 
-            // Combine system, context, and instruction
-            const prompt = `${system}\n\n${context}\n\n${instruction}`;
+            const prompt = this.promptWithLanguage(system, context, instruction, analysisData);
 
             // Get the response schema for recommended actions analysis
             const responseSchema = this.aiService.createRecommendedActionsSchema();
@@ -664,7 +680,7 @@ ${formattedContext}`;
             const tabDisplayName = tabDisplayNames[tabName] || 'Knowledge';
             
             // Show success notice
-            new Notice(`✅ ${tabDisplayName} Analysis completed successfully!`);
+            new Notice(t('notices.tabAnalysisComplete', { tab: tabDisplayName }));
             
             // Create and open modal with the specified tab
             const modal = new VaultAnalysisModal(
@@ -679,7 +695,7 @@ ${formattedContext}`;
             modal.open();
         } catch (error) {
             // console.error('Failed to reopen modal:', error);
-            new Notice(error instanceof Error ? error.message : 'Failed to reopen analysis modal');
+            new Notice(error instanceof Error ? error.message : t('notices.reopenModalFailed'));
         }
     }
 }
