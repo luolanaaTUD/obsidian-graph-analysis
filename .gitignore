@@ -12,14 +12,12 @@ yarn-error.log
 # Rust / WASM
 target/
 **/*.rs.bk
-Cargo.lock
 bin/
 pkg/
 
 # Build outputs
 main.js
 *.js.map
-graph_analysis_wasm_bg.wasm
 
 # macOS
 .DS_Store

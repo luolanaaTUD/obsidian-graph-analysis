@@ -18,87 +18,22 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === "production";
 
-// Copy WASM files to the output directory
-const copyWasmFiles = {
-  name: 'copy-wasm-files',
-  setup(build) {
-    build.onEnd(() => {
-      const wasmDir = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg');
-      const outputDir = path.join(process.cwd(), 'dist');
-      
-      // Create the output directory if it doesn't exist
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-      }
-      
-      // Copy the WASM file
-      const wasmFile = path.join(wasmDir, 'graph_analysis_wasm_bg.wasm');
-      const outputWasmFile = path.join(outputDir, 'graph_analysis_wasm_bg.wasm');
-      
-      try {
-        if (fs.existsSync(wasmFile)) {
-          fs.copyFileSync(wasmFile, outputWasmFile);
-          console.log(`Copied ${wasmFile} to ${outputWasmFile}`);
-        } else {
-          console.error(`WASM file not found at ${wasmFile}`);
-        }
-      } catch (error) {
-        console.error(`Error copying WASM file: ${error.message}`);
-      }
-    });
-  },
-};
+function readEmbeddedWasmBytes() {
+  const wasmFile = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg', 'graph_analysis_wasm_bg.wasm');
+  if (!fs.existsSync(wasmFile)) {
+    const message = `WASM binary not found at ${wasmFile}. Run "npm run build-wasm" first.`;
+    if (prod) {
+      console.error(`❌ ${message}`);
+      process.exit(1);
+    }
+    throw new Error(message);
+  }
+  const wasmBuffer = fs.readFileSync(wasmFile);
+  const base64 = wasmBuffer.toString('base64');
+  return `const EMBEDDED_WASM_BYTES = Uint8Array.from(atob(${JSON.stringify(base64)}), (c) => c.charCodeAt(0));`;
+}
 
-// Copy knowledge domains template file to the output directory
-const copyKnowledgeDomainsTemplate = {
-  name: 'copy-knowledge-domains-template',
-  setup(build) {
-    build.onEnd(() => {
-      const sourceFile = path.join(process.cwd(), 'src', 'ai', 'knowledge-domains.json');
-      const outputDir = path.join(process.cwd(), 'dist');
-      const targetFile = path.join(outputDir, 'knowledge-domains.json');
-      
-      // Create the output directory if it doesn't exist
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-      }
-      
-      try {
-        if (fs.existsSync(sourceFile)) {
-          // Verify the source file is valid JSON before copying
-          try {
-            const sourceContent = fs.readFileSync(sourceFile, 'utf8');
-            JSON.parse(sourceContent); // Just to validate, we don't need the result
-            
-            // Copy the file to the target location
-            fs.copyFileSync(sourceFile, targetFile);
-            console.log(`✅ Successfully copied knowledge domains template from ${sourceFile} to ${targetFile}`);
-          } catch (jsonError) {
-            console.error(`❌ ERROR: Knowledge domains template JSON is invalid: ${jsonError.message}`);
-            console.error('Build will continue but the plugin may not function correctly without a valid knowledge domains template');
-          }
-        } else {
-          console.error(`❌ CRITICAL ERROR: Knowledge domains template file not found at ${sourceFile}`);
-          console.error('This file is required for the plugin to function correctly');
-          
-          // Make the build fail if in production mode
-          if (prod) {
-            process.exit(1);
-          }
-        }
-      } catch (error) {
-        console.error(`❌ Error handling knowledge domains template: ${error.message}`);
-        
-        // Make the build fail if in production mode
-        if (prod) {
-          process.exit(1);
-        }
-      }
-    });
-  },
-};
-
-// Inject WASM JavaScript glue code (binary is loaded from plugin dir at runtime)
+// Inject WASM JavaScript glue code and embed the WASM binary in main.js
 const injectWasmCode = {
   name: 'inject-wasm-code',
   setup(build) {
@@ -106,6 +41,7 @@ const injectWasmCode = {
       const source = await fs.promises.readFile(args.path, 'utf8');
       const wasmJsPath = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg', 'graph_analysis_wasm.js');
       const wasmJsCode = await fs.promises.readFile(wasmJsPath, 'utf8');
+      const embeddedWasmBytes = readEmbeddedWasmBytes();
 
       // Create a modified version of the WASM JS code that works with CommonJS
       const modifiedWasmJsCode = wasmJsCode
@@ -119,6 +55,9 @@ const injectWasmCode = {
         .replace(/new URL\([^)]+\)/g, 'undefined');
 
       const modifiedSource = `
+// Embedded WASM binary (bundled at build time)
+${embeddedWasmBytes}
+
 // Injected WASM module code
 ${modifiedWasmJsCode}
 
@@ -208,7 +147,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outdir: "dist",
-  plugins: [pathAliasPlugin, injectWasmCode, copyWasmFiles, copyKnowledgeDomainsTemplate, copyCssFile],
+  plugins: [pathAliasPlugin, injectWasmCode, copyCssFile],
 });
 
 if (prod) {

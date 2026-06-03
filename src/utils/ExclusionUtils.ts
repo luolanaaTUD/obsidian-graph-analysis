@@ -144,11 +144,11 @@ export class ExclusionUtils {
     /**
      * Get a list of all excluded file paths for debugging/logging
      */
-    getExcludedFiles(): string[] {
+    getExcludedFiles(allFiles?: TFile[]): string[] {
         const excludedFiles: string[] = [];
-        const allFiles = this.app.vault.getMarkdownFiles();
+        const files = allFiles ?? this.app.vault.getMarkdownFiles();
 
-        for (const file of allFiles) {
+        for (const file of files) {
             if (this.isFileExcluded(file)) {
                 excludedFiles.push(file.path);
             }
@@ -160,19 +160,19 @@ export class ExclusionUtils {
     /**
      * Get exclusion statistics for debugging
      */
-    getExclusionStats(): {
+    getExclusionStats(allFiles?: TFile[]): {
         totalFiles: number;
         excludedByFolder: number;
         excludedByTag: number;
         totalExcluded: number;
         includedFiles: number;
     } {
-        const allFiles = this.app.vault.getMarkdownFiles();
+        const files = allFiles ?? this.app.vault.getMarkdownFiles();
         let excludedByFolder = 0;
         let excludedByTag = 0;
         let totalExcluded = 0;
 
-        for (const file of allFiles) {
+        for (const file of files) {
             const isExcludedByFolder = this.isFileInExcludedFolder(file);
             const isExcludedByTag = this.hasExcludedTags(file);
             
@@ -182,11 +182,11 @@ export class ExclusionUtils {
         }
 
         return {
-            totalFiles: allFiles.length,
+            totalFiles: files.length,
             excludedByFolder,
             excludedByTag,
             totalExcluded,
-            includedFiles: allFiles.length - totalExcluded
+            includedFiles: files.length - totalExcluded
         };
     }
 } 

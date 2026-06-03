@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import { VaultAnalysisData, VaultAnalysisResult } from '../ai/MasterAnalysisManager';
+import { getIncludedMarkdownFiles } from './PluginAccess';
 
 /**
  * Connectivity statistics for a single note
@@ -196,7 +197,7 @@ export class ConnectivityAnalysisService {
      * Compute link statistics for all notes in vault analysis
      */
     private computeLinkStats(app: App, analysisData: VaultAnalysisData): NoteConnectivityStats[] {
-        const allFiles = app.vault.getMarkdownFiles();
+        const allFiles = getIncludedMarkdownFiles(app);
         const linkStatsMap = new Map<string, NoteConnectivityStats>();
 
         // Build reverse index: count how many files link TO each file

@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+    env:
+      CARGO_LOCKED: true
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -38,13 +42,24 @@ jobs:
         run: |
           test -f dist/main.js
           test -f dist/styles.css
-          test -f dist/knowledge-domains.json
-          test -f dist/graph_analysis_wasm_bg.wasm
           test -f manifest.json
           cp dist/main.js main.js
           cp dist/styles.css styles.css
-          cp dist/knowledge-domains.json knowledge-domains.json
-          cp dist/graph_analysis_wasm_bg.wasm graph_analysis_wasm_bg.wasm
+
+      - name: Attest main.js
+        uses: actions/attest@v4
+        with:
+          subject-path: main.js
+
+      - name: Attest styles.css
+        uses: actions/attest@v4
+        with:
+          subject-path: styles.css
+
+      - name: Attest manifest.json
+        uses: actions/attest@v4
+        with:
+          subject-path: manifest.json
 
       - name: Create release
         env:
@@ -55,4 +70,4 @@ jobs:
             --title="$tag" \
             --generate-notes \
             --draft \
-            main.js manifest.json styles.css knowledge-domains.json graph_analysis_wasm_bg.wasm
+            main.js manifest.json styles.css

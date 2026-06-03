@@ -20,7 +20,7 @@ export class NoteResolver {
      * Resolve any raw note identifier to a TFile instance.
      * Returns null if no match found.
      */
-    static resolveToFile(app: App, rawId: string): TFile | null {
+    static resolveToFile(app: App, rawId: string, searchFiles?: TFile[]): TFile | null {
         if (!rawId?.trim()) return null;
 
         // 1. Exact path match
@@ -32,10 +32,10 @@ export class NoteResolver {
         const withExtFile = app.vault.getAbstractFileByPath(withExt);
         if (withExtFile instanceof TFile) return withExtFile;
 
-        // 3. Basename match (case-insensitive)
+        // 3. Basename match (case-insensitive) within search scope
         const cleanedId = rawId.split('/').pop()?.replace(/\.md$/i, '') || rawId;
-        const allFiles = app.vault.getMarkdownFiles();
-        const match = allFiles.find(
+        const candidates = searchFiles ?? app.vault.getMarkdownFiles();
+        const match = candidates.find(
             (f) => f.basename.toLowerCase() === cleanedId.toLowerCase()
         );
         return match ?? null;

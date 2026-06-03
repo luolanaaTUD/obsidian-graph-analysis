@@ -62,7 +62,7 @@
 
 .domain-pie-chart .arc:hover {
     filter: brightness(1.1);
-    stroke-width: 3px !important;
+    stroke-width: 3px;
 }
 
 .domain-pie-chart text {
@@ -169,8 +169,9 @@
     }
 
     .domain-sunburst-chart {
-        width: 100% !important;
-        height: auto !important;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
     }
 
     .domain-tooltip {
@@ -219,11 +220,11 @@
 /* Print styles */
 @media print {
     .domain-tooltip {
-        display: none !important;
+        display: none;
     }
     
     .domain-sunburst-chart,
     .domain-pie-chart {
-        filter: none !important;
+        filter: none;
     }
 }

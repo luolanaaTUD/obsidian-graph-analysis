@@ -12,25 +12,8 @@ import { GraphDataBuilder } from '../components/graph-view/data/graph-builder';
 import { PluginService } from '../services/PluginService';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
 import { cleanupNoteContent } from '../utils/NoteContentUtils';
-
-interface FailedBatchEntry {
-    timestamp: string;
-    batchIndex: number;
-    primaryModel: string;
-    retryModel: string;
-    error: string;
-    notes: Array<{ path: string; basename: string; charCount: number }>;
-}
-
-interface FailedBatchesData {
-    remaining: {
-        savedAt: string;
-        retryAfter: string;
-        reason: string;
-        notes: Array<{ path: string; basename: string; charCount: number }>;
-    } | null;
-    failed: FailedBatchEntry[];
-}
+import { PluginDataStore } from '../utils/PluginDataStore';
+import type { FailedBatchEntry, FailedBatchesData } from '../types/plugin-cache-data';
 
 export class VaultSemanticAnalysisManager {
     private app: App;
@@ -39,6 +22,7 @@ export class VaultSemanticAnalysisManager {
     private graphDataBuilder: GraphDataBuilder;
     private pluginService: PluginService;
     private masterAnalysisManager: MasterAnalysisManager;
+    private dataStore: PluginDataStore;
     private subdivisionsList: Array<{id: string, name: string, domain: string, domainId: string}> = [];
     private domainTemplateLoaded: boolean = false;
     private readonly MAX_CHARS_PER_NOTE = 8000;
@@ -46,7 +30,6 @@ export class VaultSemanticAnalysisManager {
     private readonly DELAY_BETWEEN_BATCHES = 6000; // 6s between batches (Gemini 2.5 Flash Lite RPM 10)
 
     private _analysisInProgress: 'semantic' | 'structure' | 'evolution' | 'actions' | null = null;
-    private responsesDirectoryEnsured = false;
 
     /** Window from app workspace (avoids global for pop-out compatibility) */
     private get win(): Window {
@@ -65,43 +48,14 @@ export class VaultSemanticAnalysisManager {
         this._analysisInProgress = null;
     }
 
-    /**
-     * Get the path to vault-analysis.json in the responses folder
-     */
-    private getVaultAnalysisFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis.json`;
-    }
-
-    private getFailedBatchesFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis-failed-batches.json`;
-    }
-
-
-    /**
-     * Ensure responses directory exists (cached per session)
-     */
-    private async ensureResponsesDirectory(): Promise<void> {
-        if (this.responsesDirectoryEnsured) return;
-        try {
-            const responsesDir = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses`;
-            try {
-                await this.app.vault.adapter.mkdir(responsesDir);
-            } catch {
-                // Directory might already exist
-            }
-        } catch {
-            // Directory creation may fail if it already exists
-        }
-        this.responsesDirectoryEnsured = true;
-    }
-
-    constructor(app: App, settings: GraphAnalysisSettings) {
+    constructor(app: App, settings: GraphAnalysisSettings, dataStore: PluginDataStore) {
         this.app = app;
         this.settings = settings;
+        this.dataStore = dataStore;
         this.aiService = new AIModelService(app, settings);
         this.graphDataBuilder = new GraphDataBuilder(app);
         this.pluginService = new PluginService(app);
-        this.masterAnalysisManager = new MasterAnalysisManager(app, settings);
+        this.masterAnalysisManager = new MasterAnalysisManager(app, settings, dataStore);
     }
 
     /**
@@ -161,7 +115,7 @@ export class VaultSemanticAnalysisManager {
                         const enhanced = await this.enhanceWithGraphMetrics();
                         enhanceNotice.hide();
                         if (enhanced) {
-                            new Notice('✅ vault analysis enhanced with graph metrics!');
+                            new Notice('✅ Vault analysis enhanced with graph metrics!');
                         } else {
                             new Notice('ℹ️ no existing vault analysis found. Generate analysis first.');
                         }
@@ -310,13 +264,7 @@ export class VaultSemanticAnalysisManager {
      * Load existing vault analysis data if it exists
      */
     private async loadExistingAnalysisData(): Promise<VaultAnalysisData | null> {
-        try {
-            const filePath = this.getVaultAnalysisFilePath();
-            const content = await this.app.vault.adapter.read(filePath);
-            return JSON.parse(content) as VaultAnalysisData;
-        } catch {
-            return null;
-        }
+        return this.dataStore.getVaultAnalysis();
     }
 
     /**
@@ -403,14 +351,11 @@ export class VaultSemanticAnalysisManager {
         const isIncrementalUpdate = existingAnalysis !== null && existingAnalysis.results && existingAnalysis.results.length > 0;
 
         if (!isIncrementalUpdate) {
-            // No existing analysis - all files would need processing
-            const allFiles = this.app.vault.getMarkdownFiles();
-            const includedFiles = allFiles.filter(file => !this.isFileExcluded(file));
+            const includedFiles = this.getIncludedMarkdownFiles();
             return includedFiles.length > 0;
         }
 
-        const allFiles = this.app.vault.getMarkdownFiles();
-        const includedFiles = allFiles.filter(file => !this.isFileExcluded(file));
+        const includedFiles = this.getIncludedMarkdownFiles();
         const changeInfo = this.identifyChangedFiles(includedFiles, existingAnalysis);
         const pendingCount = changeInfo.changedFiles.length + changeInfo.newFiles.length;
         return pendingCount > 0;
@@ -457,14 +402,8 @@ export class VaultSemanticAnalysisManager {
      */
     public async enhanceWithGraphMetrics(): Promise<boolean> {
         try {
-            // Load existing analysis data
-            const filePath = this.getVaultAnalysisFilePath();
-            
-            let existingData: VaultAnalysisData;
-            try {
-                const content = await this.app.vault.adapter.read(filePath);
-                existingData = JSON.parse(content) as VaultAnalysisData;
-            } catch {
+            const existingData = await this.dataStore.getVaultAnalysis();
+            if (!existingData) {
                 return false;
             }
             
@@ -496,11 +435,7 @@ export class VaultSemanticAnalysisManager {
                 updatedFiles: existingUpdatedFiles
             };
             
-            // Ensure responses directory exists before saving
-            await this.ensureResponsesDirectory();
-            
-            // Save the enhanced data
-            await this.app.vault.adapter.write(filePath, JSON.stringify(updatedData, null, 2));
+            await this.dataStore.setVaultAnalysis(updatedData);
             
             // console.log('Enhanced existing vault analysis with graph metrics and rankings');
             return true;
@@ -516,7 +451,7 @@ export class VaultSemanticAnalysisManager {
         try {
             // Check if Gemini API key is configured
             if (!this.settings.geminiApiKey || this.settings.geminiApiKey.trim() === '') {
-                new Notice('Please configure your gemini API key in settings to use vault analysis.');
+                new Notice('Please configure your Gemini API key in settings to use vault analysis.');
                 return false;
             }
 
@@ -524,11 +459,7 @@ export class VaultSemanticAnalysisManager {
             const existingAnalysis = await this.loadExistingAnalysisData();
             const isIncrementalUpdate = existingAnalysis !== null && existingAnalysis.results && existingAnalysis.results.length > 0;
 
-            // Get all markdown files in the vault
-            const allFiles = this.app.vault.getMarkdownFiles();
-            
-            // Filter out excluded files using the same logic as the main plugin
-            const includedFiles = allFiles.filter(file => !this.isFileExcluded(file));
+            const includedFiles = this.getIncludedMarkdownFiles();
             
             if (includedFiles.length === 0) {
                 new Notice('No files found for analysis after applying exclusion rules.');
@@ -571,7 +502,8 @@ export class VaultSemanticAnalysisManager {
             for (const path of failedPaths) {
                 if (inFilesToProcess.has(path)) continue;
                 const file = this.app.vault.getAbstractFileByPath(path);
-                if (file instanceof TFile && !this.isFileExcluded(file)) {
+                const includedPaths = new Set(this.getIncludedMarkdownFiles().map((f) => f.path));
+                if (file instanceof TFile && includedPaths.has(path)) {
                     filesToProcess.push(file);
                     inFilesToProcess.add(path);
                 }
@@ -623,10 +555,8 @@ export class VaultSemanticAnalysisManager {
                         // console.log(`File "${file.basename}": raw=${rawCharCount} chars, cleaned=${charCount} chars -> isShort=${isShort}`);
                     }
 
-                    // Get file stats
-                    const stat = await this.app.vault.adapter.stat(file.path);
-                    const created = stat?.ctime ? new Date(stat.ctime).toISOString() : '';
-                    const modified = stat?.mtime ? new Date(stat.mtime).toISOString() : '';
+                    const created = file.stat.ctime ? new Date(file.stat.ctime).toISOString() : '';
+                    const modified = file.stat.mtime ? new Date(file.stat.mtime).toISOString() : '';
 
                     fileDataList.push({
                         file,
@@ -1010,26 +940,16 @@ export class VaultSemanticAnalysisManager {
 
     private async getFailedBatchFilePaths(): Promise<string[]> {
         try {
-            const content = await this.app.vault.adapter.read(this.getFailedBatchesFilePath());
-            const data = JSON.parse(content) as FailedBatchesData | { failedBatches?: Array<{ notes: Array<{ path: string }> }> };
+            const data = await this.readFailedBatchesData();
             const paths = new Set<string>();
             if ('remaining' in data && data.remaining?.notes) {
                 for (const note of data.remaining.notes) {
                     if (note.path) paths.add(note.path);
                 }
             }
-            if ('failed' in data && Array.isArray(data.failed)) {
-                for (const fb of data.failed) {
-                    for (const note of fb.notes ?? []) {
-                        if (note.path) paths.add(note.path);
-                    }
-                }
-            }
-            if ('failedBatches' in data && Array.isArray(data.failedBatches)) {
-                for (const fb of data.failedBatches) {
-                    for (const note of fb.notes ?? []) {
-                        if (note.path) paths.add(note.path);
-                    }
+            for (const fb of data.failed) {
+                for (const note of fb.notes) {
+                    if (note.path) paths.add(note.path);
                 }
             }
             return [...paths];
@@ -1039,45 +959,39 @@ export class VaultSemanticAnalysisManager {
     }
 
     private async clearFailedBatches(): Promise<void> {
-        await this.ensureResponsesDirectory();
-        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(this.FAILED_BATCHES_EMPTY, null, 2));
-        // console.log('Cleared vault-analysis-failed-batches.json');
+        await this.dataStore.setFailedBatches(this.FAILED_BATCHES_EMPTY);
     }
 
     private async readFailedBatchesData(): Promise<FailedBatchesData> {
-        const filePath = this.getFailedBatchesFilePath();
-        try {
-            const content = await this.app.vault.adapter.read(filePath);
-            const raw = JSON.parse(content) as {
-                remaining?: FailedBatchesData['remaining'];
-                failed?: FailedBatchEntry[];
-                failedBatches?: Array<{
-                    timestamp?: string;
-                    batchIndex?: number;
-                    primaryModel?: string;
-                    retryModel?: string;
-                    error?: string;
-                    notes?: FailedBatchEntry['notes'];
-                }>;
-            };
-            if (raw.remaining != null || Array.isArray(raw.failed)) {
-                return { remaining: raw.remaining ?? null, failed: raw.failed ?? [] };
-            }
-            const migrated: FailedBatchesData = { remaining: null, failed: [] };
-            for (const fb of raw.failedBatches ?? []) {
-                migrated.failed.push({
-                    timestamp: fb.timestamp ?? new Date().toISOString(),
-                    batchIndex: fb.batchIndex ?? -1,
-                    primaryModel: fb.primaryModel ?? '',
-                    retryModel: fb.retryModel ?? '',
-                    error: fb.error ?? 'Unknown',
-                    notes: fb.notes ?? []
-                });
-            }
-            return migrated;
-        } catch {
+        const raw = await this.dataStore.getFailedBatches();
+        if (!raw) {
             return this.FAILED_BATCHES_EMPTY;
         }
+        if (raw.remaining != null || Array.isArray(raw.failed)) {
+            return { remaining: raw.remaining ?? null, failed: raw.failed ?? [] };
+        }
+        const legacy = raw as FailedBatchesData & {
+            failedBatches?: Array<{
+                timestamp?: string;
+                batchIndex?: number;
+                primaryModel?: string;
+                retryModel?: string;
+                error?: string;
+                notes?: FailedBatchEntry['notes'];
+            }>;
+        };
+        const migrated: FailedBatchesData = { remaining: null, failed: [] };
+        for (const fb of legacy.failedBatches ?? []) {
+            migrated.failed.push({
+                timestamp: fb.timestamp ?? new Date().toISOString(),
+                batchIndex: fb.batchIndex ?? -1,
+                primaryModel: fb.primaryModel ?? '',
+                retryModel: fb.retryModel ?? '',
+                error: fb.error ?? 'Unknown',
+                notes: fb.notes ?? []
+            });
+        }
+        return migrated;
     }
 
     private async appendFailedBatch(
@@ -1086,7 +1000,6 @@ export class VaultSemanticAnalysisManager {
         modelName: string,
         error: string
     ): Promise<void> {
-        await this.ensureResponsesDirectory();
         const data = await this.readFailedBatchesData();
         data.failed.push({
             timestamp: new Date().toISOString(),
@@ -1096,8 +1009,7 @@ export class VaultSemanticAnalysisManager {
             error,
             notes: batch.map(b => ({ path: b.file.path, basename: b.file.basename, charCount: b.charCount }))
         });
-        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
-        // console.log(`Appended failed batch ${batchIndex + 1} to ${this.getFailedBatchesFilePath()}`);
+        await this.dataStore.setFailedBatches(data);
     }
 
     private async appendFailedNotes(
@@ -1106,7 +1018,6 @@ export class VaultSemanticAnalysisManager {
         error: string
     ): Promise<void> {
         if (notes.length === 0) return;
-        await this.ensureResponsesDirectory();
         const data = await this.readFailedBatchesData();
         data.failed.push({
             timestamp: new Date().toISOString(),
@@ -1116,8 +1027,7 @@ export class VaultSemanticAnalysisManager {
             error,
             notes
         });
-        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
-        // console.log(`Appended ${notes.length} failed notes to ${this.getFailedBatchesFilePath()}`);
+        await this.dataStore.setFailedBatches(data);
     }
 
     private async saveRemainingNotes(
@@ -1127,7 +1037,6 @@ export class VaultSemanticAnalysisManager {
             batch.map(b => ({ path: b.file.path, basename: b.file.basename, charCount: b.charCount }))
         );
         if (notes.length === 0) return;
-        await this.ensureResponsesDirectory();
         const data = await this.readFailedBatchesData();
         const now = new Date();
         const retryAfter = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -1137,48 +1046,33 @@ export class VaultSemanticAnalysisManager {
             reason: 'quota_exhausted',
             notes
         };
-        await this.app.vault.adapter.write(this.getFailedBatchesFilePath(), JSON.stringify(data, null, 2));
-        // console.log(`Saved ${notes.length} remaining notes to ${this.getFailedBatchesFilePath()}`);
+        await this.dataStore.setFailedBatches(data);
     }
 
     private async ensureVaultAnalysisFileExists(): Promise<void> {
-        const filePath = this.getVaultAnalysisFilePath();
-        try {
-            await this.app.vault.adapter.read(filePath);
-        } catch {
-            // File doesn't exist, create it with empty structure
-            const initialData: VaultAnalysisData = {
-                generatedAt: new Date().toISOString(),
-                totalFiles: 0,
-                generatedFiles: 0,
-                updatedFiles: 0,
-                apiProvider: 'Google Gemini',
-                results: []
-            };
-            // Ensure responses directory exists
-            await this.ensureResponsesDirectory();
-            await this.app.vault.adapter.write(filePath, JSON.stringify(initialData, null, 2));
-            // console.log('Created initial vault analysis file in responses folder');
+        const existing = await this.dataStore.getVaultAnalysis();
+        if (existing) {
+            return;
         }
+        const initialData: VaultAnalysisData = {
+            generatedAt: new Date().toISOString(),
+            totalFiles: 0,
+            generatedFiles: 0,
+            updatedFiles: 0,
+            apiProvider: 'Google Gemini',
+            results: []
+        };
+        await this.dataStore.setVaultAnalysis(initialData);
     }
 
     public async viewVaultAnalysisResults(): Promise<void> {
         try {
-            const filePath = this.getVaultAnalysisFilePath();
-            let analysisData: VaultAnalysisData | null = null;
+            let analysisData = await this.dataStore.getVaultAnalysis();
             let hasExistingData = false;
 
-            try {
-                const content = await this.app.vault.adapter.read(filePath);
-                const parsed = JSON.parse(content) as { results?: unknown[] };
-                if (parsed && typeof parsed === 'object' && Array.isArray(parsed.results)) {
-                    analysisData = parsed as VaultAnalysisData;
-                    hasExistingData = analysisData.results.length > 0;
-                } else {
-                    throw new Error('Invalid vault analysis format');
-                }
-            } catch {
-                // File doesn't exist or is invalid - create empty structure if needed
+            if (analysisData && Array.isArray(analysisData.results)) {
+                hasExistingData = analysisData.results.length > 0;
+            } else {
                 const initialData: VaultAnalysisData = {
                     generatedAt: new Date().toISOString(),
                     totalFiles: 0,
@@ -1187,14 +1081,13 @@ export class VaultSemanticAnalysisManager {
                     apiProvider: 'Google Gemini',
                     results: []
                 };
-                await this.ensureResponsesDirectory();
-                await this.app.vault.adapter.write(filePath, JSON.stringify(initialData, null, 2));
+                await this.dataStore.setVaultAnalysis(initialData);
                 analysisData = initialData;
                 hasExistingData = false;
             }
 
             // Open modal immediately (no blocking enhancement prompt)
-            const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this, this.settings);
+            const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this, this.settings, this.dataStore);
             modal.open();
 
             // Non-blocking: offer graph metrics enhancement after modal is visible
@@ -1237,41 +1130,8 @@ export class VaultSemanticAnalysisManager {
     }
 
 
-    private isFileExcluded(file: TFile): boolean {
-        const pathLower = file.path.toLowerCase();
-        const excludeFolders = this.settings.excludeFolders ?? [];
-        if (excludeFolders.length > 0) {
-            for (const folder of excludeFolders) {
-                if (typeof folder === 'string' && folder && pathLower.includes(folder.toLowerCase())) {
-                    return true;
-                }
-            }
-        }
-
-        const excludeTags = this.settings.excludeTags ?? [];
-        if (excludeTags.length > 0) {
-            const fileCache = this.app.metadataCache.getFileCache(file);
-            if (fileCache) {
-                const rawTags: unknown = fileCache.frontmatter?.tags;
-                const frontmatterTags: string[] = Array.isArray(rawTags)
-                    ? (rawTags as string[]).map(t => (typeof t === 'string' ? t : String(t)))
-                    : typeof rawTags === 'string'
-                        ? [rawTags]
-                        : [];
-                const inlineTags = (fileCache.tags ?? []).map((tag: { tag: string }) => tag.tag.replace('#', ''));
-                const allTags: string[] = [...frontmatterTags, ...inlineTags];
-
-                for (const tag of excludeTags) {
-                    if (typeof tag === 'string' && tag && allTags.some(t =>
-                        t.toLowerCase().includes(tag.toLowerCase())
-                    )) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
+    private getIncludedMarkdownFiles(): TFile[] {
+        return this.pluginService.getPlugin().getIncludedMarkdownFiles();
     }
 
     public updateSettings(settings: GraphAnalysisSettings): void {
@@ -1360,9 +1220,7 @@ export class VaultSemanticAnalysisManager {
             ...metadata,
             tokenUsage: totalTokenUsage
         });
-        await this.ensureResponsesDirectory();
-        await this.app.vault.adapter.write(this.getVaultAnalysisFilePath(), JSON.stringify(outputData, null, 2));
-        // console.log(`Batch results saved (${mergedResults.length} total)`);
+        await this.dataStore.setVaultAnalysis(outputData);
     }
 
     private async saveAnalysisResults(
@@ -1375,13 +1233,7 @@ export class VaultSemanticAnalysisManager {
         try {
             await this.ensureVaultAnalysisFileExists();
 
-            let existingData: VaultAnalysisData | null = null;
-            try {
-                const content = await this.app.vault.adapter.read(this.getVaultAnalysisFilePath());
-                existingData = JSON.parse(content) as VaultAnalysisData;
-            } catch {
-                existingData = null;
-            }
+            const existingData = await this.dataStore.getVaultAnalysis();
 
             let metadata: { generatedAt: string; totalFiles: number; generatedFiles: number; updatedFiles: number; tokenUsage?: { promptTokens: number; candidatesTokens: number; totalTokens: number } };
             if (!isIncrementalUpdate) {
@@ -1418,9 +1270,7 @@ export class VaultSemanticAnalysisManager {
             }
 
             const { outputData } = await this.buildEnhancedResultsAndOutputData(results, isIncrementalUpdate, metadata);
-            await this.ensureResponsesDirectory();
-            await this.app.vault.adapter.write(this.getVaultAnalysisFilePath(), JSON.stringify(outputData, null, 2));
-            // console.log(`Vault analysis results saved to responses folder: ${this.getVaultAnalysisFilePath()}`);
+            await this.dataStore.setVaultAnalysis(outputData);
         } catch (error) {
             // console.error('Failed to save analysis results:', error);
             throw new Error(`Failed to save results: ${(error as Error).message}`);

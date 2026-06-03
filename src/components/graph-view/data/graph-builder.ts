@@ -11,10 +11,6 @@ export class GraphDataBuilder {
         this.app = app;
     }
 
-    private getAllMarkdownFiles(): TFile[] {
-        return this.app.vault.getMarkdownFiles();
-    }
-
     private getLinksFromFile(file: TFile): Set<string> {
         const links = new Set<string>();
         const cache = this.app.metadataCache.getFileCache(file);
@@ -41,23 +37,16 @@ export class GraphDataBuilder {
     }
 
     public async buildGraphData(): Promise<{ graphData: GraphData, degreeCentrality: Node[], metadata: GraphMetadata }> {
-        const allFiles = this.getAllMarkdownFiles();
         const plugin = this.pluginService.getPlugin();
-        
-        // Filter files using exclusion logic - single pass
-        const files: TFile[] = [];
+        const files = plugin.getIncludedMarkdownFiles();
         const nodes: string[] = [];
         const pathToIndex = new Map<string, number>();
         const edges = new Set<string>();
 
-        // Build nodes array, path-to-index mapping, and filter in single pass
-        for (const file of allFiles) {
-            if (plugin.isFileExcluded(file)) continue;
-            
+        for (const file of files) {
             const index = nodes.length;
             nodes.push(file.path);
             pathToIndex.set(file.path, index);
-            files.push(file);
         }
 
         // Build edges using metadata cache - memoize link resolution

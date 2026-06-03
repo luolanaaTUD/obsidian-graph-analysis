@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import * as d3 from 'd3';
+import { getIncludedMarkdownFiles } from '../../utils/PluginAccess';
 
 export interface CalendarData {
     date: Date;
@@ -23,20 +24,14 @@ export class KnowledgeCalendarChart {
     private container: HTMLElement;
     private options: CalendarChartOptions;
     private data: CalendarData[] = [];
-    private excludedFolders: string[];
-    private excludedTags: string[];
 
     constructor(
         app: App, 
         container: HTMLElement, 
-        options: Partial<CalendarChartOptions> = {},
-        excludedFolders: string[] = [],
-        excludedTags: string[] = []
+        options: Partial<CalendarChartOptions> = {}
     ) {
         this.app = app;
         this.container = container;
-        this.excludedFolders = excludedFolders;
-        this.excludedTags = excludedTags;
         
         this.options = {
             cellSize: 11,
@@ -51,13 +46,8 @@ export class KnowledgeCalendarChart {
             return this.data;
         }
 
-        const allFiles = this.app.vault.getMarkdownFiles();
+        const files = getIncludedMarkdownFiles(this.app);
         const dailyActivity = new Map<string, CalendarData>();
-        
-        // console.log(`Processing ${allFiles.length} files for calendar chart...`);
-        
-        // Filter excluded files first to reduce processing
-        const files = allFiles.filter(file => !this.isFileExcluded(file));
         
         // Process files in parallel batches to improve performance
         const BATCH_SIZE = 10;
@@ -128,37 +118,6 @@ export class KnowledgeCalendarChart {
         return words.length;
     }
 
-    private isFileExcluded(file: TFile): boolean {
-        if (this.excludedFolders && this.excludedFolders.length > 0) {
-            for (const excludeFolder of this.excludedFolders) {
-                if (excludeFolder && file.path.toLowerCase().includes(excludeFolder.toLowerCase())) {
-                    return true;
-                }
-            }
-        }
-
-        if (this.excludedTags && this.excludedTags.length > 0) {
-            const fileCache = this.app.metadataCache.getFileCache(file);
-            if (fileCache) {
-                const rawTags = fileCache.frontmatter?.tags as string | string[] | undefined;
-                const frontmatterTags: string[] = Array.isArray(rawTags) ? rawTags : (rawTags != null ? [String(rawTags)] : []);
-                const inlineTags: string[] = fileCache.tags?.map((tag: { tag: string }) => tag.tag.replace('#', '')) ?? [];
-                
-                const allTags = [...frontmatterTags, ...inlineTags];
-                
-                for (const excludeTag of this.excludedTags) {
-                    if (excludeTag && allTags.some(tag => 
-                        tag.toLowerCase().includes(excludeTag.toLowerCase())
-                    )) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
     async render(): Promise<void> {
         this.container.empty();
         
@@ -178,7 +137,7 @@ export class KnowledgeCalendarChart {
         const summaryContainer = this.container.createEl('div', { cls: 'calendar-summary' });
         
         // Calculate summary statistics
-        const allFiles = this.app.vault.getMarkdownFiles().filter(file => !this.isFileExcluded(file));
+        const allFiles = getIncludedMarkdownFiles(this.app);
         const totalNotes = allFiles.length;
         
         // Calculate total words from the data

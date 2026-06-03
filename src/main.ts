@@ -1,6 +1,4 @@
-import { FileSystemAdapter, Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
-import * as fs from 'fs';
-import * as path from 'path';
+import { Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata, VaultData, VaultNote, CentralityScores } from './types/types';
 import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
@@ -9,12 +7,14 @@ import { GraphAnalysisSettingTab } from './settings/GraphAnalysisSettingTab';
 import { AISummaryManager } from './ai/AISummaryManager';
 import { VaultSemanticAnalysisManager } from './ai/VaultSemanticAnalysisManager';
 import { ExclusionUtils } from './utils/ExclusionUtils';
+import { VaultScope } from './utils/VaultScope';
+import { PluginDataStore } from './utils/PluginDataStore';
 
 // Import our styles 
 import './styles/styles.css';
 
-// The WASM module glue code will be injected at the top of this file during build
-const WASM_FILENAME = 'graph_analysis_wasm_bg.wasm';
+// WASM glue code and EMBEDDED_WASM_BYTES are injected at the top of this file during build
+declare const EMBEDDED_WASM_BYTES: Uint8Array;
 declare function build_graph_from_vault(vault_data_json: string): string;
 declare function calculate_degree_centrality_cached(): string;
 declare function calculate_eigenvector_centrality_cached(): string;
@@ -31,7 +31,9 @@ export default class GraphAnalysisPlugin extends Plugin {
     graphView: GraphView | null = null;
     aiSummaryManager: AISummaryManager | null = null;
     vaultAnalysisManager: VaultSemanticAnalysisManager | null = null;
+    dataStore: PluginDataStore | null = null;
     exclusionUtils: ExclusionUtils | null = null;
+    vaultScope: VaultScope | null = null;
     
     private wasmLoadingPromise: Promise<void> | null = null;
     private wasmLoadingNotice: Notice | null = null;
@@ -41,8 +43,9 @@ export default class GraphAnalysisPlugin extends Plugin {
     async onload() {
         await this.loadSettings();
 
-        // Initialize exclusion utils
+        // Initialize exclusion utils and vault scope
         this.exclusionUtils = new ExclusionUtils(this.app, this.settings);
+        this.vaultScope = new VaultScope(this.app, this.exclusionUtils);
 
         // Initialize WASM module with improved async handling
         void this.initializeWasmModule();
@@ -106,8 +109,11 @@ export default class GraphAnalysisPlugin extends Plugin {
         this.aiSummaryManager = new AISummaryManager(this.app, this.settings);
         this.aiSummaryManager.createStatusBarButton(this.addStatusBarItem());
 
+        this.dataStore = new PluginDataStore(this);
+        await this.dataStore.migrateLegacyCacheFromVaultFiles(this.app);
+
         // Initialize Vault Analysis Manager (no status bar button - now in graph view)
-        this.vaultAnalysisManager = new VaultSemanticAnalysisManager(this.app, this.settings);
+        this.vaultAnalysisManager = new VaultSemanticAnalysisManager(this.app, this.settings, this.dataStore);
 
         // Add command for AI summary
         this.addCommand({
@@ -189,6 +195,9 @@ export default class GraphAnalysisPlugin extends Plugin {
         if (this.exclusionUtils) {
             this.exclusionUtils.updateSettings(this.settings);
         }
+        if (this.vaultScope && this.exclusionUtils) {
+            this.vaultScope = new VaultScope(this.app, this.exclusionUtils);
+        }
         // Update GraphAnalysisView settings
         const graphViews = this.app.workspace.getLeavesOfType(GRAPH_ANALYSIS_VIEW_TYPE);
         graphViews.forEach(leaf => {
@@ -205,7 +214,7 @@ export default class GraphAnalysisPlugin extends Plugin {
             try {
                 this.wasmLoadingNotice = new Notice('Initializing graph analysis...', 0);
 
-                const wasmBinary = await this.getWasmBinary();
+                const wasmBinary = this.getWasmBinary();
 
                 const wasmBinaryHash = await this.calculateBinaryHash(wasmBinary);
 
@@ -236,25 +245,10 @@ export default class GraphAnalysisPlugin extends Plugin {
         })();
     }
 
-    /**
-     * Load WASM binary from the plugin directory (shipped as a separate release artifact).
-     */
-    private async getWasmBinary(): Promise<ArrayBuffer> {
-        if (!(this.app.vault.adapter instanceof FileSystemAdapter) || !this.manifest.dir) {
-            throw new Error('WASM requires desktop filesystem access');
-        }
-
-        const pluginDir = this.app.vault.adapter.getFullPath(this.manifest.dir);
-        const wasmPath = path.join(pluginDir, WASM_FILENAME);
-
-        if (!fs.existsSync(wasmPath)) {
-            throw new Error(
-                `${WASM_FILENAME} not found in plugin directory. Reinstall the plugin from the latest release.`
-            );
-        }
-
-        const buffer = fs.readFileSync(wasmPath);
-        return new Uint8Array(buffer).buffer;
+  /** WASM binary embedded in main.js at build time. */
+    private getWasmBinary(): ArrayBuffer {
+        const copy = EMBEDDED_WASM_BYTES.slice();
+        return copy.buffer;
     }
 
     private calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {
@@ -430,20 +424,15 @@ export default class GraphAnalysisPlugin extends Plugin {
         return { nodes, edges: links };
     }
     
-    private getVaultFiles() {
-        const files = this.app.vault.getMarkdownFiles();
-        const vaultFiles = [];
-        
-        for (const file of files) {
-            // Skip excluded files
-            if (this.isFileExcluded(file)) {
-                continue;
-            }
-            
-            vaultFiles.push({ path: file.path });
+    getIncludedMarkdownFiles(): TFile[] {
+        if (!this.vaultScope) {
+            return this.app.vault.getMarkdownFiles();
         }
-        
-        return vaultFiles;
+        return this.vaultScope.getIncludedMarkdownFiles();
+    }
+
+    private getVaultFiles() {
+        return this.getIncludedMarkdownFiles().map((file) => ({ path: file.path }));
     }
 
     /**
@@ -574,7 +563,8 @@ export default class GraphAnalysisPlugin extends Plugin {
         }
 
         try {
-            const stats = this.exclusionUtils.getExclusionStats();
+            const allFiles = this.vaultScope?.getAllMarkdownFiles() ?? this.app.vault.getMarkdownFiles();
+            const stats = this.exclusionUtils.getExclusionStats(allFiles);
             new Notice(`Check console for detailed exclusion statistics. ${stats.totalExcluded} files excluded.`);
         } catch {
             new Notice('Error getting exclusion statistics');

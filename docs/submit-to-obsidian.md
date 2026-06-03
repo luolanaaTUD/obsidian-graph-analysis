@@ -2,6 +2,21 @@
 
 The plugin entry has been prepared in `obsidian-releases-fork/`. Follow these steps to open a PR.
 
+## Pre-submission: ESLint (official Obsidian plugin guidelines)
+
+This repo uses [eslint-plugin-obsidianmd](https://github.com/obsidianmd/eslint-plugin) with the `recommended` ruleset. Run the same checks locally before opening your community-plugins PR:
+
+```bash
+npm ci
+npm run lint:submission
+```
+
+- `npm run lint` — full report (includes UI sentence-case **warnings** you can fix with `npm run lint:fix`)
+- `npm run lint:submission` — **errors only** (manifest validation, API usage, vault rules, etc.)
+- `npm run lint:fix` — auto-fix where the plugin supports it (sentence case, some Obsidian patterns)
+
+Configuration lives in [`eslint.config.mjs`](../eslint.config.mjs). Type-aware rules use [`tsconfig.eslint.json`](../tsconfig.eslint.json) (includes `src/**/*.ts` and `manifest.json`).
+
 ## Step 1: Fork obsidian-releases
 
 1. Go to https://github.com/obsidianmd/obsidian-releases
@@ -37,9 +52,10 @@ git push fork add-obsidian-graph-analysis --force-with-lease
 - [ ] I attest that I have done my best to deliver a high-quality plugin...
 - [ ] **Repo URL:** https://github.com/luolanaaTUD/obsidian-graph-analysis
 - [ ] Tested on Windows / macOS / Linux / Android / iOS
-- [ ] GitHub release contains main.js, manifest.json, styles.css, graph_analysis_wasm_bg.wasm, and knowledge-domains.json as individual files
+- [ ] GitHub release contains only main.js, manifest.json, and styles.css as individual files (with artifact attestations)
 - [ ] Release tag matches manifest version (no `v` prefix)
 - [ ] manifest.json `id` matches community-plugins.json `id` (knowledge-graph-analysis)
+- [ ] Ran `npm run lint:submission` with no errors
 - [ ] README describes purpose and usage
 - [ ] Read developer policies and plugin guidelines
 - [ ] LICENSE file added

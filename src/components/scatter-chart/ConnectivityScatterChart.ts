@@ -1,6 +1,7 @@
 import { App, TFile, Modal } from 'obsidian';
 import * as d3 from 'd3';
 import { VaultAnalysisData } from '../../ai/MasterAnalysisManager';
+import { getIncludedMarkdownFiles } from '../../utils/PluginAccess';
 
 export type ScatterChartMode = 'links' | 'centrality';
 
@@ -293,7 +294,7 @@ export class ConnectivityScatterChart {
     }
 
     private computeLinkData(): void {
-        const allFiles = this.app.vault.getMarkdownFiles();
+        const allFiles = getIncludedMarkdownFiles(this.app);
         const dataPoints: ScatterDataPoint[] = [];
 
         // Build reverse index: count how many files link TO each file

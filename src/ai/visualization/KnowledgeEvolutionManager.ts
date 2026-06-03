@@ -1,5 +1,7 @@
 import { App, setIcon, MarkdownRenderer, Component } from 'obsidian';
 import { GraphAnalysisSettings } from '../../types/types';
+import { PluginDataStore } from '../../utils/PluginDataStore';
+import { EvolutionAnalysisData } from '../MasterAnalysisManager';
 import { KnowledgeCalendarChart } from '../../components/calendar-chart/KnowledgeCalendarChart';
 
 // Interfaces for Knowledge Evolution data (imported from existing manager for compatibility)
@@ -71,6 +73,7 @@ export class KnowledgeEvolutionManager {
     private container!: HTMLElement;
     private settings: GraphAnalysisSettings;
     private data: KnowledgeEvolutionData | null = null;
+    private dataStore: PluginDataStore;
     private calendarChart: KnowledgeCalendarChart | null = null;
     private createEmptyStateFn: (container: HTMLElement, message: string) => void;
 
@@ -83,9 +86,15 @@ export class KnowledgeEvolutionManager {
         return plugin;
     }
 
-    constructor(app: App, settings: GraphAnalysisSettings, createEmptyStateFn?: (container: HTMLElement, message: string) => void) {
+    constructor(
+        app: App,
+        settings: GraphAnalysisSettings,
+        dataStore: PluginDataStore,
+        createEmptyStateFn?: (container: HTMLElement, message: string) => void
+    ) {
         this.app = app;
         this.settings = settings;
+        this.dataStore = dataStore;
         this.createEmptyStateFn = createEmptyStateFn || this.defaultCreateEmptyState.bind(this);
     }
 
@@ -111,27 +120,13 @@ export class KnowledgeEvolutionManager {
 
     public async loadCachedEvolutionData(): Promise<KnowledgeEvolutionData | null> {
         try {
-            // Use the tab-specific analysis file (evolution-analysis.json)
-            // The file structure is: { knowledgeEvolution: KnowledgeEvolutionData, ... }
-            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/evolution-analysis.json`;
-            const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content) as unknown;
-            
-            if (data && typeof data === 'object' && 'knowledgeEvolution' in data) {
-                const evo = (data as { knowledgeEvolution: KnowledgeEvolutionData }).knowledgeEvolution;
-                if (evo && typeof evo === 'object') {
-                    this.data = evo;
-                    return this.data;
-                }
-            }
-            // Fallback: if the file structure is different, try direct access
-            if (data && typeof data === 'object' && 'timeline' in data && 'topicPatterns' in data && 'focusShift' in data) {
-                this.data = data as KnowledgeEvolutionData;
+            const tab = await this.dataStore.getTabAnalysis<EvolutionAnalysisData>('evolution');
+            if (tab?.knowledgeEvolution) {
+                this.data = tab.knowledgeEvolution;
                 return this.data;
             }
             return null;
         } catch {
-            // console.warn('No cached knowledge evolution data found:', error);
             return null;
         }
     }
@@ -157,7 +152,7 @@ export class KnowledgeEvolutionManager {
     private renderPlaceholder(): void {
         const placeholder = this.container.createEl('div', { cls: 'evolution-placeholder' });
         const content = placeholder.createEl('div', { cls: 'placeholder-content' });
-        content.createEl('h3', { text: '📈 knowledge evolution analysis' });
+        content.createEl('h3', { text: '📈 Knowledge evolution analysis' });
         content.createEl('p', { text: 'Generate vault analysis to see your knowledge evolution insights.' });
         const features = content.createEl('div', { cls: 'placeholder-features' });
         const items = [
@@ -177,7 +172,7 @@ export class KnowledgeEvolutionManager {
 
     private async renderBasicCalendar(): Promise<void> {
         const calendarSection = this.container.createEl('div', { cls: 'evolution-calendar-section' });
-        calendarSection.createEl('h3', { text: '📅 knowledge activity calendar' });
+        calendarSection.createEl('h3', { text: '📅 Knowledge activity calendar' });
         
         const calendarContainer = calendarSection.createEl('div', { cls: 'calendar-container' });
         
@@ -185,9 +180,7 @@ export class KnowledgeEvolutionManager {
         this.calendarChart = new KnowledgeCalendarChart(
             this.app,
             calendarContainer,
-            { cellSize: 11, yearRange: 1 },
-            this.settings.excludeFolders || [],
-            this.settings.excludeTags || []
+            { cellSize: 11, yearRange: 1 }
         );
 
         await this.calendarChart.render();
@@ -208,7 +201,7 @@ export class KnowledgeEvolutionManager {
     }
 
     private createInsightsOverview(container: HTMLElement): void {
-        container.createEl('h3', { text: '🧠 knowledge evolution insights' });
+        container.createEl('h3', { text: '🧠 Knowledge evolution insights' });
         const grid = container.createEl('div', { cls: 'evolution-insights-grid' });
         this.data!.insights.forEach(insight => {
             const card = grid.createEl('div', { cls: 'evolution-insight-card' });
@@ -226,7 +219,7 @@ export class KnowledgeEvolutionManager {
     }
 
     private async createEnhancedCalendar(container: HTMLElement): Promise<void> {
-        container.createEl('h3', { text: '📅 knowledge activity timeline' });
+        container.createEl('h3', { text: '📅 Knowledge activity timeline' });
         
         // Add timeline phases overview above calendar
         this.createTimelinePhases(container);
@@ -238,9 +231,7 @@ export class KnowledgeEvolutionManager {
         this.calendarChart = new KnowledgeCalendarChart(
             this.app,
             calendarContainer,
-            { cellSize: 11, yearRange: 1 },
-            this.settings.excludeFolders || [],
-            this.settings.excludeTags || []
+            { cellSize: 11, yearRange: 1 }
         );
 
         await this.calendarChart.render();
@@ -251,7 +242,7 @@ export class KnowledgeEvolutionManager {
 
     private createTimelinePhases(container: HTMLElement): void {
         const phasesContainer = container.createEl('div', { cls: 'timeline-phases' });
-        phasesContainer.createEl('h4', { text: '📊 knowledge development phases' });
+        phasesContainer.createEl('h4', { text: '📊 Knowledge development phases' });
         const timeline = phasesContainer.createEl('div', { cls: 'phases-timeline' });
         this.data!.timeline.phases.forEach(phase => {
             const item = timeline.createEl('div', { cls: 'phase-item' });
@@ -273,7 +264,7 @@ export class KnowledgeEvolutionManager {
 
     private addVelocityOverlay(container: HTMLElement): void {
         const velocityContainer = container.createEl('div', { cls: 'velocity-overlay' });
-        velocityContainer.createEl('h4', { text: '⚡ learning velocity trends' });
+        velocityContainer.createEl('h4', { text: '⚡ Learning velocity trends' });
         const trends = velocityContainer.createEl('div', { cls: 'velocity-trends' });
         const trendData = [
             { label: 'Productivity', value: this.data!.timeline.trends.productivity },

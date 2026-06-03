@@ -11,6 +11,7 @@ import {
 import { GraphDataBuilder } from './data/graph-builder';
 import { PluginService } from '../../services/PluginService';
 import { VaultSemanticAnalysisManager } from '../../ai/VaultSemanticAnalysisManager';
+import { PluginDataStore } from '../../utils/PluginDataStore';
 import { CENTRALITY_RESULTS_VIEW_TYPE } from '../../views/CentralityResultsView';
 import {
     KEPLER_COLOR_PALETTES,
@@ -203,13 +204,13 @@ export class GraphView {
     private markerIdHighlighted: string = '';
     private labelsSelection!: d3.Selection<SVGTextElement, SimulationGraphNode, d3.BaseType, unknown>;
 
-    constructor(app: App, settings: GraphAnalysisSettings) {
+    constructor(app: App, settings: GraphAnalysisSettings, dataStore: PluginDataStore) {
         this.app = app;
         
         // Initialize core modules
         this.pluginService = new PluginService(app);
         this.graphDataBuilder = new GraphDataBuilder(app);
-        this.vaultAnalysisManager = new VaultSemanticAnalysisManager(app, settings);
+        this.vaultAnalysisManager = new VaultSemanticAnalysisManager(app, settings, dataStore);
     }
 
     public async onload(container: HTMLElement) {
@@ -1037,6 +1038,7 @@ export class GraphView {
                 
                 // Set drag state and remove tooltip
                 this.isDraggingNode = true;
+                this.container.ownerDocument.body.addClass('graph-view-dragging');
                 this.clearTooltipTimeout();
                 this.removeNodeTooltip();
                 
@@ -1072,6 +1074,7 @@ export class GraphView {
                     d.fy = null;
                 }
                 this.isDraggingNode = false;
+                this.container.ownerDocument.body.removeClass('graph-view-dragging');
                 const element = sourceEvent.target as Element;
                 const bounds = element.getBoundingClientRect();
                 const mouseX = sourceEvent.clientX;

@@ -166,13 +166,13 @@
     }
 }
 
-/* Remove unwanted sections */
-.calendar-stats,
-.calendar-disclaimer,
-.calendar-refresh-btn,
-.calendar-chart-subtitle,
-.calendar-chart-header {
-    display: none !important;
+/* Remove unwanted legacy sections inside evolution view */
+.knowledge-evolution-container .calendar-stats,
+.knowledge-evolution-container .calendar-disclaimer,
+.knowledge-evolution-container .calendar-refresh-btn,
+.knowledge-evolution-container .calendar-chart-subtitle,
+.knowledge-evolution-container .calendar-chart-header {
+    display: none;
 }
 
 /* Clean layout for modal - remove special styling to match other sections */
@@ -189,25 +189,7 @@
 }
 
 .calendar-chart:hover .current-week-indicator {
-    opacity: 0.9 !important;
-}
-
-/* Day and month labels styling */
-.day-label {
-    font-family: var(--font-text);
-    font-size: 9px !important;
-    fill: var(--text-muted) !important;
-}
-
-text[font-size="10px"] {
-    font-family: var(--font-text) !important;
-    fill: var(--text-muted) !important;
-}
-
-text[font-size="14px"] {
-    font-family: var(--font-text) !important;
-    fill: var(--text-normal) !important;
-    font-weight: 600 !important;
+    opacity: 0.9;
 }
 
 /* Ensure proper spacing and alignment */

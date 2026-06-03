@@ -8,6 +8,7 @@ import { KnowledgeActionsData } from './visualization/KnowledgeActionsManager';
 import { KDECalculationService } from '../utils/KDECalculationService';
 import { NoteResolver } from '../utils/NoteResolver';
 import { AIContextPreparationService } from '../services/AIContextPreparationService';
+import { PluginDataStore } from '../utils/PluginDataStore';
 import type { VaultSemanticAnalysisManager } from '../views/VaultAnalysisModals';
 
 
@@ -128,39 +129,21 @@ interface StructuredActionsResponse {
 export class MasterAnalysisManager {
     private app: App;
     private aiService: AIModelService;
-    private responsesDirectoryEnsured = false;
+    private dataStore: PluginDataStore;
 
-    constructor(app: App, settings: GraphAnalysisSettings) {
+    constructor(app: App, settings: GraphAnalysisSettings, dataStore: PluginDataStore) {
         this.app = app;
         this.aiService = new AIModelService(app, settings);
+        this.dataStore = dataStore;
     }
 
-    // NEW: Ensure responses directory exists (cached per session)
-    private async ensureResponsesDirectory(): Promise<void> {
-        if (this.responsesDirectoryEnsured) return;
-        try {
-            const responsesDir = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses`;
-            try {
-                await this.app.vault.adapter.mkdir(responsesDir);
-            } catch {
-                // Directory might already exist
-            }
-        } catch {
-            // Directory creation may fail if it already exists
-        }
-        this.responsesDirectoryEnsured = true;
-    }
-
-    // Update loadCachedTabAnalysis to ensure responses directory exists
     public async loadCachedTabAnalysis(tabName: string, preloadedVaultData?: VaultAnalysisData | null): Promise<TabAnalysisData | null> {
         try {
-            // Ensure responses directory exists
-            await this.ensureResponsesDirectory();
-
-            // Look for the tab-specific analysis in the responses directory
-            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/${tabName}-analysis.json`;
-            const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content) as TabAnalysisData & { isOutdated?: boolean };
+            const loaded = await this.dataStore.getTabAnalysis<TabAnalysisData & { isOutdated?: boolean }>(tabName);
+            if (!loaded) {
+                return null;
+            }
+            const data = { ...loaded };
 
             // Check if cached analysis matches current vault state (use preloaded data to avoid re-read)
             const currentAnalysisData = preloadedVaultData !== undefined ? preloadedVaultData : await this.loadVaultAnalysisData();
@@ -172,33 +155,13 @@ export class MasterAnalysisManager {
             }
             
             return data;  // Always return cached data if it exists
-        } catch (err: unknown) {
-            // Check if this is a file not found error (ENOENT)
-            if (err && typeof err === 'object' && err !== null && 'code' in err && (err as { code?: string }).code === 'ENOENT') {
-                // console.log(`No cached ${tabName} analysis found yet. This is normal for first-time use.`);
-            } else {
-                // Log other unexpected errors
-                // console.warn(`Error loading cached ${tabName} analysis:`, error);
-            }
-            return null;
-        }
-    }
-
-    /**
-     * Get the path to vault-analysis.json in the responses folder
-     */
-    private getVaultAnalysisFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis.json`;
-    }
-
-    private async loadVaultAnalysisData(): Promise<VaultAnalysisData | null> {
-        try {
-            const filePath = this.getVaultAnalysisFilePath();
-            const content = await this.app.vault.adapter.read(filePath);
-            return JSON.parse(content) as VaultAnalysisData;
         } catch {
             return null;
         }
+    }
+
+    private async loadVaultAnalysisData(): Promise<VaultAnalysisData | null> {
+        return this.dataStore.getVaultAnalysis();
     }
 
     private generateAnalysisId(analysisData: VaultAnalysisData): string {
@@ -392,13 +355,7 @@ ${formattedContext}`;
     // NEW: Cache tab-specific analysis
     public async cacheTabAnalysis(tabName: string, data: TabAnalysisData): Promise<void> {
         try {
-            // Ensure responses directory exists
-            await this.ensureResponsesDirectory();
-            
-            // Store the tab-specific analysis in the responses directory
-            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/${tabName}-analysis.json`;
-            await this.app.vault.adapter.write(filePath, JSON.stringify(data, null, 2));
-            // console.log(`${tabName} analysis cached successfully in responses directory`);
+            await this.dataStore.setTabAnalysis(tabName, data);
         } catch {
             // Cache write may fail; caller can retry
         }
@@ -716,6 +673,7 @@ ${formattedContext}`;
                 hasExistingData,
                 vaultSemanticAnalysisManager,
                 settings,
+                this.dataStore,
                 tabName
             );
             modal.open();

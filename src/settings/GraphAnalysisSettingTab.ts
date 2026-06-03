@@ -13,6 +13,7 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
+        containerEl.addClass('graph-analysis-settings');
 
         // Exclude Notes from Analysis: title + one rounded container (Exclude Folders | Exclude Tags | Statistics)
         new Setting(containerEl).setName("Exclude notes from analysis").setHeading();
@@ -48,7 +49,7 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
         this.createExclusionStatsSection(exclusionContainer);
 
         // LLM Model Configuration: title + one rounded container
-        new Setting(containerEl).setName("Llm model configuration").setHeading();
+        new Setting(containerEl).setName("LLM model configuration").setHeading();
         const apiContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 
         let apiKeyTextComponent: { inputEl: HTMLInputElement };
@@ -68,7 +69,7 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                 return frag;
             })())
             .addText(text => {
-                text.setPlaceholder('Enter your gemini API key')
+                text.setPlaceholder('Enter your Gemini API key')
                     .setValue(this.plugin.settings.geminiApiKey)
                     .onChange(async (value) => {
                         this.plugin.settings.geminiApiKey = value;

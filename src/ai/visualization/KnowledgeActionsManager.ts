@@ -1,5 +1,7 @@
 import { App, setIcon } from 'obsidian';
 import { GraphAnalysisSettings } from '../../types/types';
+import { PluginDataStore } from '../../utils/PluginDataStore';
+import { ActionsAnalysisData } from '../MasterAnalysisManager';
 import type { VaultAnalysisResult } from '../MasterAnalysisManager';
 import { NoteResolver } from '../../utils/NoteResolver';
 
@@ -62,11 +64,18 @@ export class KnowledgeActionsManager {
     private container!: HTMLElement;
     private settings: GraphAnalysisSettings;
     private data: KnowledgeActionsData | null = null;
+    private dataStore: PluginDataStore;
     private createEmptyStateFn: (container: HTMLElement, message: string) => void;
 
-    constructor(app: App, settings: GraphAnalysisSettings, createEmptyStateFn?: (container: HTMLElement, message: string) => void) {
+    constructor(
+        app: App,
+        settings: GraphAnalysisSettings,
+        dataStore: PluginDataStore,
+        createEmptyStateFn?: (container: HTMLElement, message: string) => void
+    ) {
         this.app = app;
         this.settings = settings;
+        this.dataStore = dataStore;
         this.createEmptyStateFn = createEmptyStateFn || this.defaultCreateEmptyState.bind(this);
     }
 
@@ -92,17 +101,10 @@ export class KnowledgeActionsManager {
 
     public async loadCachedActionsData(): Promise<KnowledgeActionsData | null> {
         try {
-            // Use the tab-specific analysis file instead of master-analysis.json
-            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/actions-analysis.json`;
-            const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content) as unknown;
-
-            if (data && typeof data === 'object' && 'recommendedActions' in data) {
-                const actions = (data as { recommendedActions: KnowledgeActionsData }).recommendedActions;
-                if (actions && typeof actions === 'object') {
-                    this.data = actions;
-                    return this.data;
-                }
+            const tab = await this.dataStore.getTabAnalysis<ActionsAnalysisData>('actions');
+            if (tab?.recommendedActions) {
+                this.data = tab.recommendedActions;
+                return this.data;
             }
             return null;
         } catch {
@@ -132,7 +134,7 @@ export class KnowledgeActionsManager {
     private renderPlaceholder(): void {
         const placeholder = this.container.createEl('div', { cls: 'actions-placeholder' });
         const content = placeholder.createEl('div', { cls: 'placeholder-content' });
-        content.createEl('h3', { text: '🎯 recommended actions' });
+        content.createEl('h3', { text: '🎯 Recommended actions' });
         content.createEl('p', { text: 'Generate vault analysis to see personalized action recommendations.' });
         const features = content.createEl('div', { cls: 'placeholder-features' });
         [{ icon: '🔧', text: 'Knowledge Maintenance' }, { icon: '🔗', text: 'Connection Opportunities' }, { icon: '🗺️', text: 'Learning Paths' }, { icon: '📁', text: 'Organization Tips' }].forEach(({ icon, text }) => {
@@ -158,7 +160,7 @@ export class KnowledgeActionsManager {
 
     private createActionsSummary(container: HTMLElement): void {
         const summaryContainer = container.createEl('div', { cls: 'actions-summary' });
-        summaryContainer.createEl('h3', { text: '📊 action summary' });
+        summaryContainer.createEl('h3', { text: '📊 Action summary' });
         const stats = summaryContainer.createEl('div', { cls: 'summary-stats' });
         const totalActions = this.getTotalActionCount();
         const priorityBreakdown = this.getPriorityBreakdown();
@@ -176,7 +178,7 @@ export class KnowledgeActionsManager {
 
     private createMaintenanceSection(container: HTMLElement): void {
         const section = container.createEl('div', { cls: 'actions-section maintenance-section' });
-        section.createEl('h4', { text: '🔧 knowledge maintenance' });
+        section.createEl('h4', { text: '🔧 Knowledge maintenance' });
         section.createEl('p', { cls: 'section-description', text: 'Notes that need review, updates, or improvements' });
         const list = section.createEl('div', { cls: 'actions-list' });
         this.data!.maintenance.slice(0, 10).forEach(action => {
@@ -188,7 +190,7 @@ export class KnowledgeActionsManager {
             item.createEl('div', { cls: 'action-reason', text: action.reason });
             item.createEl('div', { cls: 'action-content', text: action.action });
             const buttons = item.createEl('div', { cls: 'action-buttons' });
-            buttons.createEl('button', { cls: 'action-btn primary', text: '📝 open note' });
+            buttons.createEl('button', { cls: 'action-btn primary', text: '📝 Open note' });
             buttons.createEl('button', { cls: 'action-btn secondary', text: '✓ mark done' });
         });
         if (this.data!.maintenance.length > 10) {
@@ -200,7 +202,7 @@ export class KnowledgeActionsManager {
 
     private createConnectionsSection(container: HTMLElement): void {
         const section = container.createEl('div', { cls: 'actions-section connections-section' });
-        section.createEl('h4', { text: '🔗 connection opportunities' });
+        section.createEl('h4', { text: '🔗 Connection opportunities' });
         section.createEl('p', { cls: 'section-description', text: 'Suggested links between your notes' });
         const list = section.createEl('div', { cls: 'connections-list' });
         this.data!.connections.slice(0, 8).forEach(connection => {
@@ -215,7 +217,7 @@ export class KnowledgeActionsManager {
             header.createEl('span', { cls: 'confidence-score', text: `${Math.round(connection.confidence * 100)}% confidence` });
             item.createEl('div', { cls: 'connection-reason', text: connection.reason });
             const buttons = item.createEl('div', { cls: 'connection-buttons' });
-            buttons.createEl('button', { cls: 'action-btn primary', text: '🔗 create link' });
+            buttons.createEl('button', { cls: 'action-btn primary', text: '🔗 Create link' });
             buttons.createEl('button', { cls: 'action-btn secondary', text: '👁️ preview' });
             buttons.createEl('button', { cls: 'action-btn tertiary', text: '✗ dismiss' });
         });
@@ -241,8 +243,8 @@ export class KnowledgeActionsManager {
                 step.createEl('span', { cls: 'step-note', text: NoteResolver.resolveToTitle(this.app, noteId) });
             });
             const buttons = item.createEl('div', { cls: 'path-buttons' });
-            buttons.createEl('button', { cls: 'action-btn primary', text: '🚀 start path' });
-            buttons.createEl('button', { cls: 'action-btn secondary', text: '📌 bookmark' });
+            buttons.createEl('button', { cls: 'action-btn primary', text: '🚀 Start path' });
+            buttons.createEl('button', { cls: 'action-btn secondary', text: '📌 Bookmark' });
         });
         this.attachLearningPathHandlers(section);
     }
@@ -250,7 +252,7 @@ export class KnowledgeActionsManager {
     private createOrganizationSection(container: HTMLElement): void {
         const section = container.createEl('div', { cls: 'actions-section organization-section' });
         const groupedSuggestions = this.groupOrganizationSuggestions();
-        section.createEl('h4', { text: '📁 organization suggestions' });
+        section.createEl('h4', { text: '📁 Organization suggestions' });
         section.createEl('p', { cls: 'section-description', text: 'Improvements for your knowledge structure' });
         const tabs = section.createEl('div', { cls: 'organization-tabs' });
         const headers = tabs.createEl('div', { cls: 'tab-headers' });

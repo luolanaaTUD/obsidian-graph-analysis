@@ -37,6 +37,7 @@
       "ES2022"
     ],
     "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true
   },
   "include": [

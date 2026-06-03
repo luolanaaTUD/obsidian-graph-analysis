@@ -9,6 +9,14 @@ This document outlines how to release new versions of the Obsidian Graph Analysi
 - Git installed locally
 - GitHub Actions **Read and write permissions** enabled (Settings → Actions → General → Workflow permissions)
 
+Before tagging a release, run Obsidian’s official ESLint rules locally:
+
+```bash
+npm run lint:submission
+```
+
+See [submit-to-obsidian.md](submit-to-obsidian.md#pre-submission-eslint-official-obsidian-plugin-guidelines) for details.
+
 ## Release Process
 
 ### 1. Bump Version and Create Tag
@@ -47,12 +55,11 @@ Once you push a tag, GitHub Actions will automatically:
 
 1. Build the Rust WASM component
 2. Build the TypeScript/JavaScript plugin
-3. Create a **draft** GitHub release with these individual assets:
-   - `main.js`
+3. Generate build provenance attestations for release assets
+4. Create a **draft** GitHub release with these individual assets:
+   - `main.js` (includes embedded WASM and knowledge-domain template)
    - `manifest.json`
    - `styles.css`
-   - `knowledge-domains.json`
-   - `graph_analysis_wasm_bg.wasm`
 
 You can monitor the progress in the **Actions** tab of your GitHub repository.
 
@@ -61,7 +68,7 @@ You can monitor the progress in the **Actions** tab of your GitHub repository.
 After the workflow succeeds:
 
 1. Open **Releases** on GitHub
-2. Verify assets are: `main.js`, `manifest.json`, `styles.css`, `knowledge-domains.json`, and `graph_analysis_wasm_bg.wasm` (no zip)
+2. Verify assets are exactly: `main.js`, `manifest.json`, and `styles.css` (no zip, no extra files)
 3. Add release notes if needed and **Publish release**
 
 ### 5. Submit to Obsidian Community Plugins
@@ -83,9 +90,10 @@ The release process is automated using `.github/workflows/release.yml`. This wor
 3. Sets up Node.js 20 and Rust for the plugin build
 4. Installs wasm-pack for WASM compilation
 5. Builds the full plugin
-6. Uploads `main.js`, `manifest.json`, `styles.css`, `knowledge-domains.json`, and `graph_analysis_wasm_bg.wasm` to a draft GitHub release
+6. Attests `main.js`, `styles.css`, and `manifest.json` with `actions/attest@v4`
+7. Uploads `main.js`, `manifest.json`, and `styles.css` to a draft GitHub release
 
-WASM is shipped as a separate binary and loaded from the plugin directory at runtime via `FileSystemAdapter.getFullPath()`. `knowledge-domains.json` is shipped separately for AI domain classification.
+WASM and the knowledge-domain template are embedded in `main.js` at build time. The workflow uses `CARGO_LOCKED=true` and a committed `graph-analysis-wasm/Cargo.lock` for reproducible Rust builds.
 
 ## Troubleshooting
 

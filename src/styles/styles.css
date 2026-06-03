@@ -43,15 +43,15 @@
 }
 
 /* Section with network cards */
-.vault-analysis-section:has(.network-cards-container) {
+.vault-analysis-section.vault-analysis-section--network-cards {
     display: block;
     width: 100%;
 }
 
 /* Base container styles */
-.knowledge-network-cards-container,
-.network-cards-container {
-    display: flex !important;
+.vault-analysis-section--network-cards .knowledge-network-cards-container,
+.vault-analysis-section--network-cards .network-cards-container {
+    display: flex;
     flex-wrap: wrap;
     gap: 20px;
     margin-bottom: 30px;
@@ -319,7 +319,7 @@
 
 /* Empty State */
 .network-empty-state {
-    text-align: center !important;
+    text-align: center;
     padding: 40px 20px;
     background: var(--background-secondary-alt, #f6f8fa);
     border-radius: 12px;
@@ -327,8 +327,9 @@
 }
 
 /* Override parent text-align for empty state inside placeholder */
-.vault-analysis-placeholder .network-empty-state {
-    text-align: center !important;
+.vault-analysis-placeholder .network-empty-state,
+.vault-analysis-placeholder .network-empty-state-text {
+    text-align: center;
 }
 
 .network-placeholder-separator {
@@ -353,7 +354,7 @@
     width: 100%;
     margin: 0 auto;
     line-height: 1.5;
-    text-align: center !important;
+    text-align: center;
     display: block;
 }
 
@@ -418,7 +419,7 @@
 /*----------------------------------------*/
 /* Nodes are fill-only; no stroke/outline in any state */
 .graph-view-svg .nodes-group circle {
-  stroke: none !important;
+  stroke: none;
 }
 
 .graph-labels-container {
@@ -481,18 +482,11 @@
 /* 4. Interaction States
 /*----------------------------------------*/
 /* Dragging state */
-.dragging,
-.graph-view-dragging {
-  cursor: grabbing !important;
+body.graph-view-dragging,
+body.graph-view-dragging .graph-view-svg {
+  cursor: grabbing;
   touch-action: none;
-}
-
-.graph-view-dragging {
-  user-select: none !important;
-}
-
-.graph-view-dragging .graph-container {
-  pointer-events: auto !important;
+  user-select: none;
 }
 
 /* Zooming state */
@@ -625,9 +619,9 @@
 }
 
 /* UI Elements */
-.open-note-button {
-  background-color: var(--graph-node-color-default) !important;
-  color: var(--text-on-accent) !important;
+.graph-node-tooltip .open-note-button {
+  background-color: var(--graph-node-color-default);
+  color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius-s);
   cursor: pointer;
@@ -637,8 +631,8 @@
   width: 100%;
 }
 
-.open-note-button:hover {
-  background-color: var(--graph-node-color-highlighted) !important;
+.graph-node-tooltip .open-note-button:hover {
+  background-color: var(--graph-node-color-highlighted);
 }
 
 .metadata-error-text {
@@ -1105,13 +1099,13 @@
 }
 
 /* Override custom theme styles - ensure items render as rows, not separate cards */
-.graph-settings-section-container .setting-item,
-.graph-settings-section-container .exclusion-stats {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  margin: 0 !important;
-  box-shadow: none !important;
+.graph-analysis-settings .graph-settings-section-container .setting-item,
+.graph-analysis-settings .graph-settings-section-container .exclusion-stats {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  box-shadow: none;
 }
 
 .graph-settings-section-container .setting-item {
@@ -1421,8 +1415,8 @@ button.is-disabled {
  * This class is added to the body when the graph view is opened/activated
  * and removed when the view is closed/deactivated or the plugin is unloaded.
  */
-.graph-analysis-hide-status-bar .status-bar {
-  display: none !important;
+body.graph-analysis-hide-status-bar .workspace .status-bar {
+  display: none;
 }
 
 /*----------------------------------------
@@ -1464,19 +1458,18 @@ button.is-disabled {
 
 /* Vault Analysis Modal Styles */
 
-/* Modal dimensions and layout - applied via JS addClass */
-.vault-analysis-modal {
-    width: 90vw !important;
-    height: auto !important;
-    max-width: 900px !important;
-    max-height: 90vh !important;
+.modal.vault-analysis-modal {
+    width: 90vw;
+    max-width: 900px;
+    max-height: 90vh;
+    height: auto;
 }
 
-.vault-analysis-modal-content {
-    overflow: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100% !important;
+.modal.vault-analysis-modal .modal-content.vault-analysis-modal-content {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 /* Landscape Modal Layout */
@@ -1514,6 +1507,19 @@ button.is-disabled {
     flex-wrap: wrap;
 }
 
+.vault-analysis-modal .vault-analysis-tab,
+.vault-analysis-modal .vault-analysis-tab:hover,
+.vault-analysis-modal .vault-analysis-tab:focus,
+.vault-analysis-modal .vault-analysis-tab:focus-visible,
+.vault-analysis-modal .vault-analysis-tab.active {
+    appearance: none;
+    -webkit-appearance: none;
+    box-shadow: none;
+    outline: none;
+    -webkit-box-shadow: none;
+    -moz-box-shadow: none;
+}
+
 .vault-analysis-tab {
     display: flex;
     align-items: center;
@@ -1527,37 +1533,18 @@ button.is-disabled {
     transition: all 0.2s ease;
     font-size: var(--font-ui-small);
     font-weight: 500;
-    box-shadow: none !important;
-    outline: none !important;
-    -webkit-box-shadow: none !important;
-    -moz-box-shadow: none !important;
 }
 
 .vault-analysis-tab:hover {
     background-color: var(--background-modifier-hover);
     color: var(--text-normal);
     border-color: var(--text-accent);
-    box-shadow: none !important;
-    outline: none !important;
-    -webkit-box-shadow: none !important;
-    -moz-box-shadow: none !important;
 }
 
 .vault-analysis-tab.active {
     background-color: var(--text-accent);
     color: var(--text-on-accent);
     border-color: var(--text-accent);
-    box-shadow: none !important;
-    outline: none !important;
-    -webkit-box-shadow: none !important;
-    -moz-box-shadow: none !important;
-}
-
-.vault-analysis-tab:focus {
-    box-shadow: none !important;
-    outline: none !important;
-    -webkit-box-shadow: none !important;
-    -moz-box-shadow: none !important;
 }
 
 .vault-analysis-tab.is-disabled {
@@ -1881,45 +1868,33 @@ button.is-disabled {
     margin-bottom: 12px;
 }
 
+.vault-analysis-section--network-cards .knowledge-network-tab,
+.vault-analysis-section--network-cards .knowledge-network-tab:hover,
+.vault-analysis-section--network-cards .knowledge-network-tab:focus,
+.vault-analysis-section--network-cards .knowledge-network-tab:focus-visible,
+.vault-analysis-section--network-cards .knowledge-network-tab:active,
+.vault-analysis-section--network-cards .knowledge-network-tab.active {
+    border: none;
+    outline: none;
+    box-shadow: none;
+    -webkit-box-shadow: none;
+    -moz-box-shadow: none;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
 .knowledge-network-tab {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 0;
     margin: 0;
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    -moz-box-shadow: none !important;
-    background: transparent !important;
     cursor: pointer;
     font-size: 13px;
     font-weight: 400;
     color: var(--text-muted);
     transition: color 0.15s ease;
-    appearance: none;
-    -webkit-appearance: none;
-}
-
-.knowledge-network-tab:focus,
-.knowledge-network-tab:focus-visible {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    -moz-box-shadow: none !important;
-}
-
-.knowledge-network-tab:hover,
-.knowledge-network-tab:active,
-.knowledge-network-tab.active {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    -moz-box-shadow: none !important;
-    background: transparent !important;
 }
 
 .knowledge-network-tab:hover {
@@ -2865,8 +2840,8 @@ button.is-disabled {
     margin-left: 12px;
 }
 
-.analysis-button-container button[style*="background"] {
-    background: var(--interactive-accent-hover) !important;
+.analysis-button-container .analysis-button--primary {
+    background: var(--interactive-accent-hover);
 }
 
 /* Enhanced structured content display */
@@ -2874,7 +2849,7 @@ button.is-disabled {
 .ai-insights-text h2,
 .ai-insights-text h3,
 .ai-insights-text h4 {
-    color: var(--text-on-accent) !important;
+    color: var(--text-normal);
     margin: 12px 0 8px 0;
     font-weight: 600;
 }
@@ -3351,7 +3326,6 @@ button.is-disabled {
 }
 
 .legend-dot.legend-confidence {
-    background: var(--text-accent);
     height: 4px;
     width: 24px;
     background: linear-gradient(to right, rgba(var(--text-accent-rgb, 100, 100, 255), 0.3), var(--text-accent));

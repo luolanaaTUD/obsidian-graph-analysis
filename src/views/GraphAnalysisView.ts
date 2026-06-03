@@ -36,7 +36,11 @@ export class GraphAnalysisView extends ItemView {
     
     constructor(leaf: WorkspaceLeaf, private plugin: GraphAnalysisPlugin) {
         super(leaf);
-        this.graphView = new GraphView(this.app, this.plugin.settings);
+        const dataStore = this.plugin.dataStore;
+        if (!dataStore) {
+            throw new Error('Plugin data store not initialized');
+        }
+        this.graphView = new GraphView(this.app, this.plugin.settings, dataStore);
         
         // Create the optimized event handler
         this.activeLeafChangeHandler = (leaf: WorkspaceLeaf | null) => {

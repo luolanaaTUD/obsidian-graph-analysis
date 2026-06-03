@@ -8,7 +8,8 @@ import {
 import { KnowledgeDomainHelper } from '../KnowledgeDomainHelper';
 import { KDECalculationService, StructuredCentralityStats } from '../../utils/KDECalculationService';
 import { CentralityKDEChart } from '../../components/kde-chart/CentralityKDEChart';
-import { VaultAnalysisData, VaultAnalysisResult } from '../MasterAnalysisManager';
+import { VaultAnalysisData, VaultAnalysisResult, StructureAnalysisData } from '../MasterAnalysisManager';
+import { PluginDataStore } from '../../utils/PluginDataStore';
 import type { KnowledgeDomain } from '../KnowledgeDomainHelper';
 
 
@@ -51,11 +52,18 @@ export class KnowledgeStructureManager {
     private domainHierarchy: HierarchicalDomain[] = [];
     private domainConnections: DomainConnection[] = [];
     private data: KnowledgeStructureData | null = null;
+    private dataStore: PluginDataStore;
     private createEmptyStateFn: (container: HTMLElement, message: string) => void;
 
-    constructor(app: App, settings: GraphAnalysisSettings, createEmptyStateFn?: (container: HTMLElement, message: string) => void) {
+    constructor(
+        app: App,
+        settings: GraphAnalysisSettings,
+        dataStore: PluginDataStore,
+        createEmptyStateFn?: (container: HTMLElement, message: string) => void
+    ) {
         this.app = app;
         this.settings = settings;
+        this.dataStore = dataStore;
         this.createEmptyStateFn = createEmptyStateFn || this.defaultCreateEmptyState.bind(this);
     }
 
@@ -81,11 +89,9 @@ export class KnowledgeStructureManager {
 
     public async loadCachedStructureData(): Promise<KnowledgeStructureData | null> {
         try {
-            const filePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/structure-analysis.json`;
-            const content = await this.app.vault.adapter.read(filePath);
-            const data = JSON.parse(content) as { knowledgeStructure?: KnowledgeStructureData };
-            if (data?.knowledgeStructure) {
-                this.data = data.knowledgeStructure;
+            const tab = await this.dataStore.getTabAnalysis<StructureAnalysisData>('structure');
+            if (tab?.knowledgeStructure) {
+                this.data = tab.knowledgeStructure;
                 return this.data;
             }
             return null;
@@ -172,13 +178,6 @@ export class KnowledgeStructureManager {
     }
 
     /**
-     * Get the path to vault-analysis.json in the responses folder
-     */
-    private getVaultAnalysisFilePath(): string {
-        return `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/responses/vault-analysis.json`;
-    }
-
-    /**
      * Build domain hierarchy from vault analysis data
      * This is now centralized in KnowledgeStructureManager
      * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
@@ -194,7 +193,10 @@ export class KnowledgeStructureManager {
             keywords?: string[];
         }
         try {
-            const raw = preloadedData ?? (JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath())) as VaultAnalysisData);
+            const raw = preloadedData ?? (await this.dataStore.getVaultAnalysis());
+            if (!raw) {
+                return null;
+            }
             const analysisData = raw;
             if (!analysisData?.results || analysisData.results.length === 0) {
                 return null;
@@ -311,7 +313,7 @@ export class KnowledgeStructureManager {
         } else {
             // Create new section
             section = targetContainer.createEl('div', { 
-                cls: 'vault-analysis-section' 
+                cls: 'vault-analysis-section vault-analysis-section--network-cards' 
             });
 
             section.createEl('h3', {
@@ -334,6 +336,8 @@ export class KnowledgeStructureManager {
             return;
         }
 
+        section.addClass('vault-analysis-section--network-cards');
+
         // Create card layout for network analysis (will append below KDE chart if it exists)
         this.renderNetworkCards(section, networkData);
     }
@@ -345,7 +349,10 @@ export class KnowledgeStructureManager {
      */
     public async renderKDEDistributionChart(section: HTMLElement, preloadedData?: VaultAnalysisData): Promise<void> {
         try {
-            const analysisData: VaultAnalysisData = preloadedData ?? (JSON.parse(await this.app.vault.adapter.read(this.getVaultAnalysisFilePath())) as VaultAnalysisData);
+            const analysisData = preloadedData ?? (await this.dataStore.getVaultAnalysis());
+            if (!analysisData) {
+                return;
+            }
             
             // Calculate histogram distributions
             const kdeService = new KDECalculationService();

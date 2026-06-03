@@ -2,6 +2,7 @@
 // Modern 2-level taxonomy for knowledge domain classification
 
 import { App } from 'obsidian';
+import bundledKnowledgeDomains from './knowledge-domains.json';
 
 // Knowledge Domain Template interfaces - 2-level hierarchy
 export interface KnowledgeSubdivision {
@@ -56,26 +57,11 @@ export class KnowledgeDomainHelper {
     public async loadDomainTemplate(): Promise<void> {
         if (this.domainTemplate) return;
         try {
-            const templatePath = `${this.app.vault.configDir}/plugins/knowledge-graph-analysis/knowledge-domains.json`;
-            let templateContent: string | null = null;
-            try {
-                templateContent = await this.app.vault.adapter.read(templatePath);
-            } catch {
-                throw new Error('Knowledge domains template not found in the plugin directory. Please ensure the knowledge-domains.json file is properly copied to the plugin directory during installation.');
+            const parsed = bundledKnowledgeDomains as unknown;
+            if (!parsed || typeof parsed !== 'object' || !('knowledge_domains' in parsed)) {
+                throw new Error('Knowledge domains template has invalid structure. Expected knowledge_domains.');
             }
-            if (templateContent === null) {
-                throw new Error('Knowledge domains template file is empty.');
-            }
-            try {
-                const parsed = JSON.parse(templateContent) as unknown;
-                if (!parsed || typeof parsed !== 'object' || !('knowledge_domains' in parsed)) {
-                    throw new Error('Knowledge domains template has invalid structure. Expected knowledge_domains.');
-                }
-                this.domainTemplate = parsed as KnowledgeDomainTemplate;
-            } catch (parseError) {
-                const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
-                throw new Error(`Failed to parse knowledge domains template JSON: ${errorMessage}`);
-            }
+            this.domainTemplate = parsed as KnowledgeDomainTemplate;
             this.domains = {};
             this.subdivisions = {};
             this.subdivisionsList = [];

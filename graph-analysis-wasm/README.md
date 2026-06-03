@@ -44,9 +44,11 @@ This module handles all graph-related computations using Rust compiled to WebAss
 - wasm-pack
 - Node.js (for testing)
 
+`Cargo.lock` is committed for reproducible dependency resolution in CI and releases.
+
 ### Building
 ```bash
-wasm-pack build --target web
+wasm-pack build --target web --release
 ```
 
 ### Testing

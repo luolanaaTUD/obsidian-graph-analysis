@@ -15,6 +15,7 @@ import { KnowledgeStructureManager } from '../ai/visualization/KnowledgeStructur
 import { KnowledgeActionsManager, ReviewCandidate } from '../ai/visualization/KnowledgeActionsManager';
 import { GraphAnalysisSettings } from '../types/types';
 import { getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
+import { PluginDataStore } from '../utils/PluginDataStore';
 
 // Import type for the manager
 export interface VaultSemanticAnalysisManager {
@@ -36,6 +37,7 @@ export class VaultAnalysisModal extends Modal {
     private analysisResultsContainer: HTMLElement | null = null;
     private knowledgeEvolutionData: KnowledgeEvolutionData | null = null;
     private masterAnalysisManager: MasterAnalysisManager;
+    private pluginDataStore: PluginDataStore;
     
     // Tab-specific analysis data
     private structureAnalysisData: StructureAnalysisData | null = null;
@@ -69,6 +71,7 @@ export class VaultAnalysisModal extends Modal {
         hasExistingData: boolean, 
         vaultSemanticAnalysisManager: VaultSemanticAnalysisManager,
         settings: GraphAnalysisSettings,
+        dataStore: PluginDataStore,
         initialView: string = 'semantic'
     ) {
         super(app);
@@ -76,7 +79,8 @@ export class VaultAnalysisModal extends Modal {
         this.hasExistingData = hasExistingData;
         this.vaultSemanticAnalysisManager = vaultSemanticAnalysisManager;
         this.settings = settings;
-        this.masterAnalysisManager = new MasterAnalysisManager(app, settings);
+        this.masterAnalysisManager = new MasterAnalysisManager(app, settings, dataStore);
+        this.pluginDataStore = dataStore;
         this.currentView = initialView;
     }
 
@@ -691,7 +695,7 @@ export class VaultAnalysisModal extends Modal {
         
         // Initialize knowledge structure manager if not already done
         if (!this.knowledgeStructureManager) {
-            this.knowledgeStructureManager = new KnowledgeStructureManager(this.app, this.settings, this.createEmptyState.bind(this));
+            this.knowledgeStructureManager = new KnowledgeStructureManager(this.app, this.settings, this.pluginDataStore, this.createEmptyState.bind(this));
         }
         
         // ALWAYS display domain distribution and KDE charts in parallel
@@ -736,7 +740,7 @@ export class VaultAnalysisModal extends Modal {
         
         // Use the KnowledgeStructureManager to render the network analysis
         if (!this.knowledgeStructureManager) {
-            this.knowledgeStructureManager = new KnowledgeStructureManager(this.app, this.settings, this.createEmptyState.bind(this));
+            this.knowledgeStructureManager = new KnowledgeStructureManager(this.app, this.settings, this.pluginDataStore, this.createEmptyState.bind(this));
         }
         
         // Render the network analysis using the visualization manager
@@ -843,7 +847,7 @@ export class VaultAnalysisModal extends Modal {
         });
         
         emptyState.createEl('h3', {
-            text: '🧠 knowledge structure analysis',
+            text: '🧠 Knowledge structure analysis',
             cls: 'vault-analysis-section-title'
         });
         
@@ -999,7 +1003,7 @@ export class VaultAnalysisModal extends Modal {
         });
 
         infoContainer.createEl('p', {
-            text: 'This analysis uses google gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
+            text: 'This analysis uses Google Gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
             cls: 'analysis-info-text'
         });
 
@@ -1256,9 +1260,7 @@ export class VaultAnalysisModal extends Modal {
             const calendarChart = new KnowledgeCalendarChart(
                 this.app,
                 chartContainer,
-                { cellSize: 11 },
-                this.settings.excludeFolders,
-                this.settings.excludeTags
+                { cellSize: 11 }
             );
 
             // Render the calendar chart
@@ -1630,7 +1632,7 @@ export class VaultAnalysisModal extends Modal {
         });
 
         infoContainer.createEl('p', {
-            text: 'This analysis uses google gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
+            text: 'This analysis uses Google Gemini AI to extract insights from your vault. We only send note summaries and metadata (keywords, domains, graph metrics) to the AI—never full note content. This protects your privacy and significantly reduces token usage.',
             cls: 'analysis-info-text'
         });
 
@@ -1830,9 +1832,7 @@ export class VaultAnalysisModal extends Modal {
         const calendarChart = new KnowledgeCalendarChart(
             this.app,
             chartContainer,
-            { cellSize: 11 },
-            this.settings.excludeFolders,
-            this.settings.excludeTags
+            { cellSize: 11 }
         );
 
         // Render the calendar chart
@@ -1888,7 +1888,7 @@ export class VaultAnalysisInfoModal extends Modal {
         
         infoContainer.createEl('h3', { text: 'Requirements' });
         infoContainer.createEl('p', {
-            text: '• google gemini API key (configured in plugin settings)'
+            text: '• Google Gemini API key (configured in plugin settings)'
         });
         infoContainer.createEl('p', {
             text: '• internet connection for AI processing'

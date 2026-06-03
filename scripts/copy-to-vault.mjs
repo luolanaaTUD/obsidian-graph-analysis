@@ -62,8 +62,6 @@ const filesToCopy = [
     { source: 'dist/main.js', dest: 'main.js' },
     { source: 'manifest.json', dest: 'manifest.json' },
     { source: 'dist/styles.css', dest: 'styles.css' },
-    { source: 'dist/graph_analysis_wasm_bg.wasm', dest: 'graph_analysis_wasm_bg.wasm' },
-    { source: 'dist/knowledge-domains.json', dest: 'knowledge-domains.json', critical: true, validate: true },
     { source: 'README.md', dest: 'README.md' },
     { source: 'LICENSE', dest: 'LICENSE' }
 ];
@@ -78,13 +76,7 @@ filesToCopy.forEach(file => {
         const message = `Skipping ${file.source} (not found)`;
         if (file.critical) {
             console.error(`❌ CRITICAL FILE MISSING: ${message}`);
-            console.error(`This file is required for the plugin to function correctly`);
-            
-            // Exit with error for critical files
-            if (file.source.includes('knowledge-domains.json')) {
-                console.error(`❌ Knowledge domains template file is missing. Please ensure it exists in the src/ai directory and was properly built.`);
-                process.exit(1);
-            }
+            process.exit(1);
         } else {
             console.log(message);
         }
@@ -93,26 +85,7 @@ filesToCopy.forEach(file => {
     
     try {
         fs.copyFileSync(sourcePath, destPath);
-        
-        // Special handling for knowledge domains template
-        if (file.validate && file.source.includes('knowledge-domains.json')) {
-            console.log(`✅ Copied knowledge domains template from ${sourcePath} to ${destPath}`);
-            
-            // Verify the file was copied correctly
-            try {
-                const fileContent = fs.readFileSync(destPath, 'utf8');
-                const jsonContent = JSON.parse(fileContent);
-                if (jsonContent && jsonContent.knowledge_domains && jsonContent.knowledge_domains.domains) {
-                    console.log(`✅ Knowledge domains template JSON is valid with ${jsonContent.knowledge_domains.domains.length} domains`);
-                } else {
-                    console.error(`❌ Knowledge domains template JSON structure is invalid. Expected knowledge_domains.domains array.`);
-                }
-            } catch (verifyError) {
-                console.error(`❌ Error verifying knowledge domains template: ${verifyError.message}`);
-            }
-        } else {
-            console.log(`Copied ${file.source} to ${destPath}`);
-        }
+        console.log(`Copied ${file.source} to ${destPath}`);
     } catch (error) {
         console.error(`Error copying ${file.source}: ${error.message}`);
     }

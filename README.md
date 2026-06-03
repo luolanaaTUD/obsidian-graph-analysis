@@ -28,7 +28,7 @@ This plugin takes a different approach. It first computes real graph metrics —
 
 ### From Obsidian Community Plugins
 
-*Coming soon.*
+In Obsidian, open **Settings → Community plugins**, turn on community plugins if prompted, and search for **Knowledge Graph Analysis**. If the listing is not visible yet, use [manual installation](#manual-installation) below.
 
 ### Manual Installation
 
@@ -104,7 +104,7 @@ Under Obsidian settings → **Knowledge Graph Analysis**:
 
 | Setting | Description |
 |---|---|
-| **Exclude Folders** | Comma-separated paths (e.g. `Archive, Templates`). Real-time stats show excluded vs included counts. |
+| **Exclude Folders** | Comma-separated paths (e.g. `Archive, daily-notes`). Real-time stats show excluded vs included counts. |
 | **Exclude Tags** | Comma-separated tags without `#` (e.g. `private, draft`). |
 | **Gemini API Key** | Required for AI analysis and summaries. |
 | **Visualization** | Graph appearance options in the graph view settings panel. |
@@ -122,7 +122,7 @@ Under Obsidian settings → **Knowledge Graph Analysis**:
 **Prerequisites:** Node.js, npm, Rust, and [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/).
 
 ```bash
-git clone https://github.com/yourusername/obsidian-graph-analysis.git
+git clone https://github.com/luolanaaTUD/obsidian-graph-analysis.git
 cd obsidian-graph-analysis
 npm install
 npm run build
@@ -131,13 +131,23 @@ npm run build
 `npm run build` runs three steps in order:
 1. **typecheck** — TypeScript type checking
 2. **build-wasm** — Compiles the Rust graph library to WebAssembly via `wasm-pack build --target web`
-3. **build:ts** — Bundles the plugin with esbuild, outputs to `dist/`, and copies WASM assets
+3. **build:ts** — Bundles the plugin with esbuild, outputs to `dist/`, and embeds the WASM binary in `main.js`
 
-To install into a vault, copy `dist/` contents into `.obsidian/plugins/obsidian-graph-analysis/`, or use `npm run copy-to-vault` if configured.
+To install into a vault, copy `dist/` contents into `.obsidian/plugins/knowledge-graph-analysis/`, or use `npm run copy-to-vault` if configured.
+
+### Lint (Obsidian community guidelines)
+
+This project uses [eslint-plugin-obsidianmd](https://github.com/obsidianmd/eslint-plugin). Before submitting to the community plugin directory:
+
+```bash
+npm run lint:submission   # errors only (CI uses this)
+npm run lint              # full report including UI sentence-case warnings
+npm run lint:fix          # auto-fix where supported
+```
 
 ## Contributing
 
-Contributions are welcome. Please feel free to submit a Pull Request.
+Contributions are welcome. Open issues or pull requests on [github.com/luolanaaTUD/obsidian-graph-analysis](https://github.com/luolanaaTUD/obsidian-graph-analysis).
 
 ## License
 
