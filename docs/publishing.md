@@ -13,7 +13,7 @@ This document outlines how to release new versions of the Obsidian Graph Analysi
 
 ### 1. Bump Version and Create Tag
 
-Use `npm version` via the release scripts (tag format has no `v` prefix — Obsidian requirement, configured via `tagVersionPrefix` in `package.json`):
+Use `npm version` via the release scripts. Tags must match the manifest version with **no `v` prefix** (Obsidian requirement). This is enforced by `tag-version-prefix=` in [`.npmrc`](../.npmrc) and `tagVersionPrefix` in `package.json`.
 
 ```bash
 npm run release        # patch (0.6.0 → 0.6.1)
