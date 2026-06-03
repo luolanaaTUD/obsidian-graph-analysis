@@ -14,6 +14,7 @@ import { PluginService } from '../services/PluginService';
 import { KnowledgeDomainHelper } from './KnowledgeDomainHelper';
 import { cleanupNoteContent } from '../utils/NoteContentUtils';
 import { PluginDataStore } from '../utils/PluginDataStore';
+import { VisualizationDerivationService } from '../services/VisualizationDerivationService';
 import type { FailedBatchEntry, FailedBatchesData } from '../types/plugin-cache-data';
 import {
     buildContextSampleFromNoteContents,
@@ -28,6 +29,7 @@ export class VaultSemanticAnalysisManager {
     private pluginService: PluginService;
     private masterAnalysisManager: MasterAnalysisManager;
     private dataStore: PluginDataStore;
+    private visualizationDerivation: VisualizationDerivationService;
     private subdivisionsList: Array<{id: string, name: string, domain: string, domainId: string}> = [];
     private domainTemplateLoaded: boolean = false;
     private readonly MAX_CHARS_PER_NOTE = 8000;
@@ -61,6 +63,13 @@ export class VaultSemanticAnalysisManager {
         this.graphDataBuilder = new GraphDataBuilder(app);
         this.pluginService = new PluginService(app);
         this.masterAnalysisManager = new MasterAnalysisManager(app, settings, dataStore);
+        this.visualizationDerivation = new VisualizationDerivationService(app, dataStore);
+    }
+
+    private scheduleDerivedVisualizations(analysisData: VaultAnalysisData): void {
+        void this.visualizationDerivation.computeAndPersist(analysisData).catch(() => {
+            // Non-blocking; tabs can compute on demand if persistence fails
+        });
     }
 
     /**
@@ -443,7 +452,8 @@ export class VaultSemanticAnalysisManager {
             };
             
             await this.dataStore.setVaultAnalysis(updatedData);
-            
+            this.scheduleDerivedVisualizations(updatedData);
+
             // console.log('Enhanced existing vault analysis with graph metrics and rankings');
             return true;
             
@@ -1297,6 +1307,7 @@ export class VaultSemanticAnalysisManager {
 
             const { outputData } = await this.buildEnhancedResultsAndOutputData(results, isIncrementalUpdate, metadata);
             await this.dataStore.setVaultAnalysis(outputData);
+            this.scheduleDerivedVisualizations(outputData);
         } catch (error) {
             // console.error('Failed to save analysis results:', error);
             throw new Error(`Failed to save results: ${(error as Error).message}`);

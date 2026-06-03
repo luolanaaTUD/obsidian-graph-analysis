@@ -1,12 +1,14 @@
 import { App, setIcon } from 'obsidian';
 import { GraphAnalysisSettings, HierarchicalDomain, DomainConnection } from '../../types/types';
-import { 
-    DomainDistributionChart, 
-    DomainDistributionData
-} from '../../components/domain-distribution/DomainDistributionChart';
+import { DomainDistributionChart } from '../../components/domain-distribution/DomainDistributionChart';
 // import { MasterAnalysisManager } from '../MasterAnalysisManager';
 import { KnowledgeDomainHelper } from '../KnowledgeDomainHelper';
-import { KDECalculationService, StructuredCentralityStats } from '../../utils/KDECalculationService';
+import {
+    KDECalculationService,
+    StructuredCentralityStats,
+    CentralityHistogramResult
+} from '../../utils/KDECalculationService';
+import type { DomainDistributionData } from '../../components/domain-distribution/DomainDistributionChart';
 import { CentralityKDEChart } from '../../components/kde-chart/CentralityKDEChart';
 import { VaultAnalysisData, VaultAnalysisResult, StructureAnalysisData } from '../MasterAnalysisManager';
 import { PluginDataStore } from '../../utils/PluginDataStore';
@@ -140,10 +142,14 @@ export class KnowledgeStructureManager {
      * Uses vault analysis data directly without relying on cached structure files
      * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
      */
-    public async createDomainDistributionChart(container: HTMLElement, preloadedData?: VaultAnalysisData): Promise<void> {
+    public async createDomainDistributionChart(
+        container: HTMLElement,
+        preloadedData?: VaultAnalysisData,
+        preloadedDomain?: DomainDistributionData
+    ): Promise<void> {
         try {
-            // Try to build hierarchy from vault analysis data
-            const domainData = await this.buildDomainHierarchyFromVaultAnalysis(preloadedData);
+            const domainData =
+                preloadedDomain ?? (await this.buildDomainHierarchyFromVaultAnalysis(preloadedData));
             
             if (!domainData || !domainData.domainHierarchy || domainData.domainHierarchy.length === 0) {
                 this.createEmptyStateFn(container, 'Generate vault analysis to see your knowledge domain distribution.');
@@ -167,7 +173,7 @@ export class KnowledgeStructureManager {
                 }
             );
             
-            await domainChart.renderWithData(domainData);
+            await this.scheduleChartRender(container, () => domainChart.renderWithData(domainData));
         } catch (err) {
             const errorMsg = container.createEl('div', { cls: 'error-message' });
             const errorMessage = err instanceof Error ? err.message : String(err);
@@ -348,16 +354,24 @@ export class KnowledgeStructureManager {
      * This method fetches data directly from vault-analysis.json and displays independently of AI analysis
      * @param preloadedData - Optional vault analysis data to avoid re-reading from disk
      */
-    public async renderKDEDistributionChart(section: HTMLElement, preloadedData?: VaultAnalysisData): Promise<void> {
+    public async renderKDEDistributionChart(
+        section: HTMLElement,
+        preloadedData?: VaultAnalysisData,
+        preloadedCentrality?: {
+            histogram: CentralityHistogramResult;
+            stats: StructuredCentralityStats;
+        }
+    ): Promise<void> {
         try {
             const analysisData = preloadedData ?? (await this.dataStore.getVaultAnalysis());
             if (!analysisData) {
                 return;
             }
-            
-            // Calculate histogram distributions
+
             const kdeService = new KDECalculationService();
-            const histogramResults = kdeService.calculateHistogramDistributions(analysisData);
+            const histogramResults =
+                preloadedCentrality?.histogram ??
+                kdeService.calculateHistogramDistributions(analysisData);
             
             // Check if we have any data to display
             const hasData = histogramResults.totals.betweenness > 0 || 
@@ -388,15 +402,36 @@ export class KnowledgeStructureManager {
                 width: 800,
                 height: 400
             });
-            chart.render();
+            await this.scheduleChartRender(chartContainer, () => {
+                chart.render();
+                return Promise.resolve();
+            });
 
-            // Add insights panel with statistics
-            const structuredStats = kdeService.getStructuredStats(analysisData);
+            const structuredStats =
+                preloadedCentrality?.stats ?? kdeService.getStructuredStats(analysisData);
             this.renderInsightsPanel(chartContainer, structuredStats);
         } catch {
             // console.error('Failed to render centrality distribution chart:', error);
             // Silently fail - don't break the UI if chart fails
         }
+    }
+
+    private scheduleChartRender<T>(container: HTMLElement, fn: () => Promise<T> | T): Promise<T> {
+        return new Promise((resolve, reject) => {
+            const win = container.ownerDocument.defaultView ?? window;
+            const run = () => {
+                try {
+                    resolve(fn());
+                } catch (e) {
+                    reject(e instanceof Error ? e : new Error(String(e)));
+                }
+            };
+            if (typeof win.requestAnimationFrame === 'function') {
+                win.requestAnimationFrame(run);
+            } else {
+                run();
+            }
+        });
     }
 
     /**

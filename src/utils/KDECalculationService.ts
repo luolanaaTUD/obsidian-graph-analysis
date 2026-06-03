@@ -486,12 +486,34 @@ export class KDECalculationService {
     }
 
     /**
+     * Histogram + structured stats in one KDE pass (for derivation cache and UI).
+     */
+    public computeCentralityInsights(analysisData: VaultAnalysisData): {
+        histogram: CentralityHistogramResult;
+        stats: StructuredCentralityStats;
+    } {
+        const histogram = this.calculateHistogramDistributions(analysisData);
+        const kdeResults = this.calculateKDEDistributions(analysisData);
+        const stats = this.getStructuredStatsFromKDE(analysisData, kdeResults);
+        return { histogram, stats };
+    }
+
+    /**
      * Generate structured statistics for UI display
      * Returns structured data instead of text string
      */
-    public getStructuredStats(analysisData: VaultAnalysisData): StructuredCentralityStats {
-        // Calculate KDE for peak detection
-        const kdeResults = this.calculateKDEDistributions(analysisData);
+    public getStructuredStats(
+        analysisData: VaultAnalysisData,
+        precomputedKde?: CentralityKDEResult
+    ): StructuredCentralityStats {
+        const kdeResults = precomputedKde ?? this.calculateKDEDistributions(analysisData);
+        return this.getStructuredStatsFromKDE(analysisData, kdeResults);
+    }
+
+    private getStructuredStatsFromKDE(
+        analysisData: VaultAnalysisData,
+        kdeResults: CentralityKDEResult
+    ): StructuredCentralityStats {
 
         // Process each centrality type
         const centralityTypes = [

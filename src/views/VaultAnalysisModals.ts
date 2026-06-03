@@ -1,5 +1,8 @@
 import { App, Modal, setIcon, Notice, MarkdownRenderer, Component } from 'obsidian';
-import { KnowledgeCalendarChart } from '../components/calendar-chart/KnowledgeCalendarChart';
+import {
+    KnowledgeCalendarChart,
+    type CalendarData
+} from '../components/calendar-chart/KnowledgeCalendarChart';
 import { ConnectivityScatterChart } from '../components/scatter-chart/ConnectivityScatterChart';
 import { ConnectionSubGraph } from '../components/connection-subgraph/ConnectionSubGraph';
 import { 
@@ -8,7 +11,8 @@ import {
     MasterAnalysisManager, 
     StructureAnalysisData,
     EvolutionAnalysisData,
-    ActionsAnalysisData
+    ActionsAnalysisData,
+    generateVaultAnalysisId
 } from '../ai/MasterAnalysisManager';
 import {
     KnowledgeEvolutionData,
@@ -21,6 +25,8 @@ import { KnowledgeActionsManager, ReviewCandidate } from '../ai/visualization/Kn
 import { GraphAnalysisSettings } from '../types/types';
 import { getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
 import { PluginDataStore } from '../utils/PluginDataStore';
+import { VisualizationDerivationService } from '../services/VisualizationDerivationService';
+import type { DerivedVisualizationsData } from '../types/plugin-cache-data';
 import { t } from '../i18n';
 
 // Import type for the manager
@@ -44,7 +50,10 @@ export class VaultAnalysisModal extends Modal {
     private knowledgeEvolutionData: KnowledgeEvolutionData | null = null;
     private masterAnalysisManager: MasterAnalysisManager;
     private pluginDataStore: PluginDataStore;
-    
+    private visualizationDerivation: VisualizationDerivationService;
+    private derivedVisualizations: DerivedVisualizationsData | null = null;
+    private derivedSourceAnalysisId: string | null = null;
+
     // Tab-specific analysis data
     private structureAnalysisData: StructureAnalysisData | null = null;
     private evolutionAnalysisData: EvolutionAnalysisData | null = null;
@@ -87,7 +96,58 @@ export class VaultAnalysisModal extends Modal {
         this.settings = settings;
         this.masterAnalysisManager = new MasterAnalysisManager(app, settings, dataStore);
         this.pluginDataStore = dataStore;
+        this.visualizationDerivation = new VisualizationDerivationService(app, dataStore);
         this.currentView = initialView;
+    }
+
+    private async ensureDerivedVisualizations(): Promise<DerivedVisualizationsData | null> {
+        if (!this.analysisData?.results?.length) {
+            return null;
+        }
+        const currentId = generateVaultAnalysisId(this.analysisData);
+        if (this.derivedVisualizations && this.derivedSourceAnalysisId === currentId) {
+            return this.derivedVisualizations;
+        }
+        const cached = await this.pluginDataStore.getDerivedVisualizations();
+        if (cached && cached.sourceAnalysisId === currentId) {
+            this.derivedVisualizations = cached;
+            this.derivedSourceAnalysisId = currentId;
+            return cached;
+        }
+        try {
+            const derived = await this.visualizationDerivation.computeIfStale(this.analysisData, cached);
+            if (derived) {
+                await this.pluginDataStore.setDerivedVisualizations(derived);
+                this.derivedVisualizations = derived;
+                this.derivedSourceAnalysisId = currentId;
+            }
+            return derived;
+        } catch {
+            return null;
+        }
+    }
+
+    private getCalendarDataFromDerived(derived: DerivedVisualizationsData): CalendarData[] {
+        const calendar = VisualizationDerivationService.reviveCalendarDays(derived.calendar);
+        KnowledgeCalendarChart.setCachedCalendar(derived.sourceAnalysisId, calendar);
+        return calendar;
+    }
+
+    private async renderCalendarChart(
+        chartContainer: HTMLElement,
+        derived: DerivedVisualizationsData | null
+    ): Promise<void> {
+        const calendarChart = new KnowledgeCalendarChart(this.app, chartContainer, { cellSize: 11 });
+        if (derived && this.analysisData) {
+            const calendarData = this.getCalendarDataFromDerived(derived);
+            const summary = VisualizationDerivationService.buildCalendarSummaryContext(
+                this.analysisData,
+                calendarData
+            );
+            await calendarChart.renderWithData(calendarData, summary);
+            return;
+        }
+        await calendarChart.render();
     }
 
     onOpen() {
@@ -106,6 +166,10 @@ export class VaultAnalysisModal extends Modal {
         
         // Load initial view
         void this.loadView(this.currentView);
+
+        if (this.hasExistingData && this.analysisData) {
+            void this.ensureDerivedVisualizations();
+        }
     }
 
     private createHeader(container: HTMLElement): void {
@@ -703,11 +767,24 @@ export class VaultAnalysisModal extends Modal {
         if (!this.knowledgeStructureManager) {
             this.knowledgeStructureManager = new KnowledgeStructureManager(this.app, this.settings, this.pluginDataStore, this.createEmptyState.bind(this));
         }
-        
+
+        const derived = await this.ensureDerivedVisualizations();
+        const centralityPreload = derived
+            ? { histogram: derived.centralityHistogram, stats: derived.centralityStats }
+            : undefined;
+
         // ALWAYS display domain distribution and KDE charts in parallel
         await Promise.all([
-            this.knowledgeStructureManager.createDomainDistributionChart(domainDistributionSection, this.analysisData ?? undefined),
-            this.knowledgeStructureManager.renderKDEDistributionChart(networkAnalysisSection, this.analysisData ?? undefined)
+            this.knowledgeStructureManager.createDomainDistributionChart(
+                domainDistributionSection,
+                this.analysisData ?? undefined,
+                derived?.domainDistribution
+            ),
+            this.knowledgeStructureManager.renderKDEDistributionChart(
+                networkAnalysisSection,
+                this.analysisData ?? undefined,
+                centralityPreload
+            )
         ]);
         
         // For the other sections, check if we have cached structure analysis data
@@ -1273,16 +1350,8 @@ export class VaultAnalysisModal extends Modal {
             const chartContainer = insightsContainer.createEl('div', { 
                 cls: 'knowledge-calendar-wrapper' 
             });
-
-            // Create calendar chart with settings
-            const calendarChart = new KnowledgeCalendarChart(
-                this.app,
-                chartContainer,
-                { cellSize: 11 }
-            );
-
-            // Render the calendar chart
-            await calendarChart.render();
+            const derived = await this.ensureDerivedVisualizations();
+            await this.renderCalendarChart(chartContainer, derived);
         }
         
         // Add details first (phases, timeline, shifts) - each item in its own rounded container
@@ -1856,16 +1925,9 @@ export class VaultAnalysisModal extends Modal {
             cls: 'knowledge-calendar-wrapper' 
         });
 
-        // Create calendar chart with settings
-        const calendarChart = new KnowledgeCalendarChart(
-            this.app,
-            chartContainer,
-            { cellSize: 11 }
-        );
+        const derived = await this.ensureDerivedVisualizations();
+        await this.renderCalendarChart(chartContainer, derived);
 
-        // Render the calendar chart
-        await calendarChart.render();
-        
         // Add placeholder for Timeline analysis below the calendar
         this.createEmptyState(calendarSection, t('vaultAnalysis.placeholderTimeline'));
     }

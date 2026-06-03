@@ -172,7 +172,7 @@ export class MasterAnalysisManager {
     }
 
     private generateAnalysisId(analysisData: VaultAnalysisData): string {
-        return `${analysisData.generatedAt}_${analysisData.totalFiles}`;
+        return generateVaultAnalysisId(analysisData);
     }
 
     /**
@@ -698,4 +698,9 @@ ${formattedContext}`;
             new Notice(error instanceof Error ? error.message : t('notices.reopenModalFailed'));
         }
     }
+}
+
+/** Stable id for vault analysis cache invalidation (semantic + derived visualizations). */
+export function generateVaultAnalysisId(analysisData: VaultAnalysisData): string {
+    return `${analysisData.generatedAt}_${analysisData.totalFiles}`;
 }

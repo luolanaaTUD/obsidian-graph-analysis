@@ -17,13 +17,20 @@ export interface CalendarChartOptions {
     colorScheme?: string[];
 }
 
+export interface CalendarSummaryContext {
+    totalNotes: number;
+    totalWords: number;
+    vaultDurationDays: number;
+}
+
 export class KnowledgeCalendarChart {
-    private static cachedCalendarData: CalendarData[] | null = null;
+    private static calendarCacheBySourceId = new Map<string, CalendarData[]>();
 
     private app: App;
     private container: HTMLElement;
     private options: CalendarChartOptions;
     private data: CalendarData[] = [];
+    private summaryContext?: CalendarSummaryContext;
 
     constructor(
         app: App, 
@@ -40,10 +47,30 @@ export class KnowledgeCalendarChart {
         };
     }
 
-    async generateCalendarData(): Promise<CalendarData[]> {
-        if (KnowledgeCalendarChart.cachedCalendarData) {
-            this.data = KnowledgeCalendarChart.cachedCalendarData;
-            return this.data;
+    static getCachedCalendar(sourceAnalysisId: string): CalendarData[] | undefined {
+        return KnowledgeCalendarChart.calendarCacheBySourceId.get(sourceAnalysisId);
+    }
+
+    static setCachedCalendar(sourceAnalysisId: string, data: CalendarData[]): void {
+        KnowledgeCalendarChart.calendarCacheBySourceId.set(sourceAnalysisId, data);
+    }
+
+    async renderWithData(
+        data: CalendarData[],
+        summaryContext?: CalendarSummaryContext
+    ): Promise<void> {
+        this.data = data;
+        this.summaryContext = summaryContext;
+        await this.render();
+    }
+
+    async generateCalendarData(sourceAnalysisId?: string): Promise<CalendarData[]> {
+        if (sourceAnalysisId) {
+            const cached = KnowledgeCalendarChart.calendarCacheBySourceId.get(sourceAnalysisId);
+            if (cached) {
+                this.data = cached;
+                return this.data;
+            }
         }
 
         const files = getIncludedMarkdownFiles(this.app);
@@ -94,8 +121,9 @@ export class KnowledgeCalendarChart {
         dailyActivities.sort((a, b) => a.date.getTime() - b.date.getTime());
         
         this.data = dailyActivities;
-        KnowledgeCalendarChart.cachedCalendarData = this.data;
-        // console.log(`Generated calendar data for ${dailyActivities.length} active days`);
+        if (sourceAnalysisId) {
+            KnowledgeCalendarChart.calendarCacheBySourceId.set(sourceAnalysisId, this.data);
+        }
 
         return this.data;
     }
@@ -135,25 +163,28 @@ export class KnowledgeCalendarChart {
 
     private createSummarySection(): void {
         const summaryContainer = this.container.createEl('div', { cls: 'calendar-summary' });
-        
-        // Calculate summary statistics
-        const allFiles = getIncludedMarkdownFiles(this.app);
-        const totalNotes = allFiles.length;
-        
-        // Calculate total words from the data
-        const totalWords = this.data.reduce((sum, day) => sum + day.wordCount, 0);
-        
-        // Calculate vault duration (from first note creation to today)
-        let vaultDuration = 'Unknown';
-        if (allFiles.length > 0) {
-            const creationDates = allFiles.map(file => file.stat.ctime);
-            const firstNoteDate = new Date(Math.min(...creationDates));
-            const today = new Date();
-            const timeDiff = today.getTime() - firstNoteDate.getTime();
-            const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-            
-            // Always display in days
-            vaultDuration = `${daysDiff.toLocaleString()} days`;
+
+        let totalNotes: number;
+        let totalWords: number;
+        let vaultDuration: string;
+
+        if (this.summaryContext) {
+            totalNotes = this.summaryContext.totalNotes;
+            totalWords = this.summaryContext.totalWords;
+            vaultDuration = `${this.summaryContext.vaultDurationDays.toLocaleString()} days`;
+        } else {
+            const allFiles = getIncludedMarkdownFiles(this.app);
+            totalNotes = allFiles.length;
+            totalWords = this.data.reduce((sum, day) => sum + day.wordCount, 0);
+            vaultDuration = 'Unknown';
+            if (allFiles.length > 0) {
+                const creationDates = allFiles.map(file => file.stat.ctime);
+                const firstNoteDate = new Date(Math.min(...creationDates));
+                const today = new Date();
+                const timeDiff = today.getTime() - firstNoteDate.getTime();
+                const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+                vaultDuration = `${daysDiff.toLocaleString()} days`;
+            }
         }
         
         const stats = summaryContainer.createEl('div', { cls: 'calendar-summary-stats' });
@@ -442,8 +473,9 @@ export class KnowledgeCalendarChart {
     }
 
     public async refresh(): Promise<void> {
-        KnowledgeCalendarChart.cachedCalendarData = null;
+        KnowledgeCalendarChart.calendarCacheBySourceId.clear();
         this.data = [];
+        this.summaryContext = undefined;
         await this.render();
     }
 } 

@@ -1,6 +1,10 @@
 import { App, TFile } from 'obsidian';
 import type { TabAnalysisData, VaultAnalysisData } from '../ai/MasterAnalysisManager';
-import type { FailedBatchesData, PluginCacheData } from '../types/plugin-cache-data';
+import type {
+    DerivedVisualizationsData,
+    FailedBatchesData,
+    PluginCacheData
+} from '../types/plugin-cache-data';
 
 export interface PluginDataHost {
     loadData(): Promise<unknown>;
@@ -63,6 +67,16 @@ export class PluginDataStore {
             cache.tabAnalyses = {};
         }
         cache.tabAnalyses[tabName] = data;
+        await this.write(cache);
+    }
+
+    async getDerivedVisualizations(): Promise<DerivedVisualizationsData | null> {
+        return (await this.read()).derivedVisualizations ?? null;
+    }
+
+    async setDerivedVisualizations(data: DerivedVisualizationsData): Promise<void> {
+        const cache = await this.read();
+        cache.derivedVisualizations = data;
         await this.write(cache);
     }
 
