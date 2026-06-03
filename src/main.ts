@@ -1,4 +1,6 @@
-import { Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import { FileSystemAdapter, Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
+import * as fs from 'fs';
+import * as path from 'path';
 import { GraphAnalysisSettings, DEFAULT_SETTINGS, GraphData, Node, GraphNeighborsResult, GraphMetadata, VaultData, VaultNote, CentralityScores } from './types/types';
 import { GraphView } from './components/graph-view/GraphView';
 import { GraphAnalysisView, GRAPH_ANALYSIS_VIEW_TYPE } from './views/GraphAnalysisView';
@@ -11,8 +13,8 @@ import { ExclusionUtils } from './utils/ExclusionUtils';
 // Import our styles 
 import './styles/styles.css';
 
-// The WASM module code and EMBEDDED_WASM_BASE64 will be injected at the top of this file during build
-declare const EMBEDDED_WASM_BASE64: string;
+// The WASM module glue code will be injected at the top of this file during build
+const WASM_FILENAME = 'graph_analysis_wasm_bg.wasm';
 declare function build_graph_from_vault(vault_data_json: string): string;
 declare function calculate_degree_centrality_cached(): string;
 declare function calculate_eigenvector_centrality_cached(): string;
@@ -203,7 +205,6 @@ export default class GraphAnalysisPlugin extends Plugin {
             try {
                 this.wasmLoadingNotice = new Notice('Initializing graph analysis...', 0);
 
-                // Use embedded WASM (base64) to avoid requestUrl file:// protocol issues in Obsidian
                 const wasmBinary = await this.getWasmBinary();
 
                 const wasmBinaryHash = await this.calculateBinaryHash(wasmBinary);
@@ -236,18 +237,24 @@ export default class GraphAnalysisPlugin extends Plugin {
     }
 
     /**
-     * Get WASM binary from embedded base64 (avoids requestUrl file:// protocol issues in Obsidian).
+     * Load WASM binary from the plugin directory (shipped as a separate release artifact).
      */
-    private getWasmBinary(): Promise<ArrayBuffer> {
-        if (typeof EMBEDDED_WASM_BASE64 === 'undefined' || !EMBEDDED_WASM_BASE64) {
-            throw new Error('WASM binary not embedded - run "npm run build" to rebuild the plugin');
+    private async getWasmBinary(): Promise<ArrayBuffer> {
+        if (!(this.app.vault.adapter instanceof FileSystemAdapter) || !this.manifest.dir) {
+            throw new Error('WASM requires desktop filesystem access');
         }
-        const binaryString = globalThis.atob(EMBEDDED_WASM_BASE64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+
+        const pluginDir = this.app.vault.adapter.getFullPath(this.manifest.dir);
+        const wasmPath = path.join(pluginDir, WASM_FILENAME);
+
+        if (!fs.existsSync(wasmPath)) {
+            throw new Error(
+                `${WASM_FILENAME} not found in plugin directory. Reinstall the plugin from the latest release.`
+            );
         }
-        return Promise.resolve(bytes.buffer);
+
+        const buffer = fs.readFileSync(wasmPath);
+        return new Uint8Array(buffer).buffer;
     }
 
     private calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {

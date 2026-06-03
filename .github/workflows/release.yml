@@ -39,10 +39,12 @@ jobs:
           test -f dist/main.js
           test -f dist/styles.css
           test -f dist/knowledge-domains.json
+          test -f dist/graph_analysis_wasm_bg.wasm
           test -f manifest.json
           cp dist/main.js main.js
           cp dist/styles.css styles.css
           cp dist/knowledge-domains.json knowledge-domains.json
+          cp dist/graph_analysis_wasm_bg.wasm graph_analysis_wasm_bg.wasm
 
       - name: Create release
         env:
@@ -53,4 +55,4 @@ jobs:
             --title="$tag" \
             --generate-notes \
             --draft \
-            main.js manifest.json styles.css knowledge-domains.json
+            main.js manifest.json styles.css knowledge-domains.json graph_analysis_wasm_bg.wasm

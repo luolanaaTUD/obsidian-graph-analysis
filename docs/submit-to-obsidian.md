@@ -37,7 +37,7 @@ git push fork add-obsidian-graph-analysis --force-with-lease
 - [ ] I attest that I have done my best to deliver a high-quality plugin...
 - [ ] **Repo URL:** https://github.com/luolanaaTUD/obsidian-graph-analysis
 - [ ] Tested on Windows / macOS / Linux / Android / iOS
-- [ ] GitHub release contains main.js, manifest.json, styles.css as individual files
+- [ ] GitHub release contains main.js, manifest.json, styles.css, graph_analysis_wasm_bg.wasm, and knowledge-domains.json as individual files
 - [ ] Release tag matches manifest version (no `v` prefix)
 - [ ] manifest.json `id` matches community-plugins.json `id` (knowledge-graph-analysis)
 - [ ] README describes purpose and usage

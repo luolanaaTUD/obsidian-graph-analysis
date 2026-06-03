@@ -52,6 +52,7 @@ Once you push a tag, GitHub Actions will automatically:
    - `manifest.json`
    - `styles.css`
    - `knowledge-domains.json`
+   - `graph_analysis_wasm_bg.wasm`
 
 You can monitor the progress in the **Actions** tab of your GitHub repository.
 
@@ -60,7 +61,7 @@ You can monitor the progress in the **Actions** tab of your GitHub repository.
 After the workflow succeeds:
 
 1. Open **Releases** on GitHub
-2. Verify assets are: `main.js`, `manifest.json`, `styles.css`, and `knowledge-domains.json` (no zip)
+2. Verify assets are: `main.js`, `manifest.json`, `styles.css`, `knowledge-domains.json`, and `graph_analysis_wasm_bg.wasm` (no zip)
 3. Add release notes if needed and **Publish release**
 
 ### 5. Submit to Obsidian Community Plugins
@@ -82,9 +83,9 @@ The release process is automated using `.github/workflows/release.yml`. This wor
 3. Sets up Node.js 20 and Rust for the plugin build
 4. Installs wasm-pack for WASM compilation
 5. Builds the full plugin
-6. Uploads `main.js`, `manifest.json`, `styles.css`, and `knowledge-domains.json` to a draft GitHub release
+6. Uploads `main.js`, `manifest.json`, `styles.css`, `knowledge-domains.json`, and `graph_analysis_wasm_bg.wasm` to a draft GitHub release
 
-WASM is embedded in `main.js` at build time; no separate `.wasm` asset is required. `knowledge-domains.json` is shipped separately because the plugin reads it from the plugin directory at runtime for AI domain classification.
+WASM is shipped as a separate binary and loaded from the plugin directory at runtime via `FileSystemAdapter.getFullPath()`. `knowledge-domains.json` is shipped separately for AI domain classification.
 
 ## Troubleshooting
 

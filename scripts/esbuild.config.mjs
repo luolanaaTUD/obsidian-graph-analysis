@@ -98,7 +98,7 @@ const copyKnowledgeDomainsTemplate = {
   },
 };
 
-// Inject WASM JavaScript code and embed WASM binary as base64 into the main.js file
+// Inject WASM JavaScript glue code (binary is loaded from plugin dir at runtime)
 const injectWasmCode = {
   name: 'inject-wasm-code',
   setup(build) {
@@ -106,16 +106,6 @@ const injectWasmCode = {
       const source = await fs.promises.readFile(args.path, 'utf8');
       const wasmJsPath = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg', 'graph_analysis_wasm.js');
       const wasmJsCode = await fs.promises.readFile(wasmJsPath, 'utf8');
-      const wasmFilePath = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg', 'graph_analysis_wasm_bg.wasm');
-
-      // Read and base64-encode the WASM binary for embedding (avoids requestUrl file:// protocol issues)
-      let wasmBase64 = '';
-      if (fs.existsSync(wasmFilePath)) {
-        const wasmBinary = fs.readFileSync(wasmFilePath);
-        wasmBase64 = wasmBinary.toString('base64');
-      } else {
-        console.warn(`WASM file not found at ${wasmFilePath}, plugin may fail to load`);
-      }
 
       // Create a modified version of the WASM JS code that works with CommonJS
       const modifiedWasmJsCode = wasmJsCode
@@ -128,13 +118,9 @@ const injectWasmCode = {
         // Remove import.meta usage
         .replace(/new URL\([^)]+\)/g, 'undefined');
 
-      // Inject the WASM JS code and embedded WASM base64 at the top of the file
       const modifiedSource = `
 // Injected WASM module code
 ${modifiedWasmJsCode}
-
-// Embedded WASM binary (base64) - avoids requestUrl file:// protocol issues in Obsidian
-const EMBEDDED_WASM_BASE64 = ${JSON.stringify(wasmBase64)};
 
 // Original TypeScript code
 ${source}`;
