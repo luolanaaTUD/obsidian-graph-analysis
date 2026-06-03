@@ -16,14 +16,14 @@ This document outlines how to release new versions of the Obsidian Graph Analysi
 Use `npm version` via the release scripts. Tags must match the manifest version with **no `v` prefix** (Obsidian requirement). This is enforced by `tag-version-prefix=` in [`.npmrc`](../.npmrc) and `tagVersionPrefix` in `package.json`.
 
 ```bash
-npm run release        # patch (0.6.0 → 0.6.1)
+npm run release        # patch (0.6.1 → 0.6.2)
 # or
-npm run release:minor  # minor (0.6.0 → 0.7.0)
+npm run release:minor  # minor (0.6.1 → 0.7.0)
 # or
-npm run release:major  # major (0.6.0 → 1.0.0)
+npm run release:major  # major (0.6.1 → 1.0.0)
 ```
 
-This bumps version, runs `version-bump.mjs` to update `manifest.json` and `versions.json`, commits, and creates a tag matching the manifest (e.g. `0.6.1` not `v0.6.1`).
+This bumps version, runs `version-bump.mjs` to update `manifest.json` and `versions.json`, commits, and creates a tag matching the manifest (e.g. `0.6.2` not `v0.6.2`).
 
 ### 2. Push Commit and Tag
 
@@ -47,7 +47,11 @@ Once you push a tag, GitHub Actions will automatically:
 
 1. Build the Rust WASM component
 2. Build the TypeScript/JavaScript plugin
-3. Create a **draft** GitHub release with `main.js`, `manifest.json`, and `styles.css` as individual assets
+3. Create a **draft** GitHub release with these individual assets:
+   - `main.js`
+   - `manifest.json`
+   - `styles.css`
+   - `knowledge-domains.json`
 
 You can monitor the progress in the **Actions** tab of your GitHub repository.
 
@@ -56,7 +60,7 @@ You can monitor the progress in the **Actions** tab of your GitHub repository.
 After the workflow succeeds:
 
 1. Open **Releases** on GitHub
-2. Verify assets are exactly: `main.js`, `manifest.json`, `styles.css` (no zip or other files)
+2. Verify assets are: `main.js`, `manifest.json`, `styles.css`, and `knowledge-domains.json` (no zip)
 3. Add release notes if needed and **Publish release**
 
 ### 5. Submit to Obsidian Community Plugins
@@ -74,12 +78,13 @@ For updates to an existing plugin, no additional action is needed as users will 
 The release process is automated using `.github/workflows/release.yml`. This workflow:
 
 1. Runs when a new tag is pushed
-2. Sets up Node.js and Rust environments
-3. Installs wasm-pack for WASM compilation
-4. Builds the full plugin
-5. Uploads `main.js`, `manifest.json`, and `styles.css` directly to a draft GitHub release
+2. Uses `actions/checkout@v5` and `actions/setup-node@v5` (Node 24 action runtime)
+3. Sets up Node.js 20 and Rust for the plugin build
+4. Installs wasm-pack for WASM compilation
+5. Builds the full plugin
+6. Uploads `main.js`, `manifest.json`, `styles.css`, and `knowledge-domains.json` to a draft GitHub release
 
-WASM is embedded in `main.js` at build time; no separate `.wasm` asset is required for community distribution.
+WASM is embedded in `main.js` at build time; no separate `.wasm` asset is required. `knowledge-domains.json` is shipped separately because the plugin reads it from the plugin directory at runtime for AI domain classification.
 
 ## Troubleshooting
 

@@ -12,10 +12,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: "npm"
@@ -38,9 +38,11 @@ jobs:
         run: |
           test -f dist/main.js
           test -f dist/styles.css
+          test -f dist/knowledge-domains.json
           test -f manifest.json
           cp dist/main.js main.js
           cp dist/styles.css styles.css
+          cp dist/knowledge-domains.json knowledge-domains.json
 
       - name: Create release
         env:
@@ -51,4 +53,4 @@ jobs:
             --title="$tag" \
             --generate-notes \
             --draft \
-            main.js manifest.json styles.css
+            main.js manifest.json styles.css knowledge-domains.json
