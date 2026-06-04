@@ -2,7 +2,6 @@ import { App, Notice } from 'obsidian';
 import { GraphAnalysisSettings } from '../types/types';
 import { AIModelService } from '../services/AIModelService';
 import { SemanticAnalysisError, getUserFriendlyMessage } from '../utils/GeminiErrorUtils';
-import { t } from '../i18n';
 import {
     buildContextSampleFromVaultRows,
     buildLanguagePromptSection
@@ -14,8 +13,6 @@ import { KDECalculationService } from '../utils/KDECalculationService';
 import { NoteResolver } from '../utils/NoteResolver';
 import { AIContextPreparationService } from '../services/AIContextPreparationService';
 import { PluginDataStore } from '../utils/PluginDataStore';
-import type { VaultSemanticAnalysisManager } from '../views/VaultAnalysisModals';
-
 
 export interface VaultAnalysisResult {
     id: string;
@@ -654,50 +651,6 @@ ${formattedContext}`;
         }
     }
 
-    /**
-     * Reopen the vault analysis modal to a specific tab after AI analysis completes.
-     * This provides a better UX by closing the modal during processing and reopening with results.
-     */
-    public async reopenModalToTab(
-        vaultSemanticAnalysisManager: VaultSemanticAnalysisManager,
-        settings: GraphAnalysisSettings,
-        tabName: string
-    ): Promise<void> {
-        try {
-            // Load fresh vault analysis data
-            const analysisData = await this.loadVaultAnalysisData();
-            const hasExistingData = analysisData !== null && analysisData.results && analysisData.results.length > 0;
-            
-            // Dynamically import VaultAnalysisModal to avoid circular dependency issues
-            const { VaultAnalysisModal } = await import('../views/VaultAnalysisModals');
-            
-            // Get tab display name for success message
-            const tabDisplayNames: Record<string, string> = {
-                'structure': 'Knowledge Structure',
-                'evolution': 'Knowledge Evolution',
-                'actions': 'Recommended Actions'
-            };
-            const tabDisplayName = tabDisplayNames[tabName] || 'Knowledge';
-            
-            // Show success notice
-            new Notice(t('notices.tabAnalysisComplete', { tab: tabDisplayName }));
-            
-            // Create and open modal with the specified tab
-            const modal = new VaultAnalysisModal(
-                this.app,
-                analysisData,
-                hasExistingData,
-                vaultSemanticAnalysisManager,
-                settings,
-                this.dataStore,
-                tabName
-            );
-            modal.open();
-        } catch (error) {
-            // console.error('Failed to reopen modal:', error);
-            new Notice(error instanceof Error ? error.message : t('notices.reopenModalFailed'));
-        }
-    }
 }
 
 /** Stable id for vault analysis cache invalidation (semantic + derived visualizations). */

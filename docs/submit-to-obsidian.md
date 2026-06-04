@@ -9,6 +9,8 @@ This repo uses [eslint-plugin-obsidianmd](https://github.com/obsidianmd/eslint-p
 ```bash
 npm ci
 npm run lint:submission
+npm run build
+node scripts/audit-release-bundle.mjs
 ```
 
 - `npm run lint` — full report (includes UI sentence-case **warnings** you can fix with `npm run lint:fix`)
@@ -56,7 +58,8 @@ git push fork add-obsidian-graph-analysis --force-with-lease
 - [ ] Release tag matches manifest version (no `v` prefix)
 - [ ] manifest.json `id` matches community-plugins.json `id` (knowledge-graph-analysis)
 - [ ] Ran `npm run lint:submission` with no errors
-- [ ] README describes purpose and usage
+- [ ] Ran `npm run build` and `node scripts/audit-release-bundle.mjs` (no atob/btoa in `main.js`)
+- [ ] README describes purpose and usage; privacy/network disclosed ([README](../README.md), [docs/security-and-privacy.md](security-and-privacy.md))
 - [ ] Read developer policies and plugin guidelines
 - [ ] LICENSE file added
 - [ ] Proper attribution for any reused code

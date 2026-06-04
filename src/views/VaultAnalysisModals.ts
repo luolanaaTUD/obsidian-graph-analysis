@@ -33,10 +33,12 @@ import { t } from '../i18n';
 export interface VaultSemanticAnalysisManager {
     generateVaultAnalysis(): Promise<boolean>;
     viewVaultAnalysisResults(): Promise<void>;
+    reopenVaultAnalysisToTab(tabName: string): Promise<void>;
     hasPendingSemanticChanges(preloadedData?: VaultAnalysisData | null): Promise<boolean>;
     isAnalysisInProgress(): boolean;
     setAnalysisInProgress(type: string): void;
     clearAnalysisInProgress(): void;
+    clearActiveVaultAnalysisModal(modal: VaultAnalysisModal): void;
 }
 
 export class VaultAnalysisModal extends Modal {
@@ -1057,11 +1059,7 @@ export class VaultAnalysisModal extends Modal {
                         } else if (tabName === 'actions') {
                             await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
                         }
-                        await this.masterAnalysisManager.reopenModalToTab(
-                            this.vaultSemanticAnalysisManager,
-                            this.settings,
-                            tabName
-                        );
+                        await this.vaultSemanticAnalysisManager.reopenVaultAnalysisToTab(tabName);
                     } catch (error) {
                         new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
                     } finally {
@@ -1142,11 +1140,7 @@ export class VaultAnalysisModal extends Modal {
                         } else if (tabName === 'actions') {
                             await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
                         }
-                        await this.masterAnalysisManager.reopenModalToTab(
-                            this.vaultSemanticAnalysisManager,
-                            this.settings,
-                            tabName
-                        );
+                        await this.vaultSemanticAnalysisManager.reopenVaultAnalysisToTab(tabName);
                     } catch (error) {
                         new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
                     } finally {
@@ -1781,11 +1775,7 @@ export class VaultAnalysisModal extends Modal {
             void (async () => {
                 try {
                     await this.masterAnalysisManager.generateRecommendedActionsAnalysis();
-                    await this.masterAnalysisManager.reopenModalToTab(
-                        this.vaultSemanticAnalysisManager,
-                        this.settings,
-                        'actions'
-                    );
+                    await this.vaultSemanticAnalysisManager.reopenVaultAnalysisToTab('actions');
                 } catch (error) {
                     new Notice(getUserFriendlyMessage(error instanceof Error ? error : new Error(String(error))));
                 } finally {
@@ -1933,6 +1923,7 @@ export class VaultAnalysisModal extends Modal {
     }
 
     onClose() {
+        this.vaultSemanticAnalysisManager.clearActiveVaultAnalysisModal(this);
         const { contentEl, modalEl } = this;
         modalEl.removeClass('vault-analysis-modal');
         contentEl.removeClass('vault-analysis-modal-content');

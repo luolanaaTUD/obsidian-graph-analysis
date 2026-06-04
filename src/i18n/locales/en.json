@@ -20,6 +20,10 @@
       "showTooltip": "Show API key",
       "hideTooltip": "Hide API key"
     },
+    "networkDisclosure": {
+      "name": "Network use (AI analysis)",
+      "desc": "When you run Vault Analysis or generate tab insights, the plugin sends note text and analysis prompts to Google's Gemini API (generativelanguage.googleapis.com) using your API key. Nothing is sent on plugin load. Graph metrics and caches stay on your device. See the README Privacy & network section."
+    },
     "languageHeading": "Language",
     "uiLanguage": {
       "name": "UI language",
@@ -85,6 +89,7 @@
     "enhanceMetricsPrompt": "Your vault analysis exists but lacks graph metrics. Click to enhance it with centrality scores.",
     "enhanceMetricsButton": "Enhance with graph metrics",
     "loadVaultAnalysisFailed": "Failed to load vault analysis results",
+    "vaultAnalysisInProgress": "Advanced analysis is still running. Results will open automatically when finished.",
     "tabAnalysisComplete": "{{tab}} Analysis completed successfully!",
     "reopenModalFailed": "Failed to reopen analysis modal",
     "updatingTabAnalysis": "Updating {{tab}} Analysis... (est. 1–2 min)",

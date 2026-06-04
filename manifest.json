@@ -3,7 +3,7 @@
 	"name": "Knowledge Graph Analysis",
 	"version": "0.6.5",
 	"minAppVersion": "1.7.2",
-	"description": "Analyze your vault using graph algorithms with Rust WASM for high-performance insights into note structure and relationships.",
+	"description": "Analyze your vault with graph algorithms and optional AI insights.",
 	"author": "wluo",
 	"authorUrl": "https://github.com/luolanaaTUD",
 	"isDesktopOnly": true

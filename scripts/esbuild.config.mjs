@@ -18,30 +18,29 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === "production";
 
-function readEmbeddedWasmBytes() {
-  const wasmFile = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg', 'graph_analysis_wasm_bg.wasm');
-  if (!fs.existsSync(wasmFile)) {
-    const message = `WASM binary not found at ${wasmFile}. Run "npm run build-wasm" first.`;
+const wasmPkgDir = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg');
+const wasmJsPath = path.join(wasmPkgDir, 'graph_analysis_wasm.js');
+const wasmBinaryPath = path.join(wasmPkgDir, 'graph_analysis_wasm_bg.wasm');
+
+function assertWasmBuildArtifacts() {
+  if (!fs.existsSync(wasmJsPath) || !fs.existsSync(wasmBinaryPath)) {
+    const message = `WASM build artifacts missing under ${wasmPkgDir}. Run "npm run build-wasm" first.`;
     if (prod) {
       console.error(`❌ ${message}`);
       process.exit(1);
     }
     throw new Error(message);
   }
-  const wasmBuffer = fs.readFileSync(wasmFile);
-  const base64 = wasmBuffer.toString('base64');
-  return `const EMBEDDED_WASM_BYTES = Uint8Array.from(atob(${JSON.stringify(base64)}), (c) => c.charCodeAt(0));`;
 }
 
-// Inject WASM JavaScript glue code and embed the WASM binary in main.js
+// Inject wasm-bindgen glue into main.ts (binary is bundled via src/wasm/embedded.ts + loader binary)
 const injectWasmCode = {
   name: 'inject-wasm-code',
   setup(build) {
     build.onLoad({ filter: /src\/main\.ts$/ }, async (args) => {
+      assertWasmBuildArtifacts();
       const source = await fs.promises.readFile(args.path, 'utf8');
-      const wasmJsPath = path.join(process.cwd(), 'graph-analysis-wasm', 'pkg', 'graph_analysis_wasm.js');
       const wasmJsCode = await fs.promises.readFile(wasmJsPath, 'utf8');
-      const embeddedWasmBytes = readEmbeddedWasmBytes();
 
       // Create a modified version of the WASM JS code that works with CommonJS
       const modifiedWasmJsCode = wasmJsCode
@@ -52,13 +51,12 @@ const injectWasmCode = {
         .replace(/export function ([a-zA-Z_]+)/g, 'function $1')
         .replace(/export async function ([a-zA-Z_]+)/g, 'async function $1')
         // Remove import.meta usage
-        .replace(/new URL\([^)]+\)/g, 'undefined');
+        .replace(/new URL\([^)]+\)/g, 'undefined')
+        // Obsidian bundle always passes Uint8Array; drop wasm-bindgen URL fetch (scanner + no network for WASM)
+        .replace(/module_or_path = fetch\(module_or_path\);/, 'module_or_path = Promise.reject(new Error("WASM must be embedded bytes"));');
 
       const modifiedSource = `
-// Embedded WASM binary (bundled at build time)
-${embeddedWasmBytes}
-
-// Injected WASM module code
+// Injected wasm-bindgen glue (WASM bytes imported from src/wasm/embedded.ts)
 ${modifiedWasmJsCode}
 
 // Original TypeScript code
@@ -147,6 +145,9 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outdir: "dist",
+  loader: {
+    ".wasm": "binary",
+  },
   plugins: [pathAliasPlugin, injectWasmCode, copyCssFile],
 });
 

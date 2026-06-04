@@ -37,6 +37,7 @@ export class VaultSemanticAnalysisManager {
     private readonly DELAY_BETWEEN_BATCHES = 6000; // 6s between batches (Gemini 2.5 Flash Lite RPM 10)
 
     private _analysisInProgress: 'semantic' | 'structure' | 'evolution' | 'actions' | null = null;
+    private activeVaultAnalysisModal: VaultAnalysisModal | null = null;
 
     /** Window from app workspace (avoids global for pop-out compatibility) */
     private get win(): Window {
@@ -53,6 +54,61 @@ export class VaultSemanticAnalysisManager {
 
     clearAnalysisInProgress(): void {
         this._analysisInProgress = null;
+    }
+
+    clearActiveVaultAnalysisModal(modal: VaultAnalysisModal): void {
+        if (this.activeVaultAnalysisModal === modal) {
+            this.activeVaultAnalysisModal = null;
+        }
+    }
+
+    openVaultAnalysisModal(
+        analysisData: VaultAnalysisData | null,
+        hasExistingData: boolean,
+        initialView = 'semantic'
+    ): VaultAnalysisModal {
+        if (this.activeVaultAnalysisModal) {
+            this.activeVaultAnalysisModal.close();
+        }
+        const modal = new VaultAnalysisModal(
+            this.app,
+            analysisData,
+            hasExistingData,
+            this,
+            this.settings,
+            this.dataStore,
+            initialView
+        );
+        this.activeVaultAnalysisModal = modal;
+        modal.open();
+        return modal;
+    }
+
+    private getTabDisplayNameForReopen(tabName: string): string {
+        switch (tabName) {
+            case 'structure':
+                return t('vaultAnalysis.tabDisplayStructure');
+            case 'evolution':
+                return t('vaultAnalysis.tabDisplayEvolution');
+            case 'actions':
+                return t('vaultAnalysis.tabDisplayActions');
+            default:
+                return t('vaultAnalysis.tabDisplayDefault');
+        }
+    }
+
+    public async reopenVaultAnalysisToTab(tabName: string): Promise<void> {
+        try {
+            const analysisData = await this.dataStore.getVaultAnalysis();
+            const hasExistingData =
+                analysisData !== null && analysisData.results && analysisData.results.length > 0;
+            new Notice(
+                t('notices.tabAnalysisComplete', { tab: this.getTabDisplayNameForReopen(tabName) })
+            );
+            this.openVaultAnalysisModal(analysisData, hasExistingData, tabName);
+        } catch (error) {
+            new Notice(error instanceof Error ? error.message : t('notices.reopenModalFailed'));
+        }
     }
 
     constructor(app: App, settings: GraphAnalysisSettings, dataStore: PluginDataStore) {
@@ -1099,6 +1155,11 @@ export class VaultSemanticAnalysisManager {
     }
 
     public async viewVaultAnalysisResults(): Promise<void> {
+        if (this.isAnalysisInProgress()) {
+            new Notice(t('notices.vaultAnalysisInProgress'));
+            return;
+        }
+
         try {
             let analysisData = await this.dataStore.getVaultAnalysis();
             let hasExistingData = false;
@@ -1120,8 +1181,7 @@ export class VaultSemanticAnalysisManager {
             }
 
             // Open modal immediately (no blocking enhancement prompt)
-            const modal = new VaultAnalysisModal(this.app, analysisData, hasExistingData, this, this.settings, this.dataStore);
-            modal.open();
+            this.openVaultAnalysisModal(analysisData, hasExistingData);
 
             // Non-blocking: offer graph metrics enhancement after modal is visible
             if (hasExistingData && analysisData) {

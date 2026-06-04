@@ -20,6 +20,10 @@
       "showTooltip": "显示 API 密钥",
       "hideTooltip": "隐藏 API 密钥"
     },
+    "networkDisclosure": {
+      "name": "网络使用（AI 分析）",
+      "desc": "当您运行库分析或生成标签页洞察时，插件会使用您的 API 密钥将笔记内容与分析提示发送至 Google Gemini API（generativelanguage.googleapis.com）。插件加载时不会发送任何数据。图指标与缓存均保存在本机。详见 README 中的「隐私与网络」一节。"
+    },
     "languageHeading": "语言",
     "uiLanguage": {
       "name": "界面语言",
@@ -85,6 +89,7 @@
     "enhanceMetricsPrompt": "您的知识库分析缺少图谱指标。点击以添加中心性分数。",
     "enhanceMetricsButton": "用图谱指标增强",
     "loadVaultAnalysisFailed": "加载知识库分析结果失败",
+    "vaultAnalysisInProgress": "高级分析仍在进行中，完成后将自动打开结果。",
     "tabAnalysisComplete": "{{tab}} 分析已成功完成！",
     "reopenModalFailed": "重新打开分析窗口失败",
     "updatingTabAnalysis": "正在更新 {{tab}} 分析…（约 1–2 分钟）",

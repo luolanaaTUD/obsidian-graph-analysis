@@ -9,12 +9,12 @@ import { ExclusionUtils } from './utils/ExclusionUtils';
 import { VaultScope } from './utils/VaultScope';
 import { PluginDataStore } from './utils/PluginDataStore';
 import { configureI18n, t } from './i18n';
+import { embeddedWasmBytes } from './wasm/embedded';
 
 // Import our styles 
 import './styles/styles.css';
 
-// WASM glue code and EMBEDDED_WASM_BYTES are injected at the top of this file during build
-declare const EMBEDDED_WASM_BYTES: Uint8Array;
+// __wbg_init is injected from wasm-bindgen glue at the top of this bundle during build
 declare function build_graph_from_vault(vault_data_json: string): string;
 declare function calculate_degree_centrality_cached(): string;
 declare function calculate_eigenvector_centrality_cached(): string;
@@ -222,10 +222,10 @@ export default class GraphAnalysisPlugin extends Plugin {
         })();
     }
 
-  /** WASM binary embedded in main.js at build time. */
+  /** WASM binary embedded in main.js at build time (esbuild binary loader). */
     private getWasmBinary(): ArrayBuffer {
-        const copy = EMBEDDED_WASM_BYTES.slice();
-        return copy.buffer;
+        const copy = embeddedWasmBytes.slice();
+        return copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength);
     }
 
     private calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {

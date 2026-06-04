@@ -1,5 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
 import { GraphAnalysisSettings } from '../types/types';
+import { geminiGenerateContent } from './GeminiRestClient';
 import { createKnowledgeNetworkSchema } from '../ai/schemas/knowledge-network.schema';
 import { createVaultSemanticAnalysisSchema } from '../ai/schemas/vault-semantic-analysis.schema';
 import { createKnowledgeEvolutionSchema } from '../ai/schemas/knowledge-evolution.schema';
@@ -24,10 +24,6 @@ export interface AIResponse<T = string> {
 export type { SemanticErrorType };
 export { SemanticAnalysisError };
 
-// export const SEMANTIC_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'] as const;
-/** Semantic models for vault analysis (gemini-3.1-flash-lite has 250K RPD) */
-// export const SEMANTIC_MODELS = ['gemini-3.1-flash-lite-preview'] as const;
-
 export class AIModelService {
     private app: { workspace: { containerEl: HTMLElement } };
     private settings: GraphAnalysisSettings;
@@ -40,7 +36,7 @@ export class AIModelService {
     private readonly ADVANCED_RATE_LIMIT_DELAY = 12000;
     private readonly MODEL_NAME = 'gemini-3-flash-preview';
     private readonly SEMANTIC_MODEL_NAME = 'gemini-3.1-flash-lite-preview'; // Default when no modelOverride
-    
+
     public getModelName(): string {
         return this.MODEL_NAME;
     }
@@ -49,21 +45,9 @@ export class AIModelService {
         return this.SEMANTIC_MODEL_NAME;
     }
 
-    private genAI: GoogleGenAI | null = null;
-
     constructor(app: { workspace: { containerEl: HTMLElement } }, settings: GraphAnalysisSettings) {
         this.app = app;
         this.settings = settings;
-        this.initializeGenAI();
-    }
-
-    /**
-     * Initialize the Google GenAI client
-     */
-    private initializeGenAI(): void {
-        if (this.settings?.geminiApiKey && this.settings.geminiApiKey.trim() !== '') {
-            this.genAI = new GoogleGenAI({ apiKey: this.settings.geminiApiKey });
-        }
     }
 
     /**
@@ -71,25 +55,14 @@ export class AIModelService {
      */
     public updateSettings(settings: GraphAnalysisSettings): void {
         this.settings = settings;
-        this.initializeGenAI();
     }
 
-    /**
-     * Extract text from response for structured output.
-     * Gemini 3 with thinking returns thoughtSignature parts; response.text logs a warning.
-     * Manually extract only non-thought text parts to get clean JSON.
-     */
-    private extractStructuredText(response: { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> }): string {
-        const parts = response.candidates?.[0]?.content?.parts;
-        if (parts && parts.length > 0) {
-            const textParts = parts
-                .filter((p): p is { text: string } => !!p.text && p.thought !== true)
-                .map(p => p.text);
-            if (textParts.length > 0) {
-                return textParts.join('').trim();
-            }
+    private getApiKey(): string {
+        const key = this.settings?.geminiApiKey?.trim();
+        if (!key) {
+            throw new Error('Gemini API key not configured. Please configure your API key in settings.');
         }
-        return (response as { text?: string }).text?.trim() ?? '';
+        return key;
     }
 
     /**
@@ -99,75 +72,55 @@ export class AIModelService {
     public async generateStructuredAnalysis<T>(
         prompt: string,
         responseSchema: unknown,
-        maxOutputTokens: number = 8192*2,
+        maxOutputTokens: number = 8192 * 2,
         temperature: number = 0.3, // more accurate results with lower temperature
         topP: number = 0.72
     ): Promise<AIResponse<T>> {
-        if (!this.genAI) {
-            throw new Error('Gemini API key not configured. Please configure your API key in settings.');
-        }
-
-        // console.log(`Sending structured analysis request to ${this.MODEL_NAME} (max tokens: ${maxOutputTokens})...`);
-        // console.log(`STRUCTURED PROMPT (${prompt.length} chars):`);
-        // console.log(prompt);
+        const apiKey = this.getApiKey();
 
         try {
-            const response = await this.genAI.models.generateContent({
+            const response = await geminiGenerateContent({
+                apiKey,
                 model: this.MODEL_NAME,
-                contents: prompt,
-                config: {
+                prompt,
+                generationConfig: {
                     responseMimeType: 'application/json',
                     responseSchema,
                     temperature,
                     topP,
                     maxOutputTokens,
                     thinkingConfig: {
-                        thinkingBudget: -1, // Dynamic thinking for complex reasoning (structure, evolution, actions)
+                        thinkingBudget: -1
                     }
                 }
             });
 
-            // Extract token usage from the response
             const tokenUsage: TokenUsage = {
                 promptTokens: response.usageMetadata?.promptTokenCount || 0,
                 candidatesTokens: response.usageMetadata?.candidatesTokenCount || 0,
                 totalTokens: response.usageMetadata?.totalTokenCount || 0
             };
 
-            // Extract text: Gemini 3 with thinking returns thoughtSignature parts; response.text
-            // logs a warning. Manually extract only non-thought text parts for clean JSON.
-            const result = this.extractStructuredText(response) || '';
-            
+            const result = response.text || '';
+
             if (!result) {
-                // console.error('Empty response details:', {
-                //     responseDefined: !!response,
-                //     textProperty: response.text,
-                //     candidates: response.candidates?.length || 0,
-                //     tokenUsage: tokenUsage
-                // });
-                throw new Error('Empty response from Gemini API - check API key, request format, or content policy restrictions');
+                throw new Error(
+                    'Empty response from Gemini API - check API key, request format, or content policy restrictions'
+                );
             }
-            
-            // Parse the JSON response since it's guaranteed to be valid JSON
+
             let parsedResult: T;
             try {
                 parsedResult = JSON.parse(result) as T;
             } catch (parseError) {
-                // console.error('Failed to parse structured response as JSON:', parseError);
                 throw new Error(`Failed to parse structured response: ${(parseError as Error).message}`);
             }
-
-            // console.log(`STRUCTURED RESPONSE SUCCESS (${result.length} chars, tokens: ${tokenUsage.totalTokens})`);
-            // console.log('Parsed result:', parsedResult);
 
             return {
                 result: parsedResult,
                 tokenUsage
             };
-
         } catch (error) {
-            // console.error(`${this.MODEL_NAME} structured API error:`, error);
-
             const errorMessage = (error as Error).message;
             const errorType = classifyGeminiError(errorMessage);
 
@@ -175,19 +128,15 @@ export class AIModelService {
                 throw new SemanticAnalysisError(errorMessage, 'quota_exhausted', this.MODEL_NAME);
             }
             if (errorType === 'rate_limit') {
-                // console.log(`Structured analysis rate limited (${this.MODEL_NAME}). Retrying in ${this.ADVANCED_RATE_LIMIT_DELAY / 1000} seconds...`);
                 await new Promise(resolve => this.win.setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
-                return this.generateStructuredAnalysis(prompt, responseSchema, maxOutputTokens, temperature, topP);
+                return this.generateStructuredAnalysis(
+                    prompt,
+                    responseSchema,
+                    maxOutputTokens,
+                    temperature,
+                    topP
+                );
             }
-
-            // Log additional context for debugging
-            // console.error('Structured analysis error context:', {
-            //     promptLength: prompt.length,
-            //     maxOutputTokens,
-            //     temperature,
-            //     topP,
-            //     hasSchema: !!responseSchema
-            // });
 
             throw error;
         }
@@ -206,29 +155,22 @@ export class AIModelService {
         topP: number = 0.72,
         modelOverride?: string
     ): Promise<AIResponse<T>> {
-        if (!this.genAI) {
-            throw new Error('Gemini API key not configured. Please configure your API key in settings.');
-        }
-
+        const apiKey = this.getApiKey();
         const model = modelOverride ?? this.SEMANTIC_MODEL_NAME;
-        // Caller must append buildLanguagePromptSection() from promptLanguage.ts.
-
-        // console.log(`Sending semantic analysis request to ${model} (max tokens: ${maxOutputTokens})...`);
-        // console.log(`SEMANTIC PROMPT (${fullPrompt.length} chars):`);
-        // console.log(fullPrompt);
 
         try {
-            const response = await this.genAI.models.generateContent({
+            const response = await geminiGenerateContent({
+                apiKey,
                 model,
-                contents: prompt,
-                config: {
+                prompt,
+                generationConfig: {
                     responseMimeType: 'application/json',
                     responseSchema,
                     temperature,
                     topP,
                     maxOutputTokens,
                     thinkingConfig: {
-                        thinkingBudget: 0, // Disable thinking for simple extraction (keywords, summary, domains)
+                        thinkingBudget: 0
                     }
                 }
             });
@@ -242,13 +184,9 @@ export class AIModelService {
             const result = response.text?.trim() || '';
 
             if (!result) {
-                // console.error('Empty semantic response details:', {
-                //     responseDefined: !!response,
-                //     textProperty: response.text,
-                //     candidates: response.candidates?.length || 0,
-                //     tokenUsage: tokenUsage
-                // });
-                throw new Error('Empty response from Gemini API - check API key, request format, or content policy restrictions');
+                throw new Error(
+                    'Empty response from Gemini API - check API key, request format, or content policy restrictions'
+                );
             }
 
             let parsedResult: T;
@@ -256,76 +194,46 @@ export class AIModelService {
                 parsedResult = JSON.parse(result) as T;
             } catch (parseError) {
                 const msg = `Failed to parse semantic response: ${(parseError as Error).message}`;
-                // console.error('Failed to parse semantic response as JSON:', parseError);
-                // console.error('Raw response text:', result.substring(0, 500));
                 throw new SemanticAnalysisError(msg, 'json_parse', model);
             }
-
-            // console.log(`SEMANTIC RESPONSE SUCCESS (${result.length} chars, tokens: ${tokenUsage.totalTokens})`);
-            // console.log('Parsed result:', parsedResult);
 
             return {
                 result: parsedResult,
                 tokenUsage
             };
-
         } catch (error) {
             if (error instanceof SemanticAnalysisError) throw error;
 
             const errorMessage = (error as Error).message;
             const errorType = classifyGeminiError(errorMessage);
             if (errorType === 'quota_exhausted') {
-                // console.warn(`Semantic analysis quota exhausted (${model}):`, errorMessage.substring(0, 200));
-            } else {
-                // console.error(`${model} semantic API error:`, error);
+                throw new SemanticAnalysisError(errorMessage, 'quota_exhausted', model);
             }
             throw new SemanticAnalysisError(errorMessage, errorType, model);
         }
     }
 
-    // ==========================================
-    // SCHEMA FACTORY METHODS
-    // ==========================================
-
-    /**
-     * Create response schema for knowledge network analysis
-     */
     public createKnowledgeNetworkSchema(): unknown {
         return createKnowledgeNetworkSchema();
     }
 
-    /**
-     * Create response schema for vault semantic analysis batch processing
-     */
     public createVaultSemanticAnalysisSchema(expectedResultCount: number): unknown {
         return createVaultSemanticAnalysisSchema(expectedResultCount);
     }
 
-    /**
-     * Create response schema for knowledge evolution analysis
-     */
     public createKnowledgeEvolutionSchema(): unknown {
         return createKnowledgeEvolutionSchema();
     }
 
-    /**
-     * Create response schema for recommended actions analysis
-     */
     public createRecommendedActionsSchema(): unknown {
         return createRecommendedActionsSchema();
     }
 
-    /**
-     * Rate limiting helper - wait between requests (uses Gemini 3 Flash rate: 12s)
-     */
     public async waitForRateLimit(): Promise<void> {
         await new Promise(resolve => this.win.setTimeout(resolve, this.ADVANCED_RATE_LIMIT_DELAY));
     }
 
-    /**
-     * Calculate recommended delay based on request count (Gemini 3 Flash: RPM 5)
-     */
-    public calculateDelay(requestCount: number): number {
+    public calculateDelay(_requestCount: number): number {
         return this.ADVANCED_RATE_LIMIT_DELAY;
     }
-} 
+}

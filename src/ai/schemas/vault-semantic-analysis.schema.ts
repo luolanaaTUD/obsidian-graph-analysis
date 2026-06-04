@@ -1,4 +1,4 @@
-import { Type } from '@google/genai';
+import { Type } from './gemini-json-schema';
 
 /**
  * Interface for individual note analysis result from batch processing

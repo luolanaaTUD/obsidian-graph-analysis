@@ -38,16 +38,6 @@ No analytics or telemetry endpoints are used.
 
 - Rust graph algorithms compiled to WebAssembly (`graph-analysis-wasm`), embedded in `main.js` at build time
 - D3 and other npm dependencies bundled into `main.js`
-- [`@google/genai`](https://www.npmjs.com/package/@google/genai) (Google Gemini SDK), bundled into `main.js` for optional AI features when the user supplies an API key
+- Optional Gemini AI uses a thin REST client ([`src/services/GeminiRestClient.ts`](src/services/GeminiRestClient.ts)) with Obsidian `requestUrl` only (no `@google/genai` in the release bundle)
 
-### Transitive dependencies (`@google/genai`)
-
-Production installs pin patched versions via `package.json` `overrides` and `npm audit` (for example `protobufjs` ≥ 7.6.2, `ws` ≥ 8.21.0, `brace-expansion` ≥ 2.1.1). Run `npm run audit:prod` locally before tagging a release.
-
-| Dependency | Role in SDK | Plugin exposure | Mitigation |
-| --- | --- | --- | --- |
-| `protobufjs` | Protocol buffer runtime inside the SDK | Bundled; used for API payloads from Google’s HTTPS endpoint, not user-supplied `.proto` compilation | Patched versions; no `pbjs` / custom schema codegen in this plugin |
-| `ws` | WebSocket client for Live API flows | Bundled; plugin only calls `models.generateContent` (HTTP), not Live/streaming APIs | Patched versions |
-| `brace-expansion` | Transitive via `google-auth-library` → `glob` / `minimatch` | Not used for user-controlled glob patterns in plugin UI | Patched versions |
-
-If you believe a reported CVE still affects this plugin after these updates, please open a private security advisory with reproduction steps.
+Run `npm run audit:prod` locally before tagging a release.

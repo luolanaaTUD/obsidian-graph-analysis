@@ -92,6 +92,14 @@ export class GraphAnalysisSettingTab extends PluginSettingTab {
                 return btn;
             });
 
+        const networkDisclosureSetting = new Setting(apiContainer)
+            .setName(t('settings.networkDisclosure.name'))
+            .setDesc(t('settings.networkDisclosure.desc'));
+        networkDisclosureSetting.settingEl.addClasses([
+            'graph-settings-item',
+            'graph-settings-network-disclosure'
+        ]);
+
         new Setting(containerEl).setName(t('settings.languageHeading')).setHeading();
         const languageContainer = containerEl.createDiv({ cls: 'graph-settings-section-container' });
 

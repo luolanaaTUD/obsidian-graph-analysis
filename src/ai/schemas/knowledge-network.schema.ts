@@ -1,4 +1,4 @@
-import { Type } from '@google/genai';
+import { Type } from './gemini-json-schema';
 
 export interface KnowledgeNetworkNode {
     title: string;

@@ -16,6 +16,7 @@
     "lint:fix": "eslint . --fix",
     "lint:submission": "eslint . --quiet && eslint manifest.json --quiet",
     "check-i18n": "node scripts/check-i18n-keys.mjs",
+    "audit:bundle": "node scripts/audit-release-bundle.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "version": "node scripts/version-bump.mjs && git add manifest.json versions.json",
     "release": "npm version patch",
@@ -63,7 +64,6 @@
     "@protobufjs/utf8": "^1.1.1"
   },
   "dependencies": {
-    "@google/genai": "^2.7.0",
     "@types/d3": "^7.4.3",
     "chroma-js": "^3.1.2",
     "d3": "^7.9.0",

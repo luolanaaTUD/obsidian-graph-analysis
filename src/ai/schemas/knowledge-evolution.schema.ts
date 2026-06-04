@@ -1,4 +1,4 @@
-import { Type } from '@google/genai';
+import { Type } from './gemini-json-schema';
 
 /**
  * Schema for knowledge evolution analysis using Google Gemini structured output
