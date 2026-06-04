@@ -4,7 +4,7 @@ An [Obsidian](https://obsidian.md) plugin that turns your vault into a knowledge
 
 Open the plugin by clicking the plugin icon <img src="docs/images/waypoints-icon.svg" alt="network icon" width="20" height="20" style="vertical-align: middle" /> in the left ribbon.
 
-<video src="https://github.com/user-attachments/assets/5cee8e3b-36ac-4522-8a03-864227389e88" controls width="800" muted loop></video>
+![Knowledge Graph Analysis demo](https://raw.githubusercontent.com/luolanaaTUD/obsidian-graph-analysis/main/docs/images/plugin-demo.gif)
 
 
 ## Why Graph Theory + AI?
@@ -90,6 +90,19 @@ Turns analysis into concrete next steps.
 - **Network Metrics** — Scatter plots of Inbound vs Outbound links and Betweenness vs Eigenvector centrality
 - **Notes Needing Review** — Priority cards (high / medium / low) for hubs, bridges, and authorities that may be stale or under-connected
 - **Suggested Connections** — An interactive sub-graph of notes the AI recommends linking. Remove unwanted suggestions, then click **Add to Main Graph** to write `[[links]]` directly into your notes
+
+## Privacy and network
+
+This plugin does **not** contact external servers when it loads. Network access happens only when **you** start Vault Analysis or generate AI insights for a tab.
+
+| When | What leaves your device |
+|------|-------------------------|
+| Vault Analysis / tab AI actions | Note text and prompts sent to **Google Gemini** (`generativelanguage.googleapis.com`) using **your** API key |
+| Graph view / WASM metrics | Stays local; graph data is read from your vault inside Obsidian |
+
+There is no plugin-owned backend. Analysis caches (semantic results, derived charts, tab analyses) are stored in Obsidian plugin data on your device.
+
+HTTP for Gemini uses Obsidian's [`requestUrl`](https://docs.obsidian.md/Reference/TypeScript+API/requestUrl) API via a small REST client (no bundled Google SDK). See [docs/security-and-privacy.md](docs/security-and-privacy.md) for reviewer notes (WASM embedding, automated scan context).
 
 ## Settings
 
