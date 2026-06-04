@@ -1,7 +1,7 @@
 {
 	"id": "knowledge-graph-analysis",
 	"name": "Knowledge Graph Analysis",
-	"version": "0.6.5",
+	"version": "0.6.6",
 	"minAppVersion": "1.7.2",
 	"description": "Analyze your vault with graph algorithms and optional AI insights.",
 	"author": "wluo",
