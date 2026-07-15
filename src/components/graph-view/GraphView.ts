@@ -1353,10 +1353,6 @@ export class GraphView {
             return;
         }
 
-        // Calculate Jenks natural breaks using the number of size categories from NODE constant
-        // Jenks returns n+1 break points for n categories
-        const breaks = ss.jenks(degrees, this.NODE.SIZE_CATEGORIES);
-
         // Create an array of radius values based on graph size
         let minRadius: number;
         let maxRadius: number;
@@ -1369,6 +1365,31 @@ export class GraphView {
         } else {
             minRadius = this.NODE.RADIUS.LARGE_GRAPH.BASE;
             maxRadius = this.NODE.RADIUS.LARGE_GRAPH.MAX;
+        }
+
+        const minDegree = Math.min(...degrees);
+        const maxDegree = Math.max(...degrees);
+
+        // Sparse vaults: all nodes share the same degree (e.g. orphans at 0).
+        // Use uniform minimum radius instead of jenks, which fails on degenerate data.
+        if (minDegree === maxDegree) {
+            this.nodeRadiusCache.clear();
+            for (const node of this.nodes) {
+                this.nodeRadiusCache.set(node.id, minRadius);
+            }
+            this.nodeRadiusScale = null;
+            return;
+        }
+
+        const breaks = this.calculateJenksBreaks(degrees, this.NODE.SIZE_CATEGORIES);
+
+        if (breaks.length < 2) {
+            this.nodeRadiusCache.clear();
+            for (const node of this.nodes) {
+                this.nodeRadiusCache.set(node.id, minRadius);
+            }
+            this.nodeRadiusScale = null;
+            return;
         }
 
         // Create radius steps: breaks.length values (one for each break point)
