@@ -27,6 +27,8 @@ if (process.env.OBSIDIAN_VAULT_PATH) {
         const homeDir = process.env.HOME;
         // vaultPath = path.join(homeDir, 'Obsidian', 'Devs');
         vaultPath = path.join(homeDir, 'Obsidian', 'ObsidianSync');
+        // vaultPath = path.join(homeDir, 'Obsidian', 'test-nolink-vault');
+
         
     } else if (isWindows) {
         // Windows path
